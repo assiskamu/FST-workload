@@ -1,0 +1,2854 @@
+<!doctype html>
+<html lang="en" class="h-full">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FST UMS Workload Calculator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/_sdk/data_sdk.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=Playfair+Display:wght@700&amp;display=swap" rel="stylesheet">
+  <style>
+    body {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    * {
+      font-family: 'Inter', sans-serif;
+    }
+    .heading-font {
+      font-family: 'Playfair Display', serif;
+    }
+    .nav-item {
+      transition: all 0.2s ease;
+    }
+    .nav-item:hover {
+      transform: translateX(4px);
+    }
+    .nav-item.active {
+      background: linear-gradient(90deg, #0c4a6e 0%, #0369a1 100%);
+      color: white;
+    }
+    .loading-spinner {
+      border: 3px solid #f3f4f6;
+      border-top: 3px solid #0369a1;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+  <style>@view-transition { navigation: auto; }</style>
+  <script src="/_sdk/element_sdk.js" type="text/javascript"></script>
+ </head>
+ <body class="h-full bg-gray-50 text-gray-900">
+  <div id="app" class="h-full flex flex-col overflow-auto"><!-- Header -->
+   <header class="bg-gradient-to-r from-sky-900 via-sky-800 to-cyan-800 text-white px-6 py-4 shadow-xl">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+     <div>
+      <h1 class="heading-font text-2xl font-bold">FST UMS Workload Calculator</h1>
+      <p class="text-sky-200 text-sm mt-1">Faculty of Science and Technology</p>
+     </div>
+     <div class="text-right">
+      <div class="text-xs text-sky-200">
+       Total Entries
+      </div>
+      <div id="total-entries" class="text-xl font-bold">
+       0
+      </div>
+     </div>
+    </div>
+   </header><!-- Main Content -->
+   <div class="flex-1 flex overflow-hidden"><!-- Sidebar -->
+    <nav class="w-64 bg-white border-r border-gray-200 overflow-y-auto flex-shrink-0 shadow-sm">
+     <div class="p-4">
+      <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+       Navigation
+      </div>
+      <div id="nav-items" class="space-y-1"></div>
+     </div>
+    </nav><!-- Content Area -->
+    <main id="content-area" class="flex-1 overflow-y-auto p-6 bg-gray-50">
+     <div class="max-w-5xl mx-auto">
+      <div class="text-center py-12">
+       <div class="loading-spinner mx-auto mb-4"></div>
+       <p class="text-gray-600">Loading...</p>
+      </div>
+     </div>
+    </main>
+   </div>
+  </div><!-- Toast -->
+  <div id="toast" class="fixed top-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg hidden z-50"><span id="toast-message"></span>
+  </div>
+  <script>
+    let currentSection = 'home';
+    let allRecords = [];
+
+    const sections = [
+      { id: 'home', name: 'Home', icon: '🏠' },
+      { id: 'profile', name: 'Staff Profile', icon: '👤' },
+      { id: 'teaching', name: 'Teaching', icon: '📚' },
+      { id: 'supervision', name: 'Supervision', icon: '🎓' },
+      { id: 'research', name: 'Research', icon: '🔬' },
+      { id: 'publications', name: 'Scholarly Writing', icon: '��️' },
+      { id: 'administration', name: 'Admin Leadership', icon: '🏛️' },
+      { id: 'admin_duties', name: 'Admin Duties', icon: '📋' },
+      { id: 'service', name: 'Service', icon: '🤝' },
+      { id: 'laboratory', name: 'Laboratory', icon: '🧪' },
+      { id: 'professional', name: 'Professional', icon: '⭐' },
+      { id: 'assistants', name: 'Teaching Assistants', icon: '👥' },
+      { id: 'results', name: 'Results', icon: '📊' }
+    ];
+
+    function showToast(message, type = 'success') {
+      const toast = document.getElementById('toast');
+      const toastMessage = document.getElementById('toast-message');
+      toastMessage.textContent = message;
+      
+      toast.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 ${
+        type === 'success' ? 'bg-green-600' : type === 'error' ? 'bg-red-600' : 'bg-blue-600'
+      } text-white`;
+      toast.classList.remove('hidden');
+      
+      setTimeout(() => {
+        toast.classList.add('hidden');
+      }, 3000);
+    }
+
+    const dataHandler = {
+      onDataChanged(data) {
+        allRecords = data;
+        const totalEntries = document.getElementById('total-entries');
+        if (totalEntries) {
+          totalEntries.textContent = allRecords.length;
+        }
+        renderSection(currentSection);
+      }
+    };
+
+    async function initializeApp() {
+      try {
+        const result = await window.dataSdk.init(dataHandler);
+        if (!result.isOk) {
+          showToast('Failed to initialize data storage', 'error');
+        }
+        renderNavigation();
+        renderSection('home');
+      } catch (error) {
+        console.error('Initialization error:', error);
+        showToast('Failed to start application', 'error');
+      }
+    }
+
+    function getRecordsBySection(section) {
+      return allRecords.filter(r => r.section === section);
+    }
+
+    function getProfile() {
+      const profileRecords = getRecordsBySection('profile');
+      return profileRecords.length > 0 ? profileRecords[0] : null;
+    }
+
+    function calculateCourseScore(course) {
+      const totalHours = (course.course_lecture || 0) + (course.course_tutorial || 0) + 
+                         (course.course_lab || 0) + (course.course_fieldwork || 0);
+      
+      const weeklyHours = totalHours / 14;
+      
+      let classSizeFactor = 1.0;
+      if (course.course_class_size > 100) classSizeFactor = 1.5;
+      else if (course.course_class_size > 50) classSizeFactor = 1.3;
+      
+      let baseScore = weeklyHours * classSizeFactor;
+      
+      return Math.round(baseScore * 10) / 10;
+    }
+
+    function calculateResearchScore(project) {
+      const basePoints = 5;
+      
+      let roleFactor = 1.0;
+      if (project.research_role === 'co-lead') roleFactor = 0.7;
+      else if (project.research_role === 'member') roleFactor = 0.5;
+      
+      let statusFactor = 1.0;
+      if (project.research_status === 'completed') statusFactor = 0.8;
+      else if (project.research_status === 'pending') statusFactor = 0.3;
+      
+      return Math.round(basePoints * roleFactor * statusFactor * 100) / 100;
+    }
+
+    function calculatePublicationScore(pub) {
+      let basePoints = 0;
+      if (pub.pub_type === 'journal') basePoints = 10;
+      else if (pub.pub_type === 'conference') basePoints = 6;
+      else if (pub.pub_type === 'book') basePoints = 15;
+      else if (pub.pub_type === 'chapter') basePoints = 8;
+      else if (pub.pub_type === 'proceeding') basePoints = 5;
+      
+      let indexFactor = 1.0;
+      if (pub.pub_index === 'Q1') indexFactor = 2.0;
+      else if (pub.pub_index === 'Q2') indexFactor = 1.5;
+      else if (pub.pub_index === 'Q3') indexFactor = 1.3;
+      else if (pub.pub_index === 'Q4') indexFactor = 1.1;
+      else if (pub.pub_index === 'Scopus' || pub.pub_index === 'WoS') indexFactor = 1.2;
+      else if (pub.pub_index === 'Other') indexFactor = 0.8;
+      
+      let authorFactor = 1.0;
+      if (pub.pub_position === 'first') authorFactor = 1.0;
+      else if (pub.pub_position === 'corresponding') authorFactor = 1.0;
+      else if (pub.pub_position === 'co-author') authorFactor = 0.5;
+      
+      let statusFactor = 1.0;
+      if (pub.pub_status === 'published') statusFactor = 1.0;
+      else if (pub.pub_status === 'accepted') statusFactor = 0.8;
+      else if (pub.pub_status === 'under-review') statusFactor = 0.3;
+      
+      return Math.round(basePoints * indexFactor * authorFactor * statusFactor * 100) / 100;
+    }
+
+    function calculateAdminLeadershipScore(position) {
+      if (position.admin_position === 'Dean') return 20;
+      if (position.admin_position === 'Deputy Dean') return 15;
+      if (position.admin_position === 'Centre Director') return 12;
+      if (position.admin_position === 'Head of Programme') return 10;
+      if (position.admin_position === 'Postgraduate Coordinator') return 8;
+      if (position.admin_position === 'Programme Coordinator') return 6;
+      return 5;
+    }
+
+    function calculateAdminDutyScore(duty) {
+      let basePoints = 0;
+      if (duty.duty_type === 'Accreditation Work') basePoints = 8;
+      else if (duty.duty_type === 'Curriculum Development') basePoints = 6;
+      else if (duty.duty_type === 'Committee Chair') basePoints = 5;
+      else if (duty.duty_type === 'Event Organizer') basePoints = 4;
+      else if (duty.duty_type === 'Exam Coordinator') basePoints = 3;
+      else if (duty.duty_type === 'Committee Member') basePoints = 2;
+      else basePoints = 2;
+      
+      let frequencyFactor = 1.0;
+      if (duty.duty_frequency === 'Per Semester') frequencyFactor = 0.5;
+      else if (duty.duty_frequency === 'One-Time Event') frequencyFactor = 0.3;
+      
+      return Math.round(basePoints * frequencyFactor * 100) / 100;
+    }
+
+    function calculateScores() {
+      const teaching = getRecordsBySection('teaching');
+      const supervision = getRecordsBySection('supervision');
+      const research = getRecordsBySection('research');
+      const publications = getRecordsBySection('publications');
+      const adminLeadership = getRecordsBySection('administration');
+      const adminDuties = getRecordsBySection('admin_duties');
+
+      let teachingScore = 0;
+      teaching.forEach(course => {
+        teachingScore += calculateCourseScore(course);
+      });
+
+      let supervisionScore = 0;
+      supervision.forEach(student => {
+        if (student.student_level === 'phd') {
+          supervisionScore += student.student_role === 'main' ? 8 : 4;
+        } else if (student.student_level === 'masters') {
+          supervisionScore += student.student_role === 'main' ? 5 : 2.5;
+        } else {
+          supervisionScore += 1;
+        }
+      });
+
+      let researchScore = 0;
+      research.forEach(project => {
+        researchScore += calculateResearchScore(project);
+      });
+      
+      let publicationScore = 0;
+      publications.forEach(pub => {
+        publicationScore += calculatePublicationScore(pub);
+      });
+
+      let adminLeadershipScore = 0;
+      adminLeadership.forEach(pos => {
+        adminLeadershipScore += calculateAdminLeadershipScore(pos);
+      });
+
+      let adminDutiesScore = 0;
+      adminDuties.forEach(duty => {
+        adminDutiesScore += calculateAdminDutyScore(duty);
+      });
+
+      const totalScore = teachingScore + supervisionScore + researchScore + publicationScore + adminLeadershipScore + adminDutiesScore;
+
+      return {
+        teaching: Math.round(teachingScore * 10) / 10,
+        supervision: Math.round(supervisionScore * 10) / 10,
+        research: Math.round(researchScore * 10) / 10,
+        publication: Math.round(publicationScore * 10) / 10,
+        adminLeadership: Math.round(adminLeadershipScore * 10) / 10,
+        adminDuties: Math.round(adminDutiesScore * 10) / 10,
+        total: Math.round(totalScore * 10) / 10
+      };
+    }
+
+    function getWorkloadStatus(totalScore) {
+      if (totalScore >= 100) return { status: 'Overloaded', color: 'red', icon: '⚠️' };
+      if (totalScore >= 70) return { status: 'Balanced', color: 'green', icon: '✅' };
+      if (totalScore >= 40) return { status: 'Moderate', color: 'yellow', icon: '⚡' };
+      return { status: 'Light', color: 'blue', icon: '💡' };
+    }
+
+    function renderNavigation() {
+      const navContainer = document.getElementById('nav-items');
+      navContainer.innerHTML = sections.map(section => {
+        const count = getRecordsBySection(section.id).length;
+        const countBadge = ['teaching', 'supervision', 'research', 'publications', 'administration', 'admin_duties'].includes(section.id) && count > 0
+          ? `<span class="ml-auto bg-sky-100 text-sky-700 text-xs px-2 py-1 rounded-full font-semibold">${count}</span>`
+          : '';
+        
+        return `
+          <button type="button" onclick="navigateToSection('${section.id}')" 
+                  class="nav-item w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 ${
+                    currentSection === section.id ? 'active' : 'text-gray-700 hover:bg-gray-100'
+                  }">
+            <span class="text-lg">${section.icon}</span>
+            <span class="font-medium flex-1">${section.name}</span>
+            ${countBadge}
+          </button>
+        `;
+      }).join('');
+    }
+
+    function navigateToSection(sectionId) {
+      currentSection = sectionId;
+      renderNavigation();
+      renderSection(sectionId);
+    }
+
+    function renderSection(sectionId) {
+      const contentArea = document.getElementById('content-area');
+      let content = '';
+      
+      switch(sectionId) {
+        case 'home': content = renderHomeSection(); break;
+        case 'profile': content = renderProfileSection(); break;
+        case 'teaching': content = renderTeachingSection(); break;
+        case 'supervision': content = renderSupervisionSection(); break;
+        case 'research': content = renderResearchSection(); break;
+        case 'publications': content = renderPublicationsSection(); break;
+        case 'administration': content = renderAdministrationSection(); break;
+        case 'admin_duties': content = renderAdminDutiesSection(); break;
+        case 'service': content = renderServiceSection(); break;
+        case 'laboratory': content = renderLaboratorySection(); break;
+        case 'professional': content = renderProfessionalSection(); break;
+        case 'assistants': content = renderAssistantsSection(); break;
+        case 'results': content = renderResultsSection(); break;
+        default: content = '<div class="text-center py-12 text-gray-500">Section coming soon</div>';
+      }
+      
+      contentArea.innerHTML = `<div class="max-w-5xl mx-auto">${content}</div>`;
+    }
+
+    function renderHomeSection() {
+      const profile = getProfile();
+      const scores = calculateScores();
+      const status = getWorkloadStatus(scores.total);
+      
+      return `
+        <div class="space-y-6">
+          <!-- Hero -->
+          <div class="bg-gradient-to-br from-sky-900 via-sky-800 to-cyan-800 rounded-2xl shadow-2xl p-8 text-white text-center">
+            <h1 class="heading-font text-4xl font-bold mb-3">FST UMS Workload Calculator</h1>
+            <p class="text-xl text-sky-100 mb-2">Faculty of Science and Technology</p>
+            <p class="text-lg text-sky-200">Universiti Malaysia Sabah</p>
+            ${profile ? `
+              <div class="mt-6 p-4 bg-white/10 backdrop-blur rounded-lg inline-block">
+                <p class="text-sm text-sky-200">Current User</p>
+                <p class="text-xl font-semibold">${profile.profile_name}</p>
+                <p class="text-sm text-sky-200">${profile.profile_rank || 'Staff'}</p>
+              </div>
+            ` : ''}
+          </div>
+
+          ${profile ? `
+          <!-- Stats -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="bg-white rounded-xl p-6 shadow-md text-center">
+              <div class="text-3xl font-bold text-sky-600">${scores.total}</div>
+              <div class="text-sm text-gray-600 mt-1">Total Score</div>
+              <span class="inline-block mt-2 px-3 py-1 bg-${status.color}-100 text-${status.color}-700 rounded-full text-xs font-semibold">
+                ${status.icon} ${status.status}
+              </span>
+            </div>
+            <div class="bg-white rounded-xl p-6 shadow-md text-center">
+              <div class="text-3xl font-bold text-blue-600">${getRecordsBySection('teaching').length}</div>
+              <div class="text-sm text-gray-600 mt-1">Courses</div>
+            </div>
+            <div class="bg-white rounded-xl p-6 shadow-md text-center">
+              <div class="text-3xl font-bold text-green-600">${getRecordsBySection('research').length}</div>
+              <div class="text-sm text-gray-600 mt-1">Projects</div>
+            </div>
+            <div class="bg-white rounded-xl p-6 shadow-md text-center">
+              <div class="text-3xl font-bold text-purple-600">${getRecordsBySection('publications').length}</div>
+              <div class="text-sm text-gray-600 mt-1">Publications</div>
+            </div>
+          </div>
+          ` : ''}
+
+          <!-- Workload vs Performance Definition -->
+          <div class="bg-white rounded-xl shadow-md border border-gray-200 p-6">
+            <h3 class="font-bold text-xl text-gray-800 mb-4 flex items-center gap-2">
+              <span>📖</span> Understanding Workload vs Performance
+            </h3>
+            
+            <div class="space-y-4">
+              <div class="p-4 bg-blue-50 border-l-4 border-blue-500 rounded">
+                <h4 class="font-semibold text-blue-900 mb-2">💼 Workload (Beban Tugas)</h4>
+                <p class="text-sm text-blue-800">
+                  Workload refers to the <strong>amount and scope of work assigned</strong> to academic staff. 
+                  It measures the <strong>volume, complexity, and time requirements</strong> of your responsibilities 
+                  including teaching, research, supervision, administration, and service activities.
+                </p>
+                <p class="text-xs text-blue-700 mt-2 italic">
+                  Example: Teaching 4 courses, supervising 6 students, leading 2 research projects
+                </p>
+              </div>
+
+              <div class="p-4 bg-green-50 border-l-4 border-green-500 rounded">
+                <h4 class="font-semibold text-green-900 mb-2">🎯 Performance (Prestasi Kerja)</h4>
+                <p class="text-sm text-green-800">
+                  Performance refers to the <strong>quality and outcomes</strong> of your work. 
+                  It measures <strong>how well you execute</strong> your responsibilities through indicators like 
+                  student evaluations, research impact, publication quality, grant success, and administrative effectiveness.
+                </p>
+                <p class="text-xs text-green-700 mt-2 italic">
+                  Example: High student satisfaction scores, Q1 publications, successful grant applications
+                </p>
+              </div>
+
+              <div class="p-4 bg-purple-50 border-l-4 border-purple-500 rounded">
+                <h4 class="font-semibold text-purple-900 mb-2">⚖️ Key Difference</h4>
+                <p class="text-sm text-purple-800">
+                  <strong>Workload = Quantity</strong> (How much work)<br>
+                  <strong>Performance = Quality</strong> (How well the work is done)
+                </p>
+                <p class="text-xs text-purple-700 mt-2">
+                  This calculator focuses on <strong>workload distribution</strong> to ensure fair task allocation. 
+                  Performance evaluation is a separate process measured through KPIs and annual assessments.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Start -->
+          <div class="grid md:grid-cols-3 gap-6">
+            <div class="bg-blue-50 rounded-xl p-6 border-2 border-blue-200">
+              <div class="text-4xl mb-3">👤</div>
+              <h3 class="font-bold text-lg mb-2">${profile ? 'Update' : 'Create'} Profile</h3>
+              <p class="text-sm text-gray-600 mb-4">${profile ? 'Update your information' : 'Start by entering your profile'}</p>
+              <button type="button" onclick="navigateToSection('profile')" class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700">
+                ${profile ? 'Edit Profile' : 'Get Started'} →
+              </button>
+            </div>
+
+            <div class="bg-green-50 rounded-xl p-6 border-2 border-green-200">
+              <div class="text-4xl mb-3">📚</div>
+              <h3 class="font-bold text-lg mb-2">Add Activities</h3>
+              <p class="text-sm text-gray-600 mb-4">Document teaching and research work</p>
+              <button type="button" onclick="navigateToSection('teaching')" class="w-full px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700">
+                Add Activities →
+              </button>
+            </div>
+
+            <div class="bg-purple-50 rounded-xl p-6 border-2 border-purple-200">
+              <div class="text-4xl mb-3">📊</div>
+              <h3 class="font-bold text-lg mb-2">View Results</h3>
+              <p class="text-sm text-gray-600 mb-4">Comprehensive workload analysis</p>
+              <button type="button" onclick="navigateToSection('results')" class="w-full px-4 py-2 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700">
+                View Results →
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderProfileSection() {
+      const profile = getProfile();
+      const isAcademic = profile?.profile_category === 'Academic Staff';
+      
+      return `
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 class="heading-font text-2xl font-bold mb-6">👤 Staff Profile</h2>
+          
+          <form id="profile-form" onsubmit="saveProfile(event)" class="space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Full Name *</label>
+                <input type="text" id="profile-name" required value="${profile?.profile_name || ''}" 
+                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                       placeholder="Assis Kamu">
+              </div>
+              
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Staff ID *</label>
+                <input type="text" id="profile-staffId" required value="${profile?.profile_staff_id || ''}"
+                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                       placeholder="250505-05050">
+              </div>
+              
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Staff Category *</label>
+                <select id="profile-category" required class="w-full px-4 py-3 border border-gray-300 rounded-lg" onchange="toggleAcademicFields()">
+                  <option value="">Select Category</option>
+                  <option value="Academic Staff" ${profile?.profile_category === 'Academic Staff' ? 'selected' : ''}>Academic Staff</option>
+                  <option value="Administration Staff" ${profile?.profile_category === 'Administration Staff' ? 'selected' : ''}>Administration Staff</option>
+                  <option value="Lab Staff" ${profile?.profile_category === 'Lab Staff' ? 'selected' : ''}>Lab Staff</option>
+                </select>
+              </div>
+              
+              <div id="programme-field" style="display: ${isAcademic ? 'block' : 'none'}">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Programme ${isAcademic ? '*' : ''}</label>
+                <select id="profile-programme" ${isAcademic ? 'required' : ''} class="w-full px-4 py-3 border border-gray-300 rounded-lg">
+                  <option value="">Select Programme</option>
+                  <option value="UH6422001 - Environmental Science" ${profile?.profile_programme === 'UH6422001 - Environmental Science' ? 'selected' : ''}>UH6422001 - Environmental Science</option>
+                  <option value="UH6441001 - Industrial Physics" ${profile?.profile_programme === 'UH6441001 - Industrial Physics' ? 'selected' : ''}>UH6441001 - Industrial Physics</option>
+                  <option value="UH6443002 - Geology" ${profile?.profile_programme === 'UH6443002 - Geology' ? 'selected' : ''}>UH6443002 - Geology</option>
+                  <option value="UH6443003 - Marine Science" ${profile?.profile_programme === 'UH6443003 - Marine Science' ? 'selected' : ''}>UH6443003 - Marine Science</option>
+                  <option value="UH6461001 - Mathematics with Economics" ${profile?.profile_programme === 'UH6461001 - Mathematics with Economics' ? 'selected' : ''}>UH6461001 - Mathematics with Economics</option>
+                  <option value="UH6461002 - Mathematics Computer Graphics" ${profile?.profile_programme === 'UH6461002 - Mathematics Computer Graphics' ? 'selected' : ''}>UH6461002 - Mathematics Computer Graphics</option>
+                  <option value="UH6545001 - Biotechnology" ${profile?.profile_programme === 'UH6545001 - Biotechnology' ? 'selected' : ''}>UH6545001 - Biotechnology</option>
+                  <option value="UH6545002 - Industrial Chemistry" ${profile?.profile_programme === 'UH6545002 - Industrial Chemistry' ? 'selected' : ''}>UH6545002 - Industrial Chemistry</option>
+                  <option value="UH6624001 - Aquaculture" ${profile?.profile_programme === 'UH6624001 - Aquaculture' ? 'selected' : ''}>UH6624001 - Aquaculture</option>
+                </select>
+              </div>
+              
+              <div id="rank-field" style="display: ${isAcademic ? 'block' : 'none'}">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Academic Rank ${isAcademic ? '*' : ''}</label>
+                <select id="profile-rank" ${isAcademic ? 'required' : ''} class="w-full px-4 py-3 border border-gray-300 rounded-lg">
+                  <option value="">Select Rank</option>
+                  <option value="Professor" ${profile?.profile_rank === 'Professor' ? 'selected' : ''}>Professor</option>
+                  <option value="Associate Professor" ${profile?.profile_rank === 'Associate Professor' ? 'selected' : ''}>Associate Professor</option>
+                  <option value="Senior Lecturer" ${profile?.profile_rank === 'Senior Lecturer' ? 'selected' : ''}>Senior Lecturer</option>
+                  <option value="Lecturer" ${profile?.profile_rank === 'Lecturer' ? 'selected' : ''}>Lecturer</option>
+                </select>
+              </div>
+              
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Administrative Position (Allowance)</label>
+                <select id="profile-admin-position" class="w-full px-4 py-3 border border-gray-300 rounded-lg" onchange="toggleOtherAdminPosition()">
+                  <option value="">None</option>
+                  <option value="Dean" ${profile?.profile_admin_position === 'Dean' ? 'selected' : ''}>Dean</option>
+                  <option value="Deputy Dean" ${profile?.profile_admin_position === 'Deputy Dean' ? 'selected' : ''}>Deputy Dean</option>
+                  <option value="Head of Programme" ${profile?.profile_admin_position === 'Head of Programme' ? 'selected' : ''}>Head of Programme</option>
+                  <option value="Postgraduate Coordinator" ${profile?.profile_admin_position === 'Postgraduate Coordinator' ? 'selected' : ''}>Postgraduate Coordinator</option>
+                  <option value="Other" ${profile?.profile_admin_position === 'Other' ? 'selected' : ''}>Other (Specify)</option>
+                </select>
+              </div>
+              
+              <div id="other-admin-position-field" style="display: ${profile?.profile_admin_position === 'Other' ? 'block' : 'none'}">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Specify Position</label>
+                <input type="text" id="profile-other-admin-position" value="${profile?.profile_other_admin_position || ''}"
+                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                       placeholder="Enter position name">
+              </div>
+            </div>
+            
+            <div class="flex justify-end gap-3">
+              <button type="submit" id="save-profile-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
+                💾 Save Profile
+              </button>
+            </div>
+          </form>
+        </div>
+      `;
+    }
+
+    function toggleAcademicFields() {
+      const category = document.getElementById('profile-category').value;
+      const isAcademic = category === 'Academic Staff';
+      
+      const programmeField = document.getElementById('programme-field');
+      const rankField = document.getElementById('rank-field');
+      const programmeSelect = document.getElementById('profile-programme');
+      const rankSelect = document.getElementById('profile-rank');
+      
+      if (isAcademic) {
+        programmeField.style.display = 'block';
+        rankField.style.display = 'block';
+        programmeSelect.required = true;
+        rankSelect.required = true;
+      } else {
+        programmeField.style.display = 'none';
+        rankField.style.display = 'none';
+        programmeSelect.required = false;
+        rankSelect.required = false;
+        programmeSelect.value = '';
+        rankSelect.value = '';
+      }
+    }
+
+    function toggleOtherAdminPosition() {
+      const adminPosition = document.getElementById('profile-admin-position').value;
+      const otherField = document.getElementById('other-admin-position-field');
+      
+      if (adminPosition === 'Other') {
+        otherField.style.display = 'block';
+      } else {
+        otherField.style.display = 'none';
+        document.getElementById('profile-other-admin-position').value = '';
+      }
+    }
+
+    async function saveProfile(event) {
+      event.preventDefault();
+      
+      const btn = document.getElementById('save-profile-btn');
+      btn.disabled = true;
+      btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
+      
+      const category = document.getElementById('profile-category').value;
+      const isAcademic = category === 'Academic Staff';
+      const adminPosition = document.getElementById('profile-admin-position').value;
+      
+      const profileData = {
+        section: 'profile',
+        profile_name: document.getElementById('profile-name').value,
+        profile_staff_id: document.getElementById('profile-staffId').value,
+        profile_category: category,
+        profile_programme: isAcademic ? document.getElementById('profile-programme').value : '',
+        profile_rank: isAcademic ? document.getElementById('profile-rank').value : '',
+        profile_admin_position: adminPosition,
+        profile_other_admin_position: adminPosition === 'Other' ? document.getElementById('profile-other-admin-position').value : '',
+        created_at: new Date().toISOString()
+      };
+      
+      const existingProfile = getProfile();
+      let result;
+      
+      if (existingProfile) {
+        result = await window.dataSdk.update({ ...existingProfile, ...profileData });
+      } else {
+        result = await window.dataSdk.create(profileData);
+      }
+      
+      btn.disabled = false;
+      btn.innerHTML = '💾 Save Profile';
+      
+      if (result.isOk) {
+        showToast('Profile saved successfully!');
+        setTimeout(() => navigateToSection('teaching'), 1000);
+      } else {
+        showToast('Failed to save profile', 'error');
+      }
+    }
+
+    function toggleOtherSemester() {
+      const semester = document.getElementById('course-semester').value;
+      const otherField = document.getElementById('other-semester-field');
+      
+      if (semester === 'Other') {
+        otherField.style.display = 'block';
+      } else {
+        otherField.style.display = 'none';
+        document.getElementById('course-other-semester').value = '';
+      }
+    }
+
+    function renderTeachingSection() {
+      const courses = getRecordsBySection('teaching');
+      
+      return `
+        <div class="space-y-6">
+          <!-- Calculation Formula -->
+          <div class="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl shadow-sm border-2 border-blue-200 p-6">
+            <h3 class="font-bold text-lg text-blue-900 mb-3 flex items-center gap-2">
+              <span>���</span> Teaching Score Calculation Formula
+            </h3>
+            
+            <div class="bg-white rounded-lg p-4 mb-4">
+              <p class="font-mono text-sm text-gray-800 mb-2">
+                <strong>Score</strong> = (Weekly Contact Hours × Class Size Factor)
+              </p>
+              <div class="text-xs text-gray-600 space-y-1 ml-4">
+                <p>• <strong>Weekly Contact Hours</strong> = Total Semester Hours ÷ 14 weeks</p>
+                <p>• <strong>Total Semester Hours</strong> = Lecture + Tutorial + Lab + Fieldwork</p>
+                <p>• <strong>Class Size Factor:</strong></p>
+                <p class="ml-4">- ≤50 students: 1.0</p>
+                <p class="ml-4">- 51-100 students: 1.3</p>
+                <p class="ml-4">- 101+ students: 1.5</p>
+              </div>
+            </div>
+            
+            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+              <p class="text-sm font-semibold text-yellow-900 mb-3">📝 Example Calculation:</p>
+              <div class="grid grid-cols-2 gap-3 mb-3">
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Credit Hours</p>
+                  <p class="text-lg font-bold text-yellow-900">2</p>
+                </div>
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Class Size</p>
+                  <p class="text-lg font-bold text-yellow-900">45 students</p>
+                </div>
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Lecture Hours</p>
+                  <p class="text-lg font-bold text-yellow-900">22</p>
+                </div>
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Tutorial Hours</p>
+                  <p class="text-lg font-bold text-yellow-900">6</p>
+                </div>
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Lab Hours</p>
+                  <p class="text-lg font-bold text-yellow-900">0</p>
+                </div>
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Fieldwork Hours</p>
+                  <p class="text-lg font-bold text-yellow-900">0</p>
+                </div>
+              </div>
+              <div class="bg-white rounded p-3 border-2 border-yellow-300 mb-2">
+                <p class="text-xs text-yellow-700 mb-1">Total Semester Hours: 22 + 6 + 0 + 0 = 28 hours</p>
+                <p class="text-xs text-yellow-700 mb-1">Weekly Hours: 28 ÷ 14 = 2 hours/week</p>
+                <p class="text-xs text-yellow-700">Class Size Factor: 45 students → 1.0</p>
+              </div>
+              <p class="text-sm font-bold text-yellow-900 text-center">
+                Score = 2 × 1.0 = <span class="text-green-700 text-lg">2.0 points</span>
+              </p>
+            </div>
+          </div>
+
+          <!-- Add Course Form -->
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="heading-font text-2xl font-bold mb-6">📚 Teaching Courses</h2>
+            
+            <form id="teaching-form" onsubmit="saveCourse(event)" class="space-y-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Course Code *</label>
+                  <input type="text" id="course-code" required 
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="e.g., SJ24102">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Course Name *</label>
+                  <input type="text" id="course-name" required
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="e.g., Monetary Economics">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Credit Hours *</label>
+                  <input type="number" id="course-credit" required min="1" max="10"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="3">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Class Size *</label>
+                  <input type="number" id="course-size" required min="1"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="75">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Lecture Hours (per semester) *</label>
+                  <input type="number" id="course-lecture" required min="0"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="42">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Tutorial Hours (per semester) *</label>
+                  <input type="number" id="course-tutorial" required min="0"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="28">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Lab Hours (per semester) *</label>
+                  <input type="number" id="course-lab" required min="0"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="14">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Fieldwork Hours (per semester) *</label>
+                  <input type="number" id="course-fieldwork" required min="0"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="0">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Semester *</label>
+                  <select id="course-semester" required class="w-full px-4 py-3 border border-gray-300 rounded-lg" onchange="toggleOtherSemester()">
+                    <option value="">Select Semester</option>
+                    <option value="Semester 1 2025/2026">Semester 1 2025/2026</option>
+                    <option value="Semester 2 2025/2026">Semester 2 2025/2026</option>
+                    <option value="Semester 1 2026/2027">Semester 1 2026/2027</option>
+                    <option value="Semester 2 2026/2027">Semester 2 2026/2027</option>
+                    <option value="Semester 1 2027/2028">Semester 1 2027/2028</option>
+                    <option value="Semester 2 2027/2028">Semester 2 2027/2028</option>
+                    <option value="Semester 1 2028/2029">Semester 1 2028/2029</option>
+                    <option value="Semester 2 2028/2029">Semester 2 2028/2029</option>
+                    <option value="Semester 1 2029/2030">Semester 1 2029/2030</option>
+                    <option value="Semester 2 2029/2030">Semester 2 2029/2030</option>
+                    <option value="Semester 1 2030/2031">Semester 1 2030/2031</option>
+                    <option value="Semester 2 2030/2031">Semester 2 2030/2031</option>
+                    <option value="Other">Other (Specify)</option>
+                  </select>
+                </div>
+                
+                <div id="other-semester-field" style="display: none">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Specify Semester</label>
+                  <input type="text" id="course-other-semester"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="e.g., Semester 1 2024/2025">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Role *</label>
+                  <select id="course-role" required class="w-full px-4 py-3 border border-gray-300 rounded-lg">
+                    <option value="">Select Role</option>
+                    <option value="Lecturer">Lecturer</option>
+                    <option value="Coordinator">Coordinator</option>
+                    <option value="Lecturer + Coordinator">Lecturer + Coordinator</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div class="flex justify-between">
+                <button type="button" onclick="navigateToSection('profile')" class="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium">← Previous</button>
+                <button type="submit" id="save-course-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
+                  ➕ Add Course
+                </button>
+              </div>
+            </form>
+          </div>
+          
+          <!-- Course List -->
+          ${courses.length > 0 ? `
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 class="font-bold text-lg mb-4">Your Courses (${courses.length})</h3>
+              <div class="space-y-3">
+                ${courses.map(course => {
+                  const score = calculateCourseScore(course);
+                  const totalHours = (course.course_lecture || 0) + (course.course_tutorial || 0) + 
+                                     (course.course_lab || 0) + (course.course_fieldwork || 0);
+                  const weeklyHours = (totalHours / 14).toFixed(1);
+                  const semesterDisplay = course.course_semester === 'Other' ? 
+                    course.course_other_semester : course.course_semester;
+                  
+                  return `
+                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                      <div class="flex-1">
+                        <div class="font-semibold text-gray-900">${course.course_code} - ${course.course_name}</div>
+                        <div class="text-sm text-gray-600 mt-1">
+                          ${semesterDisplay} • ${course.course_role} • ${course.course_class_size} students
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1">
+                          Semester: L(${course.course_lecture}) T(${course.course_tutorial}) Lab(${course.course_lab}) FW(${course.course_fieldwork}) = ${totalHours}h
+                          • Weekly: ${weeklyHours}h • <span class="font-semibold text-green-700">Score: ${score}</span>
+                        </div>
+                      </div>
+                      <button type="button" onclick="deleteCourse('${course.__backendId}')" 
+                              class="ml-4 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium">
+                        Delete
+                      </button>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          ` : ''}
+          
+          <!-- Navigation -->
+          <div class="flex justify-end">
+            <button type="button" onclick="navigateToSection('supervision')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
+              Next: Supervision →
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    async function saveCourse(event) {
+      event.preventDefault();
+      
+      if (allRecords.length >= 999) {
+        showToast('Maximum limit of 999 records reached', 'error');
+        return;
+      }
+      
+      const btn = document.getElementById('save-course-btn');
+      btn.disabled = true;
+      btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
+      
+      const semester = document.getElementById('course-semester').value;
+      const finalSemester = semester === 'Other' ? 
+        document.getElementById('course-other-semester').value : semester;
+      
+      const courseData = {
+        section: 'teaching',
+        course_code: document.getElementById('course-code').value,
+        course_name: document.getElementById('course-name').value,
+        course_credit_hours: parseInt(document.getElementById('course-credit').value),
+        course_class_size: parseInt(document.getElementById('course-size').value),
+        course_lecture: parseInt(document.getElementById('course-lecture').value),
+        course_tutorial: parseInt(document.getElementById('course-tutorial').value),
+        course_lab: parseInt(document.getElementById('course-lab').value),
+        course_fieldwork: parseInt(document.getElementById('course-fieldwork').value),
+        course_semester: semester,
+        course_other_semester: semester === 'Other' ? finalSemester : '',
+        course_role: document.getElementById('course-role').value,
+        created_at: new Date().toISOString()
+      };
+      
+      const result = await window.dataSdk.create(courseData);
+      
+      btn.disabled = false;
+      btn.innerHTML = '➕ Add Course';
+      
+      if (result.isOk) {
+        showToast('Course added successfully!');
+        document.getElementById('teaching-form').reset();
+        document.getElementById('other-semester-field').style.display = 'none';
+      } else {
+        showToast('Failed to add course', 'error');
+      }
+    }
+
+    async function deleteCourse(backendId) {
+      const course = allRecords.find(r => r.__backendId === backendId);
+      if (!course) return;
+      
+      const result = await window.dataSdk.delete(course);
+      
+      if (result.isOk) {
+        showToast('Course deleted successfully!');
+      } else {
+        showToast('Failed to delete course', 'error');
+      }
+    }
+
+    function renderSupervisionSection() {
+      const students = getRecordsBySection('supervision');
+      
+      return `
+        <div class="space-y-6">
+          <!-- Calculation Formula -->
+          <div class="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl shadow-sm border-2 border-purple-200 p-6">
+            <h3 class="font-bold text-lg text-purple-900 mb-3 flex items-center gap-2">
+              <span>🧮</span> Supervision Score Calculation Formula
+            </h3>
+            
+            <div class="bg-white rounded-lg p-4 mb-4">
+              <p class="font-mono text-sm text-gray-800 mb-3">
+                <strong>Score per Student</strong> = Points based on Level × Role
+              </p>
+              <div class="text-xs text-gray-600 space-y-2 ml-4">
+                <div>
+                  <p class="font-semibold text-purple-900 mb-1">PhD Students:</p>
+                  <p class="ml-4">• Main Supervisor: <strong>8 points</strong></p>
+                  <p class="ml-4">• Co-Supervisor: <strong>4 points</strong></p>
+                </div>
+                <div>
+                  <p class="font-semibold text-purple-900 mb-1">Masters Students:</p>
+                  <p class="ml-4">• Main Supervisor: <strong>5 points</strong></p>
+                  <p class="ml-4">• Co-Supervisor: <strong>2.5 points</strong></p>
+                </div>
+                <div>
+                  <p class="font-semibold text-purple-900 mb-1">Undergraduate (FYP) Students:</p>
+                  <p class="ml-4">����� Main or Co-Supervisor: <strong>1 point</strong></p>
+                </div>
+              </div>
+            </div>
+            
+            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+              <p class="text-sm font-semibold text-yellow-900 mb-3">📝 Example Calculation:</p>
+              <div class="grid grid-cols-3 gap-3 mb-3">
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Student 1</p>
+                  <p class="text-sm font-bold text-yellow-900">PhD (Main)</p>
+                </div>
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Student 2</p>
+                  <p class="text-sm font-bold text-yellow-900">Masters (Main)</p>
+                </div>
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Student 3</p>
+                  <p class="text-sm font-bold text-yellow-900">FYP (Main)</p>
+                </div>
+              </div>
+              <div class="bg-white rounded p-3 border-2 border-yellow-300 mb-2">
+                <p class="text-xs text-yellow-700 mb-1">PhD Main Supervisor: 8 points</p>
+                <p class="text-xs text-yellow-700 mb-1">Masters Main Supervisor: 5 points</p>
+                <p class="text-xs text-yellow-700">FYP Main Supervisor: 1 point</p>
+              </div>
+              <p class="text-sm font-bold text-yellow-900 text-center">
+                Total Score = 8 + 5 + 1 = <span class="text-green-700 text-lg">14.0 points</span>
+              </p>
+            </div>
+          </div>
+
+          <!-- Add Student Form -->
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="heading-font text-2xl font-bold mb-6">🎓 Student Supervision</h2>
+            
+            <form id="supervision-form" onsubmit="saveStudent(event)" class="space-y-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Student Name *</label>
+                  <input type="text" id="student-name" required 
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="e.g., Ahmad bin Abdullah">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Matric Number *</label>
+                  <input type="text" id="student-matric" required
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="e.g., MI2100123">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Study Level *</label>
+                  <select id="student-level" required class="w-full px-4 py-3 border border-gray-300 rounded-lg">
+                    <option value="">Select Level</option>
+                    <option value="phd">PhD</option>
+                    <option value="masters">Masters</option>
+                    <option value="undergraduate">Undergraduate (FYP)</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Supervision Role *</label>
+                  <select id="student-role" required class="w-full px-4 py-3 border border-gray-300 rounded-lg">
+                    <option value="">Select Role</option>
+                    <option value="main">Main Supervisor</option>
+                    <option value="co">Co-Supervisor</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Research Title *</label>
+                  <input type="text" id="student-title" required
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="e.g., Study of Marine Biodiversity">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Start Year *</label>
+                  <input type="number" id="student-year" required min="2000" max="2030"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="2024">
+                </div>
+              </div>
+              
+              <div class="flex justify-between">
+                <button type="button" onclick="navigateToSection('teaching')" class="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium">← Previous</button>
+                <button type="submit" id="save-student-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
+                  ➕ Add Student
+                </button>
+              </div>
+            </form>
+          </div>
+          
+          <!-- Student List -->
+          ${students.length > 0 ? `
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 class="font-bold text-lg mb-4">Supervised Students (${students.length})</h3>
+              <div class="space-y-3">
+                ${students.map(student => {
+                  let score = 0;
+                  if (student.student_level === 'phd') {
+                    score = student.student_role === 'main' ? 8 : 4;
+                  } else if (student.student_level === 'masters') {
+                    score = student.student_role === 'main' ? 5 : 2.5;
+                  } else {
+                    score = 1;
+                  }
+                  
+                  return `
+                  <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div class="flex-1">
+                      <div class="font-semibold text-gray-900">${student.student_name} (${student.student_matric})</div>
+                      <div class="text-sm text-gray-600 mt-1">
+                        ${student.student_level.toUpperCase()} • ${student.student_role === 'main' ? 'Main Supervisor' : 'Co-Supervisor'} • Started ${student.student_year}
+                      </div>
+                      <div class="text-xs text-gray-500 mt-1">
+                        ${student.student_title} • <span class="font-semibold text-green-700">Score: ${score}</span>
+                      </div>
+                    </div>
+                    <button type="button" onclick="deleteStudent('${student.__backendId}')" 
+                            class="ml-4 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium">
+                      Delete
+                    </button>
+                  </div>
+                `}).join('')}
+              </div>
+            </div>
+          ` : ''}
+          
+          <!-- Navigation -->
+          <div class="flex justify-end">
+            <button type="button" onclick="navigateToSection('research')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
+              Next: Research →
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    async function saveStudent(event) {
+      event.preventDefault();
+      
+      if (allRecords.length >= 999) {
+        showToast('Maximum limit of 999 records reached', 'error');
+        return;
+      }
+      
+      const btn = document.getElementById('save-student-btn');
+      btn.disabled = true;
+      btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
+      
+      const studentData = {
+        section: 'supervision',
+        student_name: document.getElementById('student-name').value,
+        student_matric: document.getElementById('student-matric').value,
+        student_level: document.getElementById('student-level').value,
+        student_role: document.getElementById('student-role').value,
+        student_title: document.getElementById('student-title').value,
+        student_year: parseInt(document.getElementById('student-year').value),
+        created_at: new Date().toISOString()
+      };
+      
+      const result = await window.dataSdk.create(studentData);
+      
+      btn.disabled = false;
+      btn.innerHTML = '➕ Add Student';
+      
+      if (result.isOk) {
+        showToast('Student added successfully!');
+        document.getElementById('supervision-form').reset();
+      } else {
+        showToast('Failed to add student', 'error');
+      }
+    }
+
+    async function deleteStudent(backendId) {
+      const student = allRecords.find(r => r.__backendId === backendId);
+      if (!student) return;
+      
+      const result = await window.dataSdk.delete(student);
+      
+      if (result.isOk) {
+        showToast('Student deleted successfully!');
+      } else {
+        showToast('Failed to delete student', 'error');
+      }
+    }
+
+    function renderResearchSection() {
+      const projects = getRecordsBySection('research');
+      
+      return `
+        <div class="space-y-6">
+          <!-- Calculation Formula -->
+          <div class="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl shadow-sm border-2 border-green-200 p-6">
+            <h3 class="font-bold text-lg text-green-900 mb-3 flex items-center gap-2">
+              <span>🧮</span> Research Score Calculation Formula
+            </h3>
+            
+            <div class="bg-white rounded-lg p-4 mb-4">
+              <p class="font-mono text-sm text-gray-800 mb-3">
+                <strong>Score</strong> = Base Points × Role Factor × Status Factor
+              </p>
+              <div class="text-xs text-gray-600 space-y-2 ml-4">
+                <div>
+                  <p class="font-semibold text-green-900 mb-1">Base Points:</p>
+                  <p class="ml-4">• Each research project: <strong>5 points</strong></p>
+                </div>
+                <div>
+                  <p class="font-semibold text-green-900 mb-1">Role Factor:</p>
+                  <p class="ml-4">• Lead Researcher: <strong>1.0</strong></p>
+                  <p class="ml-4">• Co-Lead Researcher: <strong>0.7</strong></p>
+                  <p class="ml-4">• Team Member: <strong>0.5</strong></p>
+                </div>
+                <div>
+                  <p class="font-semibold text-green-900 mb-1">Status Factor:</p>
+                  <p class="ml-4">• Ongoing: <strong>1.0</strong></p>
+                  <p class="ml-4">• Completed: <strong>0.8</strong></p>
+                  <p class="ml-4">• Pending: <strong>0.3</strong></p>
+                </div>
+              </div>
+            </div>
+            
+            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+              <p class="text-sm font-semibold text-yellow-900 mb-3">📝 Example Calculation:</p>
+              <div class="grid grid-cols-3 gap-3 mb-3">
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Project 1</p>
+                  <p class="text-sm font-bold text-yellow-900">Lead, Ongoing</p>
+                </div>
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Project 2</p>
+                  <p class="text-sm font-bold text-yellow-900">Co-Lead, Completed</p>
+                </div>
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Project 3</p>
+                  <p class="text-sm font-bold text-yellow-900">Member, Pending</p>
+                </div>
+              </div>
+              <div class="bg-white rounded p-3 border-2 border-yellow-300 mb-2">
+                <p class="text-xs text-yellow-700 mb-1">Project 1: 5 × 1.0 × 1.0 = 5.0 points</p>
+                <p class="text-xs text-yellow-700 mb-1">Project 2: 5 × 0.7 × 0.8 = 2.8 points</p>
+                <p class="text-xs text-yellow-700">Project 3: 5 × 0.5 × 0.3 = 0.75 points</p>
+              </div>
+              <p class="text-sm font-bold text-yellow-900 text-center">
+                Total Score = 5.0 + 2.8 + 0.75 = <span class="text-green-700 text-lg">8.55 points</span>
+              </p>
+            </div>
+          </div>
+
+          <!-- Add Project Form -->
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="heading-font text-2xl font-bold mb-6">🔬 Research Projects</h2>
+            
+            <form id="research-form" onsubmit="saveResearch(event)" class="space-y-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="md:col-span-2">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Project Title *</label>
+                  <input type="text" id="research-title" required 
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="e.g., Sustainable Energy Solutions for Rural Areas">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Grant Code *</label>
+                  <input type="text" id="research-grant-code" required
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="e.g., FRGS/1/2024/STG06/UMS/02/1">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Role *</label>
+                  <select id="research-role" required class="w-full px-4 py-3 border border-gray-300 rounded-lg">
+                    <option value="">Select Role</option>
+                    <option value="lead">Lead Researcher</option>
+                    <option value="co-lead">Co-Lead Researcher</option>
+                    <option value="member">Team Member</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Grant Amount (RM) *</label>
+                  <input type="number" id="research-amount" required min="0"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="50000">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Status *</label>
+                  <select id="research-status" required class="w-full px-4 py-3 border border-gray-300 rounded-lg">
+                    <option value="">Select Status</option>
+                    <option value="ongoing">Ongoing</option>
+                    <option value="completed">Completed</option>
+                    <option value="pending">Pending</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Start Year *</label>
+                  <input type="number" id="research-year" required min="2000" max="2030"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="2024">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Duration (Years) *</label>
+                  <input type="number" id="research-duration" required min="1" max="10" step="0.5"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="2">
+                </div>
+              </div>
+              
+              <div class="flex justify-between">
+                <button type="button" onclick="navigateToSection('supervision')" class="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium">← Previous</button>
+                <button type="submit" id="save-research-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
+                  ➕ Add Project
+                </button>
+              </div>
+            </form>
+          </div>
+          
+          <!-- Project List -->
+          ${projects.length > 0 ? `
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 class="font-bold text-lg mb-4">Research Projects (${projects.length})</h3>
+              <div class="space-y-3">
+                ${projects.map(project => {
+                  const score = calculateResearchScore(project);
+                  return `
+                  <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div class="flex-1">
+                      <div class="font-semibold text-gray-900">${project.research_title}</div>
+                      <div class="text-sm text-gray-600 mt-1">
+                        ${project.research_grant_code} • ${project.research_role.replace('-', ' ')} • RM ${project.research_amount.toLocaleString()}
+                      </div>
+                      <div class="text-xs text-gray-500 mt-1">
+                        ${project.research_year} • ${project.research_duration} years • <span class="capitalize">${project.research_status}</span>
+                        • <span class="font-semibold text-green-700">Score: ${score}</span>
+                      </div>
+                    </div>
+                    <button type="button" onclick="deleteResearch('${project.__backendId}')" 
+                            class="ml-4 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium">
+                      Delete
+                    </button>
+                  </div>
+                `}).join('')}
+              </div>
+            </div>
+          ` : ''}
+          
+          <!-- Navigation -->
+          <div class="flex justify-end">
+            <button type="button" onclick="navigateToSection('publications')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
+              Next: Publications →
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    async function saveResearch(event) {
+      event.preventDefault();
+      
+      if (allRecords.length >= 999) {
+        showToast('Maximum limit of 999 records reached', 'error');
+        return;
+      }
+      
+      const btn = document.getElementById('save-research-btn');
+      btn.disabled = true;
+      btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
+      
+      const researchData = {
+        section: 'research',
+        research_title: document.getElementById('research-title').value,
+        research_grant_code: document.getElementById('research-grant-code').value,
+        research_role: document.getElementById('research-role').value,
+        research_amount: parseFloat(document.getElementById('research-amount').value),
+        research_status: document.getElementById('research-status').value,
+        research_year: parseInt(document.getElementById('research-year').value),
+        research_duration: parseFloat(document.getElementById('research-duration').value),
+        created_at: new Date().toISOString()
+      };
+      
+      const result = await window.dataSdk.create(researchData);
+      
+      btn.disabled = false;
+      btn.innerHTML = '➕ Add Project';
+      
+      if (result.isOk) {
+        showToast('Research project added successfully!');
+        document.getElementById('research-form').reset();
+      } else {
+        showToast('Failed to add research project', 'error');
+      }
+    }
+
+    async function deleteResearch(backendId) {
+      const research = allRecords.find(r => r.__backendId === backendId);
+      if (!research) return;
+      
+      const result = await window.dataSdk.delete(research);
+      
+      if (result.isOk) {
+        showToast('Research project deleted successfully!');
+      } else {
+        showToast('Failed to delete research project', 'error');
+      }
+    }
+
+    function renderPublicationsSection() {
+      const publications = getRecordsBySection('publications');
+      
+      return `
+        <div class="space-y-6">
+          <!-- Calculation Formula -->
+          <div class="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl shadow-sm border-2 border-indigo-200 p-6">
+            <h3 class="font-bold text-lg text-indigo-900 mb-3 flex items-center gap-2">
+              <span>🧮</span> Publication Score Calculation Formula
+            </h3>
+            
+            <div class="bg-white rounded-lg p-4 mb-4">
+              <p class="font-mono text-sm text-gray-800 mb-3">
+                <strong>Score</strong> = Base Points × Indexing Factor × Author Position Factor × Status Factor
+              </p>
+              <div class="text-xs text-gray-600 space-y-2 ml-4">
+                <div>
+                  <p class="font-semibold text-indigo-900 mb-1">Base Points (by Type):</p>
+                  <p class="ml-4">• Journal Article: <strong>10 points</strong></p>
+                  <p class="ml-4">• Book: <strong>15 points</strong></p>
+                  <p class="ml-4">• Book Chapter: <strong>8 points</strong></p>
+                  <p class="ml-4">• Conference Paper: <strong>6 points</strong></p>
+                  <p class="ml-4">• Proceeding: <strong>5 points</strong></p>
+                </div>
+                <div>
+                  <p class="font-semibold text-indigo-900 mb-1">Indexing Factor:</p>
+                  <p class="ml-4">• Q1 (Scopus/WoS): <strong>2.0</strong></p>
+                  <p class="ml-4">• Q2 (Scopus/WoS): <strong>1.5</strong></p>
+                  <p class="ml-4">• Q3 (Scopus/WoS): <strong>1.3</strong></p>
+                  <p class="ml-4">• Q4 (Scopus/WoS): <strong>1.1</strong></p>
+                  <p class="ml-4">• Scopus/WoS: <strong>1.2</strong></p>
+                  <p class="ml-4">• Other Indexed: <strong>0.8</strong></p>
+                </div>
+                <div>
+                  <p class="font-semibold text-indigo-900 mb-1">Author Position Factor:</p>
+                  <p class="ml-4">• First Author: <strong>1.0</strong></p>
+                  <p class="ml-4">• Corresponding Author: <strong>1.0</strong></p>
+                  <p class="ml-4">• Co-Author: <strong>0.5</strong></p>
+                </div>
+                <div>
+                  <p class="font-semibold text-indigo-900 mb-1">Status Factor:</p>
+                  <p class="ml-4">• Published: <strong>1.0</strong></p>
+                  <p class="ml-4">• Accepted: <strong>0.8</strong></p>
+                  <p class="ml-4">• Under Review: <strong>0.3</strong></p>
+                </div>
+              </div>
+            </div>
+            
+            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+              <p class="text-sm font-semibold text-yellow-900 mb-3">📝 Example Calculation:</p>
+              <div class="grid grid-cols-3 gap-3 mb-3">
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Publication 1</p>
+                  <p class="text-xs font-bold text-yellow-900">Journal, Q1</p>
+                  <p class="text-xs text-yellow-700">First Author, Published</p>
+                </div>
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Publication 2</p>
+                  <p class="text-xs font-bold text-yellow-900">Conference, Scopus</p>
+                  <p class="text-xs text-yellow-700">Co-Author, Published</p>
+                </div>
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Publication 3</p>
+                  <p class="text-xs font-bold text-yellow-900">Chapter, Q2</p>
+                  <p class="text-xs text-yellow-700">First Author, Accepted</p>
+                </div>
+              </div>
+              <div class="bg-white rounded p-3 border-2 border-yellow-300 mb-2">
+                <p class="text-xs text-yellow-700 mb-1">Publication 1: 10 × 2.0 × 1.0 × 1.0 = 20.0 points</p>
+                <p class="text-xs text-yellow-700 mb-1">Publication 2: 6 × 1.2 × 0.5 × 1.0 = 3.6 points</p>
+                <p class="text-xs text-yellow-700">Publication 3: 8 × 1.5 × 1.0 × 0.8 = 9.6 points</p>
+              </div>
+              <p class="text-sm font-bold text-yellow-900 text-center">
+                Total Score = 20.0 + 3.6 + 9.6 = <span class="text-green-700 text-lg">33.2 points</span>
+              </p>
+            </div>
+          </div>
+
+          <!-- Add Publication Form -->
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="heading-font text-2xl font-bold mb-6">✍️ Scholarly Writing & Publications</h2>
+            
+            <form id="publication-form" onsubmit="savePublication(event)" class="space-y-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="md:col-span-2">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Publication Title *</label>
+                  <input type="text" id="pub-title" required 
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="e.g., Novel Approach to Marine Conservation">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Publication Type *</label>
+                  <select id="pub-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg">
+                    <option value="">Select Type</option>
+                    <option value="journal">Journal Article</option>
+                    <option value="conference">Conference Paper</option>
+                    <option value="book">Book</option>
+                    <option value="chapter">Book Chapter</option>
+                    <option value="proceeding">Proceeding</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Indexing *</label>
+                  <select id="pub-index" required class="w-full px-4 py-3 border border-gray-300 rounded-lg">
+                    <option value="">Select Indexing</option>
+                    <option value="Q1">Q1 (Scopus/WoS)</option>
+                    <option value="Q2">Q2 (Scopus/WoS)</option>
+                    <option value="Q3">Q3 (Scopus/WoS)</option>
+                    <option value="Q4">Q4 (Scopus/WoS)</option>
+                    <option value="Scopus">Scopus</option>
+                    <option value="WoS">Web of Science</option>
+                    <option value="Other">Other Indexed</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Journal/Conference Name *</label>
+                  <input type="text" id="pub-venue" required
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="e.g., Journal of Marine Science">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Author Position *</label>
+                  <select id="pub-position" required class="w-full px-4 py-3 border border-gray-300 rounded-lg">
+                    <option value="">Select Position</option>
+                    <option value="first">First Author</option>
+                    <option value="corresponding">Corresponding Author</option>
+                    <option value="co-author">Co-Author</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Publication Year *</label>
+                  <input type="number" id="pub-year" required min="2000" max="2030"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="2024">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Status *</label>
+                  <select id="pub-status" required class="w-full px-4 py-3 border border-gray-300 rounded-lg">
+                    <option value="">Select Status</option>
+                    <option value="published">Published</option>
+                    <option value="accepted">Accepted</option>
+                    <option value="under-review">Under Review</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div class="flex justify-between">
+                <button type="button" onclick="navigateToSection('research')" class="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium">← Previous</button>
+                <button type="submit" id="save-pub-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
+                  ➕ Add Publication
+                </button>
+              </div>
+            </form>
+          </div>
+          
+          <!-- Publication List -->
+          ${publications.length > 0 ? `
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 class="font-bold text-lg mb-4">Publications (${publications.length})</h3>
+              <div class="space-y-3">
+                ${publications.map(pub => {
+                  const score = calculatePublicationScore(pub);
+                  return `
+                  <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div class="flex-1">
+                      <div class="font-semibold text-gray-900">${pub.pub_title}</div>
+                      <div class="text-sm text-gray-600 mt-1">
+                        ${pub.pub_venue} • ${pub.pub_year} • ${pub.pub_index}
+                      </div>
+                      <div class="text-xs text-gray-500 mt-1">
+                        ${pub.pub_type.replace('-', ' ')} • ${pub.pub_position.replace('-', ' ')} • <span class="capitalize">${pub.pub_status.replace('-', ' ')}</span>
+                        • <span class="font-semibold text-green-700">Score: ${score}</span>
+                      </div>
+                    </div>
+                    <button type="button" onclick="deletePublication('${pub.__backendId}')" 
+                            class="ml-4 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium">
+                      Delete
+                    </button>
+                  </div>
+                `;}).join('')}
+              </div>
+            </div>
+          ` : ''}
+          
+          <!-- Navigation -->
+          <div class="flex justify-end">
+            <button type="button" onclick="navigateToSection('administration')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
+              Next: Administration →
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    async function savePublication(event) {
+      event.preventDefault();
+      
+      if (allRecords.length >= 999) {
+        showToast('Maximum limit of 999 records reached', 'error');
+        return;
+      }
+      
+      const btn = document.getElementById('save-pub-btn');
+      btn.disabled = true;
+      btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
+      
+      const pubData = {
+        section: 'publications',
+        pub_title: document.getElementById('pub-title').value,
+        pub_type: document.getElementById('pub-type').value,
+        pub_index: document.getElementById('pub-index').value,
+        pub_venue: document.getElementById('pub-venue').value,
+        pub_position: document.getElementById('pub-position').value,
+        pub_year: parseInt(document.getElementById('pub-year').value),
+        pub_status: document.getElementById('pub-status').value,
+        created_at: new Date().toISOString()
+      };
+      
+      const result = await window.dataSdk.create(pubData);
+      
+      btn.disabled = false;
+      btn.innerHTML = '➕ Add Publication';
+      
+      if (result.isOk) {
+        showToast('Publication added successfully!');
+        document.getElementById('publication-form').reset();
+      } else {
+        showToast('Failed to add publication', 'error');
+      }
+    }
+
+    async function deletePublication(backendId) {
+      const publication = allRecords.find(r => r.__backendId === backendId);
+      if (!publication) return;
+      
+      const result = await window.dataSdk.delete(publication);
+      
+      if (result.isOk) {
+        showToast('Publication deleted successfully!');
+      } else {
+        showToast('Failed to delete publication', 'error');
+      }
+    }
+
+    function renderAdministrationSection() {
+      const adminPositions = getRecordsBySection('administration');
+      
+      return `
+        <div class="space-y-6">
+          <!-- Calculation Formula -->
+          <div class="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl shadow-sm border-2 border-amber-200 p-6">
+            <h3 class="font-bold text-lg text-amber-900 mb-3 flex items-center gap-2">
+              <span>🧮</span> Admin Leadership Score Calculation Formula
+            </h3>
+            
+            <div class="bg-white rounded-lg p-4 mb-4">
+              <p class="font-mono text-sm text-gray-800 mb-3">
+                <strong>Score</strong> = Base Points by Position Level
+              </p>
+              <div class="text-xs text-gray-600 space-y-2 ml-4">
+                <div>
+                  <p class="font-semibold text-amber-900 mb-1">Faculty Level Positions:</p>
+                  <p class="ml-4">• Dean: <strong>20 points</strong></p>
+                  <p class="ml-4">• Deputy Dean: <strong>15 points</strong></p>
+                  <p class="ml-4">• Centre Director: <strong>12 points</strong></p>
+                </div>
+                <div>
+                  <p class="font-semibold text-amber-900 mb-1">Programme Level Positions:</p>
+                  <p class="ml-4">• Head of Programme: <strong>10 points</strong></p>
+                  <p class="ml-4">• Postgraduate Coordinator: <strong>8 points</strong></p>
+                  <p class="ml-4">• Programme Coordinator: <strong>6 points</strong></p>
+                </div>
+                <div>
+                  <p class="font-semibold text-amber-900 mb-1">Other Positions:</p>
+                  <p class="ml-4">• Other Administrative Roles: <strong>5 points</strong></p>
+                </div>
+              </div>
+            </div>
+            
+            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+              <p class="text-sm font-semibold text-yellow-900 mb-3">📝 Example Calculation:</p>
+              <div class="grid grid-cols-2 gap-3 mb-3">
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Position 1</p>
+                  <p class="text-sm font-bold text-yellow-900">Deputy Dean</p>
+                </div>
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Position 2</p>
+                  <p class="text-sm font-bold text-yellow-900">Head of Programme</p>
+                </div>
+              </div>
+              <div class="bg-white rounded p-3 border-2 border-yellow-300 mb-2">
+                <p class="text-xs text-yellow-700 mb-1">Deputy Dean: 15 points</p>
+                <p class="text-xs text-yellow-700">Head of Programme: 10 points</p>
+              </div>
+              <p class="text-sm font-bold text-yellow-900 text-center">
+                Total Score = 15 + 10 = <span class="text-green-700 text-lg">25 points</span>
+              </p>
+            </div>
+          </div>
+
+          <!-- Add Position Form -->
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="heading-font text-2xl font-bold mb-6">🏛️ Administrative Leadership</h2>
+            
+            <form id="admin-form" onsubmit="saveAdminPosition(event)" class="space-y-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Position *</label>
+                  <select id="admin-position" required class="w-full px-4 py-3 border border-gray-300 rounded-lg" onchange="toggleOtherPosition()">
+                    <option value="">Select Position</option>
+                    <option value="Dean">Dean</option>
+                    <option value="Deputy Dean">Deputy Dean</option>
+                    <option value="Centre Director">Centre Director</option>
+                    <option value="Head of Programme">Head of Programme</option>
+                    <option value="Postgraduate Coordinator">Postgraduate Coordinator</option>
+                    <option value="Programme Coordinator">Programme Coordinator</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                
+                <div id="other-position-field" style="display: none">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Specify Position</label>
+                  <input type="text" id="admin-other-position"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="e.g., Quality Assurance Coordinator">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Specific Position *</label>
+                  <input type="text" id="admin-faculty" required
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="e.g., Deputy Dean of Research & Innovation">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Start Date *</label>
+                  <input type="date" id="admin-start-date" required
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">End Date</label>
+                  <input type="date" id="admin-end-date"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Monthly Allowance *</label>
+                  <select id="admin-allowance" required class="w-full px-4 py-3 border border-gray-300 rounded-lg">
+                    <option value="">Select</option>
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div class="flex justify-between">
+                <button type="button" onclick="navigateToSection('publications')" class="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium">← Previous</button>
+                <button type="submit" id="save-admin-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
+                  ➕ Add Position
+                </button>
+              </div>
+            </form>
+          </div>
+          
+          <!-- Position List -->
+          ${adminPositions.length > 0 ? `
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 class="font-bold text-lg mb-4">Administrative Positions (${adminPositions.length})</h3>
+              <div class="space-y-3">
+                ${adminPositions.map(pos => {
+                  const score = calculateAdminLeadershipScore(pos);
+                  const displayPosition = pos.admin_position === 'Other' ? pos.admin_other_position : pos.admin_position;
+                  const endDate = pos.admin_end_date ? ` - ${pos.admin_end_date}` : ' - Present';
+                  
+                  return `
+                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                      <div class="flex-1">
+                        <div class="font-semibold text-gray-900">${displayPosition}</div>
+                        <div class="text-sm text-gray-600 mt-1">
+                          ${pos.admin_faculty} • ${pos.admin_start_date}${endDate}
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1">
+                          Monthly Allowance: ${pos.admin_allowance || 'No'} • <span class="font-semibold text-green-700">Score: ${score}</span>
+                        </div>
+                      </div>
+                      <button type="button" onclick="deleteAdminPosition('${pos.__backendId}')" 
+                              class="ml-4 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium">
+                        Delete
+                      </button>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          ` : ''}
+          
+          <!-- Navigation -->
+          <div class="flex justify-end">
+            <button type="button" onclick="navigateToSection('admin_duties')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
+              Next: Admin Duties →
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    function toggleOtherPosition() {
+      const position = document.getElementById('admin-position').value;
+      const otherField = document.getElementById('other-position-field');
+      
+      if (position === 'Other') {
+        otherField.style.display = 'block';
+      } else {
+        otherField.style.display = 'none';
+        document.getElementById('admin-other-position').value = '';
+      }
+    }
+
+    async function saveAdminPosition(event) {
+      event.preventDefault();
+      
+      if (allRecords.length >= 999) {
+        showToast('Maximum limit of 999 records reached', 'error');
+        return;
+      }
+      
+      const btn = document.getElementById('save-admin-btn');
+      btn.disabled = true;
+      btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
+      
+      const position = document.getElementById('admin-position').value;
+      
+      const adminData = {
+        section: 'administration',
+        admin_position: position,
+        admin_other_position: position === 'Other' ? document.getElementById('admin-other-position').value : '',
+        admin_faculty: document.getElementById('admin-faculty').value,
+        admin_start_date: document.getElementById('admin-start-date').value,
+        admin_end_date: document.getElementById('admin-end-date').value || '',
+        admin_allowance: document.getElementById('admin-allowance').value,
+        created_at: new Date().toISOString()
+      };
+      
+      const result = await window.dataSdk.create(adminData);
+      
+      btn.disabled = false;
+      btn.innerHTML = '➕ Add Position';
+      
+      if (result.isOk) {
+        showToast('Administrative position added successfully!');
+        document.getElementById('admin-form').reset();
+        document.getElementById('other-position-field').style.display = 'none';
+      } else {
+        showToast('Failed to add administrative position', 'error');
+      }
+    }
+
+    async function deleteAdminPosition(backendId) {
+      const position = allRecords.find(r => r.__backendId === backendId);
+      if (!position) return;
+      
+      const result = await window.dataSdk.delete(position);
+      
+      if (result.isOk) {
+        showToast('Administrative position deleted successfully!');
+      } else {
+        showToast('Failed to delete administrative position', 'error');
+      }
+    }
+
+    function renderAdminDutiesSection() {
+      const adminDuties = getRecordsBySection('admin_duties');
+      
+      return `
+        <div class="space-y-6">
+          <!-- Calculation Formula -->
+          <div class="bg-gradient-to-r from-teal-50 to-cyan-50 rounded-xl shadow-sm border-2 border-teal-200 p-6">
+            <h3 class="font-bold text-lg text-teal-900 mb-3 flex items-center gap-2">
+              <span>🧮</span> Admin Duties Score Calculation Formula
+            </h3>
+            
+            <div class="bg-white rounded-lg p-4 mb-4">
+              <p class="font-mono text-sm text-gray-800 mb-3">
+                <strong>Score</strong> = Base Points × Frequency Factor
+              </p>
+              <div class="text-xs text-gray-600 space-y-2 ml-4">
+                <div>
+                  <p class="font-semibold text-teal-900 mb-1">Base Points by Duty Type:</p>
+                  <p class="ml-4">• Accreditation Work: <strong>8 points</strong></p>
+                  <p class="ml-4">• Curriculum Development: <strong>6 points</strong></p>
+                  <p class="ml-4">• Committee Chair: <strong>5 points</strong></p>
+                  <p class="ml-4">• Event Organizer: <strong>4 points</strong></p>
+                  <p class="ml-4">��� Exam Coordinator: <strong>3 points</strong></p>
+                  <p class="ml-4">• Committee Member: <strong>2 points</strong></p>
+                  <p class="ml-4">• Other: <strong>2 points</strong></p>
+                </div>
+                <div>
+                  <p class="font-semibold text-teal-900 mb-1">Frequency Factor:</p>
+                  <p class="ml-4">• Ongoing (Year-round): <strong>1.0</strong></p>
+                  <p class="ml-4">• Per Semester: <strong>0.5</strong></p>
+                  <p class="ml-4">• One-Time Event: <strong>0.3</strong></p>
+                </div>
+              </div>
+            </div>
+            
+            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+              <p class="text-sm font-semibold text-yellow-900 mb-3">📝 Example Calculation:</p>
+              <div class="grid grid-cols-3 gap-3 mb-3">
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Duty 1</p>
+                  <p class="text-sm font-bold text-yellow-900">Committee Chair</p>
+                  <p class="text-xs text-yellow-700">Ongoing</p>
+                </div>
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Duty 2</p>
+                  <p class="text-sm font-bold text-yellow-900">Event Organizer</p>
+                  <p class="text-xs text-yellow-700">One-Time</p>
+                </div>
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Duty 3</p>
+                  <p class="text-sm font-bold text-yellow-900">Committee Member</p>
+                  <p class="text-xs text-yellow-700">Per Semester</p>
+                </div>
+              </div>
+              <div class="bg-white rounded p-3 border-2 border-yellow-300 mb-2">
+                <p class="text-xs text-yellow-700 mb-1">Committee Chair (Ongoing): 5 × 1.0 = 5.0 points</p>
+                <p class="text-xs text-yellow-700 mb-1">Event Organizer (One-Time): 4 × 0.3 = 1.2 points</p>
+                <p class="text-xs text-yellow-700">Committee Member (Semester): 2 × 0.5 = 1.0 point</p>
+              </div>
+              <p class="text-sm font-bold text-yellow-900 text-center">
+                Total Score = 5.0 + 1.2 + 1.0 = <span class="text-green-700 text-lg">7.2 points</span>
+              </p>
+            </div>
+          </div>
+
+          <!-- Add Duty Form -->
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="heading-font text-2xl font-bold mb-6">��� Administrative Duties</h2>
+            
+            <form id="admin-duty-form" onsubmit="saveAdminDuty(event)" class="space-y-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Duty Type *</label>
+                  <select id="duty-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg">
+                    <option value="">Select Duty Type</option>
+                    <option value="Accreditation Work">Accreditation Work</option>
+                    <option value="Curriculum Development">Curriculum Development</option>
+                    <option value="Committee Chair">Committee Chair</option>
+                    <option value="Event Organizer">Event Organizer</option>
+                    <option value="Exam Coordinator">Exam Coordinator</option>
+                    <option value="Committee Member">Committee Member</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Duty Name/Description *</label>
+                  <input type="text" id="duty-name" required 
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="e.g., MQA Accreditation Committee">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Frequency *</label>
+                  <select id="duty-frequency" required class="w-full px-4 py-3 border border-gray-300 rounded-lg">
+                    <option value="">Select Frequency</option>
+                    <option value="Ongoing (Year-round)">Ongoing (Year-round) - 1.0</option>
+                    <option value="Per Semester">Per Semester - 0.5</option>
+                    <option value="One-Time Event">One-Time Event - 0.3</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Academic Year *</label>
+                  <input type="text" id="duty-year" required
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="e.g., 2024/2025">
+                </div>
+                
+                <div class="md:col-span-2">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Additional Notes</label>
+                  <textarea id="duty-notes" rows="3"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="e.g., Chaired 8 meetings, prepared accreditation documents"></textarea>
+                </div>
+              </div>
+              
+              <div class="flex justify-between">
+                <button type="button" onclick="navigateToSection('administration')" class="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium">← Previous</button>
+                <button type="submit" id="save-duty-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
+                  ➕ Add Duty
+                </button>
+              </div>
+            </form>
+          </div>
+          
+          <!-- Duties List -->
+          ${adminDuties.length > 0 ? `
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 class="font-bold text-lg mb-4">Administrative Duties (${adminDuties.length})</h3>
+              <div class="space-y-3">
+                ${adminDuties.map(duty => {
+                  const score = calculateAdminDutyScore(duty);
+                  
+                  return `
+                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                      <div class="flex-1">
+                        <div class="font-semibold text-gray-900">${duty.duty_name}</div>
+                        <div class="text-sm text-gray-600 mt-1">
+                          ${duty.duty_type} • ${duty.duty_frequency} • ${duty.duty_year}
+                        </div>
+                        ${duty.duty_notes ? `<div class="text-xs text-gray-500 mt-1">${duty.duty_notes}</div>` : ''}
+                        <div class="text-xs text-gray-500 mt-1">
+                          <span class="font-semibold text-green-700">Score: ${score}</span>
+                        </div>
+                      </div>
+                      <button type="button" onclick="deleteAdminDuty('${duty.__backendId}')" 
+                              class="ml-4 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium">
+                        Delete
+                      </button>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          ` : ''}
+          
+          <!-- Navigation -->
+          <div class="flex justify-end">
+            <button type="button" onclick="navigateToSection('results')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
+              View Results →
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    async function saveAdminDuty(event) {
+      event.preventDefault();
+      
+      if (allRecords.length >= 999) {
+        showToast('Maximum limit of 999 records reached', 'error');
+        return;
+      }
+      
+      const btn = document.getElementById('save-duty-btn');
+      btn.disabled = true;
+      btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
+      
+      const dutyData = {
+        section: 'admin_duties',
+        duty_type: document.getElementById('duty-type').value,
+        duty_name: document.getElementById('duty-name').value,
+        duty_frequency: document.getElementById('duty-frequency').value,
+        duty_year: document.getElementById('duty-year').value,
+        duty_notes: document.getElementById('duty-notes').value,
+        created_at: new Date().toISOString()
+      };
+      
+      const result = await window.dataSdk.create(dutyData);
+      
+      btn.disabled = false;
+      btn.innerHTML = '➕ Add Duty';
+      
+      if (result.isOk) {
+        showToast('Administrative duty added successfully!');
+        document.getElementById('admin-duty-form').reset();
+      } else {
+        showToast('Failed to add administrative duty', 'error');
+      }
+    }
+
+    async function deleteAdminDuty(backendId) {
+      const duty = allRecords.find(r => r.__backendId === backendId);
+      if (!duty) return;
+      
+      const result = await window.dataSdk.delete(duty);
+      
+      if (result.isOk) {
+        showToast('Administrative duty deleted successfully!');
+      } else {
+        showToast('Failed to delete administrative duty', 'error');
+      }
+    }
+
+    function calculateServiceScore(service) {
+      let basePoints = 0;
+      if (service.service_type === 'External Examiner') basePoints = 8;
+      else if (service.service_type === 'Keynote Speaker') basePoints = 7;
+      else if (service.service_type === 'Invited Speaker') basePoints = 5;
+      else if (service.service_type === 'Journal Reviewer') basePoints = 4;
+      else if (service.service_type === 'Conference Reviewer') basePoints = 3;
+      else if (service.service_type === 'Community Outreach') basePoints = 3;
+      else if (service.service_type === 'Media Engagement') basePoints = 2;
+      else basePoints = 2;
+      
+      let scopeFactor = 1.0;
+      if (service.service_scope === 'International') scopeFactor = 1.5;
+      else if (service.service_scope === 'National') scopeFactor = 1.2;
+      else if (service.service_scope === 'Regional') scopeFactor = 1.0;
+      else if (service.service_scope === 'Institutional') scopeFactor = 0.8;
+      
+      return Math.round(basePoints * scopeFactor * 100) / 100;
+    }
+
+    function renderServiceSection() {
+      const services = getRecordsBySection('service');
+      
+      return `
+        <div class="space-y-6">
+          <!-- Calculation Formula -->
+          <div class="bg-gradient-to-r from-rose-50 to-pink-50 rounded-xl shadow-sm border-2 border-rose-200 p-6">
+            <h3 class="font-bold text-lg text-rose-900 mb-3 flex items-center gap-2">
+              <span>🧮</span> Service & Engagement Score Calculation Formula
+            </h3>
+            
+            <div class="bg-white rounded-lg p-4 mb-4">
+              <p class="font-mono text-sm text-gray-800 mb-3">
+                <strong>Score</strong> = Base Points × Scope Factor
+              </p>
+              <div class="text-xs text-gray-600 space-y-2 ml-4">
+                <div>
+                  <p class="font-semibold text-rose-900 mb-1">Base Points by Service Type:</p>
+                  <p class="ml-4">• External Examiner: <strong>8 points</strong></p>
+                  <p class="ml-4">• Keynote Speaker: <strong>7 points</strong></p>
+                  <p class="ml-4">• Invited Speaker: <strong>5 points</strong></p>
+                  <p class="ml-4">• Journal Reviewer: <strong>4 points</strong></p>
+                  <p class="ml-4">• Conference Reviewer: <strong>3 points</strong></p>
+                  <p class="ml-4">• Community Outreach: <strong>3 points</strong></p>
+                  <p class="ml-4">• Media Engagement: <strong>2 points</strong></p>
+                  <p class="ml-4">• Other: <strong>2 points</strong></p>
+                </div>
+                <div>
+                  <p class="font-semibold text-rose-900 mb-1">Scope Factor:</p>
+                  <p class="ml-4">• International: <strong>1.5</strong></p>
+                  <p class="ml-4">• National: <strong>1.2</strong></p>
+                  <p class="ml-4">• Regional/State: <strong>1.0</strong></p>
+                  <p class="ml-4">• Institutional: <strong>0.8</strong></p>
+                </div>
+              </div>
+            </div>
+            
+            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+              <p class="text-sm font-semibold text-yellow-900 mb-3">📝 Example Calculation:</p>
+              <div class="grid grid-cols-3 gap-3 mb-3">
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Service 1</p>
+                  <p class="text-sm font-bold text-yellow-900">External Examiner</p>
+                  <p class="text-xs text-yellow-700">International</p>
+                </div>
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Service 2</p>
+                  <p class="text-sm font-bold text-yellow-900">Keynote Speaker</p>
+                  <p class="text-xs text-yellow-700">National</p>
+                </div>
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Service 3</p>
+                  <p class="text-sm font-bold text-yellow-900">Journal Reviewer</p>
+                  <p class="text-xs text-yellow-700">International</p>
+                </div>
+              </div>
+              <div class="bg-white rounded p-3 border-2 border-yellow-300 mb-2">
+                <p class="text-xs text-yellow-700 mb-1">External Examiner (International): 8 × 1.5 = 12.0 points</p>
+                <p class="text-xs text-yellow-700 mb-1">Keynote Speaker (National): 7 × 1.2 = 8.4 points</p>
+                <p class="text-xs text-yellow-700">Journal Reviewer (International): 4 × 1.5 = 6.0 points</p>
+              </div>
+              <p class="text-sm font-bold text-yellow-900 text-center">
+                Total Score = 12.0 + 8.4 + 6.0 = <span class="text-green-700 text-lg">26.4 points</span>
+              </p>
+            </div>
+          </div>
+
+          <!-- Add Service Form -->
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="heading-font text-2xl font-bold mb-6">🤝 Service & Engagement</h2>
+            
+            <form id="service-form" onsubmit="saveService(event)" class="space-y-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Service Type *</label>
+                  <select id="service-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg">
+                    <option value="">Select Service Type</option>
+                    <option value="External Examiner">External Examiner</option>
+                    <option value="Keynote Speaker">Keynote Speaker</option>
+                    <option value="Invited Speaker">Invited Speaker</option>
+                    <option value="Journal Reviewer">Journal Reviewer</option>
+                    <option value="Conference Reviewer">Conference Reviewer</option>
+                    <option value="Community Outreach">Community Outreach</option>
+                    <option value="Media Engagement">Media Engagement</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Activity Title *</label>
+                  <input type="text" id="service-title" required 
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="e.g., PhD Thesis Examination - University of Malaya">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Scope *</label>
+                  <select id="service-scope" required class="w-full px-4 py-3 border border-gray-300 rounded-lg">
+                    <option value="">Select Scope</option>
+                    <option value="International">International</option>
+                    <option value="National">National</option>
+                    <option value="Regional">Regional/State</option>
+                    <option value="Institutional">Institutional</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Organization/Institution *</label>
+                  <input type="text" id="service-organization" required
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="e.g., University of Malaya">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Date *</label>
+                  <input type="date" id="service-date" required
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Duration (Hours)</label>
+                  <input type="number" id="service-duration" min="0" step="0.5"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="4">
+                </div>
+                
+                <div class="md:col-span-2">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+                  <textarea id="service-description" rows="3"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="Brief description of the service activity"></textarea>
+                </div>
+              </div>
+              
+              <div class="flex justify-between">
+                <button type="button" onclick="navigateToSection('admin_duties')" class="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium">← Previous</button>
+                <button type="submit" id="save-service-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
+                  ➕ Add Service
+                </button>
+              </div>
+            </form>
+          </div>
+          
+          <!-- Service List -->
+          ${services.length > 0 ? `
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 class="font-bold text-lg mb-4">Service Activities (${services.length})</h3>
+              <div class="space-y-3">
+                ${services.map(service => {
+                  const score = calculateServiceScore(service);
+                  
+                  return `
+                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                      <div class="flex-1">
+                        <div class="font-semibold text-gray-900">${service.service_title}</div>
+                        <div class="text-sm text-gray-600 mt-1">
+                          ${service.service_type} • ${service.service_scope} • ${service.service_organization}
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1">
+                          ${service.service_date}${service.service_duration ? ` • ${service.service_duration} hours` : ''}
+                          • <span class="font-semibold text-green-700">Score: ${score}</span>
+                        </div>
+                        ${service.service_description ? `<div class="text-xs text-gray-500 mt-1">${service.service_description}</div>` : ''}
+                      </div>
+                      <button type="button" onclick="deleteService('${service.__backendId}')" 
+                              class="ml-4 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium">
+                        Delete
+                      </button>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          ` : ''}
+          
+          <!-- Navigation -->
+          <div class="flex justify-end">
+            <button type="button" onclick="navigateToSection('laboratory')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
+              Next: Laboratory →
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    async function saveService(event) {
+      event.preventDefault();
+      
+      if (allRecords.length >= 999) {
+        showToast('Maximum limit of 999 records reached', 'error');
+        return;
+      }
+      
+      const btn = document.getElementById('save-service-btn');
+      btn.disabled = true;
+      btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
+      
+      const serviceData = {
+        section: 'service',
+        service_type: document.getElementById('service-type').value,
+        service_title: document.getElementById('service-title').value,
+        service_scope: document.getElementById('service-scope').value,
+        service_organization: document.getElementById('service-organization').value,
+        service_date: document.getElementById('service-date').value,
+        service_duration: parseFloat(document.getElementById('service-duration').value) || 0,
+        service_description: document.getElementById('service-description').value,
+        created_at: new Date().toISOString()
+      };
+      
+      const result = await window.dataSdk.create(serviceData);
+      
+      btn.disabled = false;
+      btn.innerHTML = '➕ Add Service';
+      
+      if (result.isOk) {
+        showToast('Service activity added successfully!');
+        document.getElementById('service-form').reset();
+      } else {
+        showToast('Failed to add service activity', 'error');
+      }
+    }
+
+    async function deleteService(backendId) {
+      const service = allRecords.find(r => r.__backendId === backendId);
+      if (!service) return;
+      
+      const result = await window.dataSdk.delete(service);
+      
+      if (result.isOk) {
+        showToast('Service activity deleted successfully!');
+      } else {
+        showToast('Failed to delete service activity', 'error');
+      }
+    }
+
+    function calculateLabScore(lab) {
+      let basePoints = 0;
+      if (lab.lab_responsibility === 'Lab Coordinator') basePoints = 10;
+      else if (lab.lab_responsibility === 'Lab Technician Supervisor') basePoints = 8;
+      else if (lab.lab_responsibility === 'Equipment Manager') basePoints = 6;
+      else if (lab.lab_responsibility === 'Safety Officer') basePoints = 5;
+      else if (lab.lab_responsibility === 'Lab Assistant Coordinator') basePoints = 4;
+      else basePoints = 3;
+      
+      let frequencyFactor = 1.0;
+      if (lab.lab_frequency === 'Full-Time (Year-round)') frequencyFactor = 1.0;
+      else if (lab.lab_frequency === 'Per Semester') frequencyFactor = 0.5;
+      else if (lab.lab_frequency === 'Per Course') frequencyFactor = 0.3;
+      
+      return Math.round(basePoints * frequencyFactor * 100) / 100;
+    }
+
+    function renderLaboratorySection() {
+      const labs = getRecordsBySection('laboratory');
+      
+      return `
+        <div class="space-y-6">
+          <!-- Calculation Formula -->
+          <div class="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl shadow-sm border-2 border-emerald-200 p-6">
+            <h3 class="font-bold text-lg text-emerald-900 mb-3 flex items-center gap-2">
+              <span>🧮</span> Laboratory Operations Score Calculation Formula
+            </h3>
+            
+            <div class="bg-white rounded-lg p-4 mb-4">
+              <p class="font-mono text-sm text-gray-800 mb-3">
+                <strong>Score</strong> = Base Points × Frequency Factor
+              </p>
+              <div class="text-xs text-gray-600 space-y-2 ml-4">
+                <div>
+                  <p class="font-semibold text-emerald-900 mb-1">Base Points by Responsibility:</p>
+                  <p class="ml-4">• Lab Coordinator: <strong>10 points</strong></p>
+                  <p class="ml-4">• Lab Technician Supervisor: <strong>8 points</strong></p>
+                  <p class="ml-4">• Equipment Manager: <strong>6 points</strong></p>
+                  <p class="ml-4">• Safety Officer: <strong>5 points</strong></p>
+                  <p class="ml-4">• Lab Assistant Coordinator: <strong>4 points</strong></p>
+                  <p class="ml-4">• Other Lab Duties: <strong>3 points</strong></p>
+                </div>
+                <div>
+                  <p class="font-semibold text-emerald-900 mb-1">Frequency Factor:</p>
+                  <p class="ml-4">• Full-Time (Year-round): <strong>1.0</strong></p>
+                  <p class="ml-4">• Per Semester: <strong>0.5</strong></p>
+                  <p class="ml-4">• Per Course: <strong>0.3</strong></p>
+                </div>
+              </div>
+            </div>
+            
+            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+              <p class="text-sm font-semibold text-yellow-900 mb-3">📝 Example Calculation:</p>
+              <div class="grid grid-cols-3 gap-3 mb-3">
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Lab 1</p>
+                  <p class="text-sm font-bold text-yellow-900">Lab Coordinator</p>
+                  <p class="text-xs text-yellow-700">Full-Time</p>
+                </div>
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Lab 2</p>
+                  <p class="text-sm font-bold text-yellow-900">Equipment Manager</p>
+                  <p class="text-xs text-yellow-700">Per Semester</p>
+                </div>
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Lab 3</p>
+                  <p class="text-sm font-bold text-yellow-900">Safety Officer</p>
+                  <p class="text-xs text-yellow-700">Full-Time</p>
+                </div>
+              </div>
+              <div class="bg-white rounded p-3 border-2 border-yellow-300 mb-2">
+                <p class="text-xs text-yellow-700 mb-1">Lab Coordinator (Full-Time): 10 × 1.0 = 10.0 points</p>
+                <p class="text-xs text-yellow-700 mb-1">Equipment Manager (Per Semester): 6 × 0.5 = 3.0 points</p>
+                <p class="text-xs text-yellow-700">Safety Officer (Full-Time): 5 × 1.0 = 5.0 points</p>
+              </div>
+              <p class="text-sm font-bold text-yellow-900 text-center">
+                Total Score = 10.0 + 3.0 + 5.0 = <span class="text-green-700 text-lg">18.0 points</span>
+              </p>
+            </div>
+          </div>
+
+          <!-- Add Lab Form -->
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="heading-font text-2xl font-bold mb-6">🧪 Laboratory Operations</h2>
+            
+            <form id="lab-form" onsubmit="saveLab(event)" class="space-y-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Laboratory Name *</label>
+                  <input type="text" id="lab-name" required 
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="e.g., Chemistry Research Laboratory">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Lab Code</label>
+                  <input type="text" id="lab-code"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="e.g., LAB-CHEM-01">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Responsibility Type *</label>
+                  <select id="lab-responsibility" required class="w-full px-4 py-3 border border-gray-300 rounded-lg">
+                    <option value="">Select Responsibility</option>
+                    <option value="Lab Coordinator">Lab Coordinator</option>
+                    <option value="Lab Technician Supervisor">Lab Technician Supervisor</option>
+                    <option value="Equipment Manager">Equipment Manager</option>
+                    <option value="Safety Officer">Safety Officer</option>
+                    <option value="Lab Assistant Coordinator">Lab Assistant Coordinator</option>
+                    <option value="Other">Other Lab Duties</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Frequency *</label>
+                  <select id="lab-frequency" required class="w-full px-4 py-3 border border-gray-300 rounded-lg">
+                    <option value="">Select Frequency</option>
+                    <option value="Full-Time (Year-round)">Full-Time (Year-round) - 1.0</option>
+                    <option value="Per Semester">Per Semester - 0.5</option>
+                    <option value="Per Course">Per Course - 0.3</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Number of Students (per session)</label>
+                  <input type="number" id="lab-students" min="0"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="25">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Academic Year *</label>
+                  <input type="text" id="lab-year" required
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="e.g., 2024/2025">
+                </div>
+                
+                <div class="md:col-span-2">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Additional Details</label>
+                  <textarea id="lab-details" rows="3"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="e.g., Manage 15 pieces of equipment, conduct safety audits quarterly"></textarea>
+                </div>
+              </div>
+              
+              <div class="flex justify-between">
+                <button type="button" onclick="navigateToSection('service')" class="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium">← Previous</button>
+                <button type="submit" id="save-lab-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
+                  ➕ Add Lab Responsibility
+                </button>
+              </div>
+            </form>
+          </div>
+          
+          <!-- Lab List -->
+          ${labs.length > 0 ? `
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 class="font-bold text-lg mb-4">Laboratory Responsibilities (${labs.length})</h3>
+              <div class="space-y-3">
+                ${labs.map(lab => {
+                  const score = calculateLabScore(lab);
+                  
+                  return `
+                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                      <div class="flex-1">
+                        <div class="font-semibold text-gray-900">${lab.lab_name}</div>
+                        <div class="text-sm text-gray-600 mt-1">
+                          ${lab.lab_responsibility} • ${lab.lab_frequency} • ${lab.lab_year}
+                        </div>
+                        ${lab.lab_code ? `<div class="text-xs text-gray-500 mt-1">Code: ${lab.lab_code}</div>` : ''}
+                        ${lab.lab_students ? `<div class="text-xs text-gray-500">Students per session: ${lab.lab_students}</div>` : ''}
+                        ${lab.lab_details ? `<div class="text-xs text-gray-500 mt-1">${lab.lab_details}</div>` : ''}
+                        <div class="text-xs text-gray-500 mt-1">
+                          <span class="font-semibold text-green-700">Score: ${score}</span>
+                        </div>
+                      </div>
+                      <button type="button" onclick="deleteLab('${lab.__backendId}')" 
+                              class="ml-4 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium">
+                        Delete
+                      </button>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          ` : ''}
+          
+          <!-- Navigation -->
+          <div class="flex justify-end">
+            <button type="button" onclick="navigateToSection('professional')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
+              Next: Professional →
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    async function saveLab(event) {
+      event.preventDefault();
+      
+      if (allRecords.length >= 999) {
+        showToast('Maximum limit of 999 records reached', 'error');
+        return;
+      }
+      
+      const btn = document.getElementById('save-lab-btn');
+      btn.disabled = true;
+      btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
+      
+      const labData = {
+        section: 'laboratory',
+        lab_name: document.getElementById('lab-name').value,
+        lab_code: document.getElementById('lab-code').value,
+        lab_responsibility: document.getElementById('lab-responsibility').value,
+        lab_frequency: document.getElementById('lab-frequency').value,
+        lab_students: parseInt(document.getElementById('lab-students').value) || 0,
+        lab_year: document.getElementById('lab-year').value,
+        lab_details: document.getElementById('lab-details').value,
+        created_at: new Date().toISOString()
+      };
+      
+      const result = await window.dataSdk.create(labData);
+      
+      btn.disabled = false;
+      btn.innerHTML = '➕ Add Lab Responsibility';
+      
+      if (result.isOk) {
+        showToast('Lab responsibility added successfully!');
+        document.getElementById('lab-form').reset();
+      } else {
+        showToast('Failed to add lab responsibility', 'error');
+      }
+    }
+
+    async function deleteLab(backendId) {
+      const lab = allRecords.find(r => r.__backendId === backendId);
+      if (!lab) return;
+      
+      const result = await window.dataSdk.delete(lab);
+      
+      if (result.isOk) {
+        showToast('Lab responsibility deleted successfully!');
+      } else {
+        showToast('Failed to delete lab responsibility', 'error');
+      }
+    }
+
+    function calculateProfessionalScore(activity) {
+      let basePoints = 0;
+      if (activity.prof_type === 'Professional Body Leadership') basePoints = 10;
+      else if (activity.prof_type === 'Professional Certification') basePoints = 8;
+      else if (activity.prof_type === 'Conference Organizer') basePoints = 7;
+      else if (activity.prof_type === 'Editorial Board Member') basePoints = 6;
+      else if (activity.prof_type === 'Professional Training') basePoints = 5;
+      else if (activity.prof_type === 'Membership') basePoints = 3;
+      else basePoints = 3;
+      
+      let scopeFactor = 1.0;
+      if (activity.prof_scope === 'International') scopeFactor = 1.5;
+      else if (activity.prof_scope === 'National') scopeFactor = 1.2;
+      else if (activity.prof_scope === 'Regional') scopeFactor = 1.0;
+      
+      return Math.round(basePoints * scopeFactor * 100) / 100;
+    }
+
+    function renderProfessionalSection() {
+      const activities = getRecordsBySection('professional');
+      
+      return `
+        <div class="space-y-6">
+          <!-- Calculation Formula -->
+          <div class="bg-gradient-to-r from-violet-50 to-purple-50 rounded-xl shadow-sm border-2 border-violet-200 p-6">
+            <h3 class="font-bold text-lg text-violet-900 mb-3 flex items-center gap-2">
+              <span>🧮</span> Professional Development Score Calculation Formula
+            </h3>
+            
+            <div class="bg-white rounded-lg p-4 mb-4">
+              <p class="font-mono text-sm text-gray-800 mb-3">
+                <strong>Score</strong> = Base Points × Scope Factor
+              </p>
+              <div class="text-xs text-gray-600 space-y-2 ml-4">
+                <div>
+                  <p class="font-semibold text-violet-900 mb-1">Base Points by Activity Type:</p>
+                  <p class="ml-4">• Professional Body Leadership: <strong>10 points</strong></p>
+                  <p class="ml-4">• Professional Certification: <strong>8 points</strong></p>
+                  <p class="ml-4">• Conference Organizer: <strong>7 points</strong></p>
+                  <p class="ml-4">• Editorial Board Member: <strong>6 points</strong></p>
+                  <p class="ml-4">• Professional Training: <strong>5 points</strong></p>
+                  <p class="ml-4">• Professional Membership: <strong>3 points</strong></p>
+                  <p class="ml-4">• Other: <strong>3 points</strong></p>
+                </div>
+                <div>
+                  <p class="font-semibold text-violet-900 mb-1">Scope Factor:</p>
+                  <p class="ml-4">• International: <strong>1.5</strong></p>
+                  <p class="ml-4">• National: <strong>1.2</strong></p>
+                  <p class="ml-4">• Regional/State: <strong>1.0</strong></p>
+                </div>
+              </div>
+            </div>
+            
+            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+              <p class="text-sm font-semibold text-yellow-900 mb-3">📝 Example Calculation:</p>
+              <div class="grid grid-cols-3 gap-3 mb-3">
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Activity 1</p>
+                  <p class="text-sm font-bold text-yellow-900">Body Leadership</p>
+                  <p class="text-xs text-yellow-700">International</p>
+                </div>
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Activity 2</p>
+                  <p class="text-sm font-bold text-yellow-900">Certification</p>
+                  <p class="text-xs text-yellow-700">National</p>
+                </div>
+                <div class="bg-white rounded p-2 border border-yellow-200">
+                  <p class="text-xs text-yellow-700 font-medium">Activity 3</p>
+                  <p class="text-sm font-bold text-yellow-900">Editorial Board</p>
+                  <p class="text-xs text-yellow-700">International</p>
+                </div>
+              </div>
+              <div class="bg-white rounded p-3 border-2 border-yellow-300 mb-2">
+                <p class="text-xs text-yellow-700 mb-1">Professional Body Leadership (International): 10 × 1.5 = 15.0 points</p>
+                <p class="text-xs text-yellow-700 mb-1">Professional Certification (National): 8 × 1.2 = 9.6 points</p>
+                <p class="text-xs text-yellow-700">Editorial Board Member (International): 6 × 1.5 = 9.0 points</p>
+              </div>
+              <p class="text-sm font-bold text-yellow-900 text-center">
+                Total Score = 15.0 + 9.6 + 9.0 = <span class="text-green-700 text-lg">33.6 points</span>
+              </p>
+            </div>
+          </div>
+
+          <!-- Add Professional Activity Form -->
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="heading-font text-2xl font-bold mb-6">⭐ Professional Development</h2>
+            
+            <form id="professional-form" onsubmit="saveProfessional(event)" class="space-y-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Activity Type *</label>
+                  <select id="prof-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg">
+                    <option value="">Select Activity Type</option>
+                    <option value="Professional Body Leadership">Professional Body Leadership</option>
+                    <option value="Professional Certification">Professional Certification</option>
+                    <option value="Conference Organizer">Conference Organizer</option>
+                    <option value="Editorial Board Member">Editorial Board Member</option>
+                    <option value="Professional Training">Professional Training</option>
+                    <option value="Membership">Professional Membership</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Activity Title *</label>
+                  <input type="text" id="prof-title" required 
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="e.g., President of Malaysian Chemical Society">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Scope *</label>
+                  <select id="prof-scope" required class="w-full px-4 py-3 border border-gray-300 rounded-lg">
+                    <option value="">Select Scope</option>
+                    <option value="International">International</option>
+                    <option value="National">National</option>
+                    <option value="Regional">Regional/State</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Organization/Body *</label>
+                  <input type="text" id="prof-organization" required
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="e.g., Malaysian Chemical Society">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Role/Position</label>
+                  <input type="text" id="prof-role"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="e.g., President, Member, Participant">
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Year *</label>
+                  <input type="number" id="prof-year" required min="2000" max="2030"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="2024">
+                </div>
+                
+                <div class="md:col-span-2">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+                  <textarea id="prof-description" rows="3"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         placeholder="Brief description of the professional activity"></textarea>
+                </div>
+              </div>
+              
+              <div class="flex justify-between">
+                <button type="button" onclick="navigateToSection('laboratory')" class="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium">← Previous</button>
+                <button type="submit" id="save-prof-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
+                  ➕ Add Activity
+                </button>
+              </div>
+            </form>
+          </div>
+          
+          <!-- Professional Activities List -->
+          ${activities.length > 0 ? `
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 class="font-bold text-lg mb-4">Professional Activities (${activities.length})</h3>
+              <div class="space-y-3">
+                ${activities.map(activity => {
+                  const score = calculateProfessionalScore(activity);
+                  
+                  return `
+                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                      <div class="flex-1">
+                        <div class="font-semibold text-gray-900">${activity.prof_title}</div>
+                        <div class="text-sm text-gray-600 mt-1">
+                          ${activity.prof_type} • ${activity.prof_scope} • ${activity.prof_organization}
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1">
+                          ${activity.prof_year}${activity.prof_role ? ` • ${activity.prof_role}` : ''}
+                          • <span class="font-semibold text-green-700">Score: ${score}</span>
+                        </div>
+                        ${activity.prof_description ? `<div class="text-xs text-gray-500 mt-1">${activity.prof_description}</div>` : ''}
+                      </div>
+                      <button type="button" onclick="deleteProfessional('${activity.__backendId}')" 
+                              class="ml-4 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium">
+                        Delete
+                      </button>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          ` : ''}
+          
+          <!-- Navigation -->
+          <div class="flex justify-end">
+            <button type="button" onclick="navigateToSection('results')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
+              View Results →
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    async function saveProfessional(event) {
+      event.preventDefault();
+      
+      if (allRecords.length >= 999) {
+        showToast('Maximum limit of 999 records reached', 'error');
+        return;
+      }
+      
+      const btn = document.getElementById('save-prof-btn');
+      btn.disabled = true;
+      btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
+      
+      const profData = {
+        section: 'professional',
+        prof_type: document.getElementById('prof-type').value,
+        prof_title: document.getElementById('prof-title').value,
+        prof_scope: document.getElementById('prof-scope').value,
+        prof_organization: document.getElementById('prof-organization').value,
+        prof_role: document.getElementById('prof-role').value,
+        prof_year: parseInt(document.getElementById('prof-year').value),
+        prof_description: document.getElementById('prof-description').value,
+        created_at: new Date().toISOString()
+      };
+      
+      const result = await window.dataSdk.create(profData);
+      
+      btn.disabled = false;
+      btn.innerHTML = '➕ Add Activity';
+      
+      if (result.isOk) {
+        showToast('Professional activity added successfully!');
+        document.getElementById('professional-form').reset();
+      } else {
+        showToast('Failed to add professional activity', 'error');
+      }
+    }
+
+    async function deleteProfessional(backendId) {
+      const activity = allRecords.find(r => r.__backendId === backendId);
+      if (!activity) return;
+      
+      const result = await window.dataSdk.delete(activity);
+      
+      if (result.isOk) {
+        showToast('Professional activity deleted successfully!');
+      } else {
+        showToast('Failed to delete professional activity', 'error');
+      }
+    }
+
+    function renderAssistantsSection() {
+      return `
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 class="heading-font text-2xl font-bold mb-6">�� Teaching Assistants</h2>
+          <p class="text-gray-600">Manage teaching assistants here</p>
+        </div>
+      `;
+    }
+
+    function renderResultsSection() {
+      const scores = calculateScores();
+      
+      return `
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 class="heading-font text-2xl font-bold mb-6">������ Results</h2>
+          <div class="text-center py-12">
+            <div class="text-6xl font-bold text-sky-600 mb-4">${scores.total}</div>
+            <p class="text-xl text-gray-600">Total Workload Score</p>
+          </div>
+        </div>
+      `;
+    }
+
+    document.addEventListener('DOMContentLoaded', initializeApp);
+  </script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9c0c4711c26f7a7f',t:'MTc2ODg4ODA1MS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
