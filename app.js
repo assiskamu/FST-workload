@@ -9,6 +9,7 @@ let notifications = [];
 
 const APP_VERSION = '1.1.0';
 const SUBMIT_ENDPOINT = 'PASTE_APPS_SCRIPT_WEB_APP_URL_HERE';
+const SUBMIT_ENDPOINT_KEY = 'fst_workload_submit_endpoint_v1';
 const SUBMISSION_HISTORY_KEY = 'fst_workload_submission_history_v1';
 const SUBMISSION_PENDING_KEY = 'fst_workload_submission_pending_v1';
 const SUBMIT_TOKEN_SESSION_KEY = 'fst_workload_submit_token_v1';
@@ -677,6 +678,48 @@ let submissionState = { isSubmitting: false, lastError: null, lastPayload: null 
       }
     }
 
+    function readSubmitEndpoint() {
+      if (SUBMIT_ENDPOINT && !SUBMIT_ENDPOINT.includes('PASTE_APPS_SCRIPT_WEB_APP_URL_HERE')) {
+        return SUBMIT_ENDPOINT;
+      }
+      if (typeof localStorage === 'undefined') return '';
+      try {
+        return localStorage.getItem(SUBMIT_ENDPOINT_KEY) || '';
+      } catch (error) {
+        return '';
+      }
+    }
+
+    function promptSubmitEndpoint() {
+      const currentEndpoint = readSubmitEndpoint();
+      const endpoint = window.prompt(
+        'Enter the Apps Script Web App URL for submissions:',
+        currentEndpoint || 'https://'
+      );
+      if (!endpoint) return null;
+      const trimmed = endpoint.trim();
+      if (!/^https?:\/\//i.test(trimmed)) {
+        showToast('Please enter a valid URL starting with http or https.', 'error');
+        return null;
+      }
+      if (typeof localStorage !== 'undefined') {
+        try {
+          localStorage.setItem(SUBMIT_ENDPOINT_KEY, trimmed);
+        } catch (error) {
+          // Ignore storage errors
+        }
+      }
+      return trimmed;
+    }
+
+    function configureSubmissionEndpoint() {
+      const endpoint = promptSubmitEndpoint();
+      if (!endpoint) return;
+      showToast('Submission endpoint saved.', 'success');
+      submissionState.lastError = null;
+      renderSubmissionStatus();
+    }
+
     function getSubmitToken() {
       let token = null;
       if (typeof sessionStorage !== 'undefined') {
@@ -942,6 +985,18 @@ let submissionState = { isSubmitting: false, lastError: null, lastPayload: null 
       }
 
       if (submissionState.lastError) {
+        const needsEndpoint = submissionState.lastError === 'Submission endpoint not configured.';
+        const actionButton = needsEndpoint
+          ? `
+            <button onclick="configureSubmissionEndpoint()" class="px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 text-sm">
+              Configure Endpoint
+            </button>
+          `
+          : `
+            <button onclick="retrySubmission()" class="px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 text-sm">
+              Retry Submission
+            </button>
+          `;
         container.classList.remove('hidden');
         container.innerHTML = `
           <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-800">
@@ -949,9 +1004,7 @@ let submissionState = { isSubmitting: false, lastError: null, lastPayload: null 
               <strong>Submission failed:</strong>
               <span class="block text-xs text-red-700">${escapeHtml(submissionState.lastError)}</span>
             </div>
-            <button onclick="retrySubmission()" class="px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 text-sm">
-              Retry Submission
-            </button>
+            ${actionButton}
           </div>
         `;
         return;
@@ -976,11 +1029,18 @@ let submissionState = { isSubmitting: false, lastError: null, lastPayload: null 
     async function submitReport() {
       if (submissionState.isSubmitting) return;
 
-      if (!SUBMIT_ENDPOINT || SUBMIT_ENDPOINT.includes('PASTE_APPS_SCRIPT_WEB_APP_URL_HERE')) {
+      let endpoint = readSubmitEndpoint();
+      if (!endpoint) {
         showToast('Submission endpoint not configured yet.', 'error');
         submissionState.lastError = 'Submission endpoint not configured.';
         renderSubmissionStatus();
-        return;
+        endpoint = promptSubmitEndpoint();
+        if (!endpoint) {
+          return;
+        }
+        submissionState.lastError = null;
+        renderSubmissionStatus();
+        showToast('Submission endpoint saved. Submitting report...', 'success');
       }
 
       const validation = validateSubmissionState();
@@ -1017,7 +1077,7 @@ let submissionState = { isSubmitting: false, lastError: null, lastPayload: null 
       setSubmitButtonState(true);
 
       try {
-        const response = await fetch(SUBMIT_ENDPOINT, {
+        const response = await fetch(endpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
