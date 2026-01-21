@@ -3690,192 +3690,538 @@ let currentSection = 'home';
       }
     }
 
+    // Export/Reporting Module
+    const ExportReportingModule = (() => {
+      const Utilities = {
+        csvEscape(value) {
+          if (value === null || value === undefined) return '';
+          const stringValue = String(value);
+          if (/[",\n\r]/.test(stringValue)) {
+            return `"${stringValue.replace(/"/g, '""')}"`;
+          }
+          return stringValue;
+        },
+        downloadBlob(filename, blob) {
+          const link = document.createElement('a');
+          const url = URL.createObjectURL(blob);
+          link.setAttribute('href', url);
+          link.setAttribute('download', filename);
+          link.style.visibility = 'hidden';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        },
+        formatDateTime(date = new Date()) {
+          return date.toLocaleString('en-MY', {
+            year: 'numeric',
+            month: 'short',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+        },
+        toBOMUTF8() {
+          return '\uFEFF';
+        }
+      };
+
+      const ReportBuilder = {
+        buildReportModel(state) {
+          const { profile, scores, status, generatedAt, recordsBySection } = state;
+          const config = window.elementSdk?.config || defaultConfig;
+          const adminPosition = profile
+            ? (profile.profile_admin_position === 'Other'
+              ? profile.profile_other_admin_position
+              : profile.profile_admin_position)
+            : 'N/A';
+
+          const sections = [
+            {
+              id: 'teaching',
+              title: 'Teaching',
+              columns: ['Course Code', 'Course Name', 'Credit Hours', 'Class Size', 'Lecture Hrs', 'Tutorial Hrs', 'Lab Hrs', 'Fieldwork Hrs', 'Semester', 'Role', 'Score'],
+              rows: recordsBySection.teaching.map(course => ([
+                course.course_code,
+                course.course_name,
+                course.course_credit_hours,
+                course.course_class_size,
+                course.course_lecture,
+                course.course_tutorial,
+                course.course_lab,
+                course.course_fieldwork,
+                course.course_semester === 'Other' ? course.course_semester_other : course.course_semester,
+                course.course_role,
+                calculateCourseScore(course).toFixed(2)
+              ]))
+            },
+            {
+              id: 'supervision',
+              title: 'Supervision',
+              columns: ['Student Name', 'Matric', 'Level', 'Role', 'Research Title', 'Year', 'Score'],
+              rows: recordsBySection.supervision.map(student => ([
+                student.student_name,
+                student.student_matric,
+                student.student_level,
+                student.student_role,
+                student.student_title,
+                student.student_year,
+                calculateSupervisionScore(student).toFixed(2)
+              ]))
+            },
+            {
+              id: 'research',
+              title: 'Research Projects',
+              columns: ['Project Title', 'Grant Code', 'Role', 'Amount (RM)', 'Status', 'Year', 'Duration', 'Score'],
+              rows: recordsBySection.research.map(project => ([
+                project.research_title,
+                project.research_grant_code,
+                project.research_role,
+                project.research_amount,
+                project.research_status,
+                project.research_year,
+                project.research_duration,
+                calculateResearchScore(project).toFixed(2)
+              ]))
+            },
+            {
+              id: 'publications',
+              title: 'Publications',
+              columns: ['Title', 'Type', 'Index', 'Venue', 'Position', 'Year', 'Status', 'Score'],
+              rows: recordsBySection.publications.map(pub => ([
+                pub.pub_title,
+                pub.pub_type,
+                pub.pub_index,
+                pub.pub_venue,
+                pub.pub_position,
+                pub.pub_year,
+                pub.pub_status,
+                calculatePublicationScore(pub).toFixed(2)
+              ]))
+            },
+            {
+              id: 'administration',
+              title: 'Admin Leadership',
+              columns: ['Position', 'Faculty/Unit', 'Allowance (RM)', 'Start Date', 'End Date', 'Score'],
+              rows: recordsBySection.administration.map(admin => ([
+                admin.admin_position === 'Other' ? admin.admin_other_position : admin.admin_position,
+                admin.admin_faculty,
+                admin.admin_allowance ? admin.admin_allowance.toFixed(2) : 'N/A',
+                admin.admin_start_date,
+                admin.admin_end_date || 'Current',
+                calculateAdministrationScore(admin).toFixed(2)
+              ]))
+            },
+            {
+              id: 'admin_duties',
+              title: 'Admin Duties',
+              columns: ['Duty Name', 'Type', 'Frequency', 'Year', 'Notes', 'Score'],
+              rows: recordsBySection.admin_duties.map(duty => ([
+                duty.duty_name,
+                duty.duty_type,
+                duty.duty_frequency,
+                duty.duty_year,
+                duty.duty_notes || 'N/A',
+                calculateAdminDutyScore(duty).toFixed(2)
+              ]))
+            },
+            {
+              id: 'service',
+              title: 'Service & Engagement',
+              columns: ['Service Title', 'Type', 'Scope', 'Organization', 'Date', 'Duration (Hours)', 'Notes', 'Score'],
+              rows: recordsBySection.service.map(service => ([
+                service.service_title,
+                service.service_type,
+                service.service_scope,
+                service.service_organization,
+                service.service_date,
+                service.service_duration,
+                service.service_description || 'N/A',
+                calculateServiceScore(service).toFixed(2)
+              ]))
+            },
+            {
+              id: 'laboratory',
+              title: 'Laboratory Responsibilities',
+              columns: ['Lab Name', 'Responsibility', 'Frequency', 'Year', 'Description', 'Score'],
+              rows: recordsBySection.laboratory.map(lab => ([
+                lab.lab_name,
+                lab.lab_responsibility,
+                lab.lab_frequency,
+                lab.lab_year,
+                lab.lab_description || 'N/A',
+                calculateLabScore(lab).toFixed(2)
+              ]))
+            },
+            {
+              id: 'professional',
+              title: 'Professional Activities',
+              columns: ['Title', 'Type', 'Scope', 'Organization', 'Year', 'Description', 'Score'],
+              rows: recordsBySection.professional.map(prof => ([
+                prof.prof_title,
+                prof.prof_type,
+                prof.prof_scope,
+                prof.prof_organization,
+                prof.prof_year,
+                prof.prof_description || 'N/A',
+                calculateProfessionalScore(prof).toFixed(2)
+              ]))
+            }
+          ];
+
+          const totals = {
+            entries: allRecords.length,
+            categories: {
+              teaching: recordsBySection.teaching.length,
+              supervision: recordsBySection.supervision.length,
+              research: recordsBySection.research.length,
+              publications: recordsBySection.publications.length,
+              administration: recordsBySection.administration.length,
+              admin_duties: recordsBySection.admin_duties.length,
+              service: recordsBySection.service.length,
+              laboratory: recordsBySection.laboratory.length,
+              professional: recordsBySection.professional.length
+            }
+          };
+
+          return {
+            meta: {
+              title: config.app_title || defaultConfig.app_title,
+              subtitle: config.app_subtitle || defaultConfig.app_subtitle,
+              generatedAt,
+              staffName: profile.profile_name,
+              staffId: profile.profile_staff_id,
+              staffRank: profile.profile_rank || profile.profile_category,
+              staffCategory: profile.profile_category || 'N/A',
+              programme: profile.profile_programme || 'N/A',
+              adminPosition
+            },
+            sections,
+            tables: [
+              {
+                title: 'Workload Summary',
+                rows: [
+                  ['Teaching', scores.teaching.toFixed(2), totals.categories.teaching],
+                  ['Supervision', scores.supervision.toFixed(2), totals.categories.supervision],
+                  ['Research', scores.research.toFixed(2), totals.categories.research],
+                  ['Publications', scores.publications.toFixed(2), totals.categories.publications],
+                  ['Admin Leadership', scores.adminLeadership.toFixed(2), totals.categories.administration],
+                  ['Admin Duties', scores.adminDuties.toFixed(2), totals.categories.admin_duties],
+                  ['Service', scores.service.toFixed(2), totals.categories.service],
+                  ['Laboratory', scores.laboratory.toFixed(2), totals.categories.laboratory],
+                  ['Professional', scores.professional.toFixed(2), totals.categories.professional]
+                ]
+              }
+            ],
+            totals,
+            score: {
+              total: scores.total,
+              status: status.label,
+              icon: status.icon
+            }
+          };
+        },
+        renderReportHTML(reportModel) {
+          const container = document.createElement('div');
+          container.id = 'report-print-root';
+          container.className = 'report-print-root';
+
+          const headerHtml = `
+            <div class="report-header">
+              <div class="report-title">${reportModel.meta.title}</div>
+              <div class="report-subtitle">${reportModel.meta.subtitle}</div>
+              <div class="report-meta">
+                <div><strong>Generated:</strong> ${Utilities.formatDateTime(reportModel.meta.generatedAt)}</div>
+                <div><strong>Staff:</strong> ${reportModel.meta.staffName} (${reportModel.meta.staffId})</div>
+                <div><strong>Rank:</strong> ${reportModel.meta.staffRank}</div>
+                <div><strong>Programme:</strong> ${reportModel.meta.programme}</div>
+                <div><strong>Admin Position:</strong> ${reportModel.meta.adminPosition}</div>
+              </div>
+            </div>
+          `;
+
+          const summaryRows = reportModel.tables[0].rows.map(row => `
+            <tr>
+              ${row.map(cell => `<td>${cell}</td>`).join('')}
+            </tr>
+          `).join('');
+
+          const summaryHtml = `
+            <section class="report-section">
+              <h2>Workload Summary</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Category</th>
+                    <th>Score</th>
+                    <th>Count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${summaryRows}
+                  <tr class="report-total-row">
+                    <td>Total</td>
+                    <td>${reportModel.score.total.toFixed(2)}</td>
+                    <td>${reportModel.totals.entries}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="report-status">
+                <strong>Status:</strong> ${reportModel.score.status} ${reportModel.score.icon}
+              </div>
+            </section>
+          `;
+
+          const sectionsHtml = reportModel.sections.map(section => {
+            if (section.rows.length === 0) {
+              return `
+                <section class="report-section">
+                  <h2>${section.title}</h2>
+                  <div class="report-empty">No records available.</div>
+                </section>
+              `;
+            }
+
+            const headers = section.columns.map(col => `<th>${col}</th>`).join('');
+            const rows = section.rows.map(row => `
+              <tr>
+                ${row.map(cell => `<td>${cell}</td>`).join('')}
+              </tr>
+            `).join('');
+
+            return `
+              <section class="report-section">
+                <h2>${section.title}</h2>
+                <table>
+                  <thead>
+                    <tr>${headers}</tr>
+                  </thead>
+                  <tbody>${rows}</tbody>
+                </table>
+              </section>
+            `;
+          }).join('');
+
+          container.innerHTML = `
+            <div class="report-body">
+              ${headerHtml}
+              ${summaryHtml}
+              ${sectionsHtml}
+            </div>
+          `;
+
+          return container;
+        },
+        renderReportText(reportModel) {
+          const lines = [];
+          lines.push(`${reportModel.meta.title} - SUMMARY`);
+          lines.push('='.repeat(60));
+          lines.push(`Generated: ${Utilities.formatDateTime(reportModel.meta.generatedAt)}`);
+          lines.push(`Staff: ${reportModel.meta.staffName} (${reportModel.meta.staffId})`);
+          lines.push(`Rank: ${reportModel.meta.staffRank}`);
+          lines.push('');
+          lines.push('WORKLOAD SCORES');
+          lines.push('-'.repeat(60));
+          reportModel.tables[0].rows.forEach(row => {
+            lines.push(`${row[0].padEnd(20)} ${row[1]}`);
+          });
+          lines.push('-'.repeat(60));
+          lines.push(`TOTAL SCORE: ${reportModel.score.total.toFixed(2)}`);
+          lines.push(`STATUS: ${reportModel.score.status} ${reportModel.score.icon}`);
+          return lines.join('\n');
+        }
+      };
+
+      const Exporters = {
+        exportXLSX(reportModel) {
+          if (typeof XLSX === 'undefined') {
+            showToast('Excel export unavailable. Please check the XLSX library.', 'error');
+            return;
+          }
+
+          const workbook = XLSX.utils.book_new();
+          const summarySheetData = [
+            [reportModel.meta.title],
+            [reportModel.meta.subtitle],
+            [],
+            ['Generated', Utilities.formatDateTime(reportModel.meta.generatedAt)],
+            ['Staff Name', reportModel.meta.staffName],
+            ['Staff ID', reportModel.meta.staffId],
+            ['Rank', reportModel.meta.staffRank],
+            ['Programme', reportModel.meta.programme],
+            ['Admin Position', reportModel.meta.adminPosition],
+            [],
+            ['Category', 'Score', 'Count'],
+            ...reportModel.tables[0].rows,
+            ['Total', reportModel.score.total.toFixed(2), reportModel.totals.entries],
+            [],
+            ['Status', reportModel.score.status]
+          ];
+
+          const summarySheet = XLSX.utils.aoa_to_sheet(summarySheetData);
+          XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
+
+          reportModel.sections.forEach(section => {
+            if (section.rows.length === 0) {
+              return;
+            }
+            const sheetData = [section.columns, ...section.rows];
+            const sheet = XLSX.utils.aoa_to_sheet(sheetData);
+            XLSX.utils.book_append_sheet(workbook, sheet, section.title.substring(0, 30));
+          });
+
+          const fileName = `FST_Workload_Report_${reportModel.meta.staffId}_${reportModel.meta.generatedAt.toISOString().split('T')[0]}.xlsx`;
+          XLSX.writeFile(workbook, fileName);
+          showToast('Excel report downloaded successfully!');
+        },
+        exportSummaryCSV(reportModel) {
+          const rows = [
+            ['Staff Name', reportModel.meta.staffName],
+            ['Staff ID', reportModel.meta.staffId],
+            ['Generated', Utilities.formatDateTime(reportModel.meta.generatedAt)],
+            [],
+            ['Category', 'Score', 'Count'],
+            ...reportModel.tables[0].rows,
+            ['TOTAL', reportModel.score.total.toFixed(2), reportModel.totals.entries],
+            ['Status', reportModel.score.status]
+          ];
+
+          const csv = rows.map(row => {
+            if (row.length === 0) return '';
+            return row.map(Utilities.csvEscape).join(',');
+          }).join('\n');
+
+          const blob = new Blob([Utilities.toBOMUTF8(), csv], { type: 'text/csv;charset=utf-8;' });
+          const fileName = `FST_Workload_Summary_${reportModel.meta.staffId}_${reportModel.meta.generatedAt.toISOString().split('T')[0]}.csv`;
+          Utilities.downloadBlob(fileName, blob);
+          showToast('Summary CSV downloaded!');
+        },
+        printPDF(reportModel) {
+          const existing = document.getElementById('report-print-root');
+          if (existing) {
+            existing.remove();
+          }
+          const reportElement = ReportBuilder.renderReportHTML(reportModel);
+          document.body.appendChild(reportElement);
+          document.body.classList.add('printing-report');
+
+          const cleanup = () => {
+            document.body.classList.remove('printing-report');
+            const node = document.getElementById('report-print-root');
+            if (node) {
+              node.remove();
+            }
+            window.removeEventListener('afterprint', cleanup);
+          };
+
+          window.addEventListener('afterprint', cleanup);
+          requestAnimationFrame(() => {
+            window.print();
+            showToast('Opening print dialog...');
+          });
+        }
+      };
+
+      function buildState() {
+        const scores = calculateScores();
+        return {
+          profile: getProfile(),
+          scores,
+          status: getWorkloadStatus(scores.total),
+          generatedAt: new Date(),
+          recordsBySection: {
+            teaching: getRecordsBySection('teaching'),
+            supervision: getRecordsBySection('supervision'),
+            research: getRecordsBySection('research'),
+            publications: getRecordsBySection('publications'),
+            administration: getRecordsBySection('administration'),
+            admin_duties: getRecordsBySection('admin_duties'),
+            service: getRecordsBySection('service'),
+            laboratory: getRecordsBySection('laboratory'),
+            professional: getRecordsBySection('professional')
+          }
+        };
+      }
+
+      function ensureProfile(state) {
+        if (!state.profile) {
+          showToast('Please create a profile first', 'error');
+          return false;
+        }
+        return true;
+      }
+
+      function getReportModel() {
+        const state = buildState();
+        if (!ensureProfile(state)) {
+          return null;
+        }
+        return ReportBuilder.buildReportModel(state);
+      }
+
+      function copySummaryText() {
+        const reportModel = getReportModel();
+        if (!reportModel) return;
+        const text = ReportBuilder.renderReportText(reportModel);
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.writeText(text).then(() => {
+            showToast('Summary copied to clipboard!');
+          }).catch(() => {
+            showToast('Failed to copy to clipboard', 'error');
+          });
+          return;
+        }
+
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'absolute';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+
+        try {
+          const success = document.execCommand('copy');
+          if (success) {
+            showToast('Summary copied to clipboard (fallback)');
+          } else {
+            showToast('Clipboard not available. Please copy manually.', 'error');
+          }
+        } catch (error) {
+          showToast('Clipboard not available. Please copy manually.', 'error');
+        } finally {
+          document.body.removeChild(textarea);
+        }
+      }
+
+      return {
+        Utilities,
+        ReportBuilder,
+        Exporters,
+        getReportModel,
+        copySummaryText
+      };
+    })();
+
     // Export Functions
     function printResultsPDF() {
-      window.print();
-      showToast('Opening print dialog...');
+      const reportModel = ExportReportingModule.getReportModel();
+      if (!reportModel) return;
+      ExportReportingModule.Exporters.printPDF(reportModel);
     }
 
     function exportToExcel() {
-      const scores = calculateScores();
-      const profile = getProfile();
-      
-      if (!profile) {
-        showToast('Please create a profile first', 'error');
-        return;
-      }
-
-      // Create CSV content (Excel-compatible)
-      let csv = '\uFEFF'; // UTF-8 BOM for Excel
-      csv += 'FST UMS Workload Calculator - Full Report\n\n';
-      
-      // Profile Information
-      csv += 'STAFF PROFILE\n';
-      csv += `Name,${profile.profile_name}\n`;
-      csv += `Staff ID,${profile.profile_staff_id}\n`;
-      csv += `Category,${profile.profile_category}\n`;
-      csv += `Programme,${profile.profile_programme || 'N/A'}\n`;
-      csv += `Rank,${profile.profile_rank || 'N/A'}\n`;
-      csv += `Admin Position,${profile.profile_admin_position === 'Other' ? profile.profile_other_admin_position : profile.profile_admin_position}\n`;
-      csv += '\n';
-      
-      // Summary Scores
-      csv += 'WORKLOAD SUMMARY\n';
-      csv += 'Category,Score,Count\n';
-      csv += `Teaching,${scores.teaching.toFixed(2)},${getRecordsBySection('teaching').length}\n`;
-      csv += `Supervision,${scores.supervision.toFixed(2)},${getRecordsBySection('supervision').length}\n`;
-      csv += `Research,${scores.research.toFixed(2)},${getRecordsBySection('research').length}\n`;
-      csv += `Publications,${scores.publications.toFixed(2)},${getRecordsBySection('publications').length}\n`;
-      csv += `Admin Leadership,${scores.adminLeadership.toFixed(2)},${getRecordsBySection('administration').length}\n`;
-      csv += `Admin Duties,${scores.adminDuties.toFixed(2)},${getRecordsBySection('admin_duties').length}\n`;
-      csv += `Service,${scores.service.toFixed(2)},${getRecordsBySection('service').length}\n`;
-      csv += `Laboratory,${scores.laboratory.toFixed(2)},${getRecordsBySection('laboratory').length}\n`;
-      csv += `Professional,${scores.professional.toFixed(2)},${getRecordsBySection('professional').length}\n`;
-      csv += `TOTAL,${scores.total.toFixed(2)},${allRecords.length}\n`;
-      csv += '\n';
-      
-      // Teaching Details
-      const courses = getRecordsBySection('teaching');
-      if (courses.length > 0) {
-        csv += 'TEACHING COURSES\n';
-        csv += 'Course Code,Course Name,Credit Hours,Class Size,Lecture Hrs,Tutorial Hrs,Lab Hrs,Fieldwork Hrs,Semester,Role,Score\n';
-        courses.forEach(course => {
-          const score = calculateCourseScore(course);
-          const semester = course.course_semester === 'Other' ? course.course_semester_other : course.course_semester;
-          csv += `"${course.course_code}","${course.course_name}",${course.course_credit_hours},${course.course_class_size},`;
-          csv += `${course.course_lecture},${course.course_tutorial},${course.course_lab},${course.course_fieldwork},"${semester}","${course.course_role}",${score.toFixed(2)}\n`;
-        });
-        csv += '\n';
-      }
-      
-      // Supervision Details
-      const students = getRecordsBySection('supervision');
-      if (students.length > 0) {
-        csv += 'STUDENT SUPERVISION\n';
-        csv += 'Student Name,Matric,Level,Role,Research Title,Year,Score\n';
-        students.forEach(student => {
-          const score = calculateSupervisionScore(student);
-          csv += `"${student.student_name}","${student.student_matric}","${student.student_level}","${student.student_role}","${student.student_title}",${student.student_year},${score.toFixed(2)}\n`;
-        });
-        csv += '\n';
-      }
-      
-      // Research Details
-      const projects = getRecordsBySection('research');
-      if (projects.length > 0) {
-        csv += 'RESEARCH PROJECTS\n';
-        csv += 'Project Title,Grant Code,Role,Amount (RM),Status,Year,Duration,Score\n';
-        projects.forEach(proj => {
-          const score = calculateResearchScore(proj);
-          csv += `"${proj.research_title}","${proj.research_grant_code}","${proj.research_role}",${proj.research_amount},"${proj.research_status}",${proj.research_year},${proj.research_duration},${score.toFixed(2)}\n`;
-        });
-        csv += '\n';
-      }
-      
-      // Publications Details
-      const publications = getRecordsBySection('publications');
-      if (publications.length > 0) {
-        csv += 'PUBLICATIONS\n';
-        csv += 'Title,Type,Index,Venue,Position,Year,Status,Score\n';
-        publications.forEach(pub => {
-          const score = calculatePublicationScore(pub);
-          csv += `"${pub.pub_title}","${pub.pub_type}","${pub.pub_index}","${pub.pub_venue}","${pub.pub_position}",${pub.pub_year},"${pub.pub_status}",${score.toFixed(2)}\n`;
-        });
-        csv += '\n';
-      }
-      
-      // Download
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', `FST_Workload_Report_${profile.profile_staff_id}_${new Date().toISOString().split('T')[0]}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      showToast('Excel file downloaded successfully!');
+      const reportModel = ExportReportingModule.getReportModel();
+      if (!reportModel) return;
+      ExportReportingModule.Exporters.exportXLSX(reportModel);
     }
 
     function exportSummaryCSV() {
-      const scores = calculateScores();
-      const profile = getProfile();
-      const status = getWorkloadStatus(scores.total);
-      
-      if (!profile) {
-        showToast('Please create a profile first', 'error');
-        return;
-      }
-
-      let csv = '\uFEFF'; // UTF-8 BOM
-      csv += 'FST UMS Workload Calculator - Summary Report\n\n';
-      csv += `Staff Name,${profile.profile_name}\n`;
-      csv += `Staff ID,${profile.profile_staff_id}\n`;
-      csv += `Generated,${new Date().toLocaleString()}\n\n`;
-      
-      csv += 'Category,Score,Percentage\n';
-      const total = scores.total || 1; // Avoid division by zero
-      csv += `Teaching,${scores.teaching.toFixed(2)},${((scores.teaching / total) * 100).toFixed(1)}%\n`;
-      csv += `Supervision,${scores.supervision.toFixed(2)},${((scores.supervision / total) * 100).toFixed(1)}%\n`;
-      csv += `Research,${scores.research.toFixed(2)},${((scores.research / total) * 100).toFixed(1)}%\n`;
-      csv += `Publications,${scores.publications.toFixed(2)},${((scores.publications / total) * 100).toFixed(1)}%\n`;
-      csv += `Admin Leadership,${scores.adminLeadership.toFixed(2)},${((scores.adminLeadership / total) * 100).toFixed(1)}%\n`;
-      csv += `Admin Duties,${scores.adminDuties.toFixed(2)},${((scores.adminDuties / total) * 100).toFixed(1)}%\n`;
-      csv += `Service,${scores.service.toFixed(2)},${((scores.service / total) * 100).toFixed(1)}%\n`;
-      csv += `Laboratory,${scores.laboratory.toFixed(2)},${((scores.laboratory / total) * 100).toFixed(1)}%\n`;
-      csv += `Professional,${scores.professional.toFixed(2)},${((scores.professional / total) * 100).toFixed(1)}%\n`;
-      csv += `\nTOTAL,${scores.total.toFixed(2)},100%\n`;
-      csv += `Status,${status.label}\n`;
-      
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', `FST_Workload_Summary_${profile.profile_staff_id}_${new Date().toISOString().split('T')[0]}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      showToast('Summary CSV downloaded!');
+      const reportModel = ExportReportingModule.getReportModel();
+      if (!reportModel) return;
+      ExportReportingModule.Exporters.exportSummaryCSV(reportModel);
     }
 
     function copyToClipboard() {
-      const scores = calculateScores();
-      const profile = getProfile();
-      const status = getWorkloadStatus(scores.total);
-      
-      if (!profile) {
-        showToast('Please create a profile first', 'error');
-        return;
-      }
-
-      let text = 'FST UMS WORKLOAD CALCULATOR - SUMMARY\n';
-      text += '='.repeat(50) + '\n\n';
-      text += `Staff: ${profile.profile_name} (${profile.profile_staff_id})\n`;
-      text += `Rank: ${profile.profile_rank || profile.profile_category}\n`;
-      text += `Date: ${new Date().toLocaleDateString()}\n\n`;
-      
-      text += 'WORKLOAD SCORES:\n';
-      text += '-'.repeat(50) + '\n';
-      text += `Teaching:          ${scores.teaching.toFixed(2)}\n`;
-      text += `Supervision:       ${scores.supervision.toFixed(2)}\n`;
-      text += `Research:          ${scores.research.toFixed(2)}\n`;
-      text += `Publications:      ${scores.publications.toFixed(2)}\n`;
-      text += `Admin Leadership:  ${scores.adminLeadership.toFixed(2)}\n`;
-      text += `Admin Duties:      ${scores.adminDuties.toFixed(2)}\n`;
-      text += `Service:           ${scores.service.toFixed(2)}\n`;
-      text += `Laboratory:        ${scores.laboratory.toFixed(2)}\n`;
-      text += `Professional:      ${scores.professional.toFixed(2)}\n`;
-      text += '-'.repeat(50) + '\n';
-      text += `TOTAL SCORE:       ${scores.total.toFixed(2)}\n`;
-      text += `STATUS:            ${status.label} ${status.icon}\n`;
-      
-      // Copy to clipboard
-      navigator.clipboard.writeText(text).then(() => {
-        showToast('Summary copied to clipboard!');
-      }).catch(err => {
-        showToast('Failed to copy to clipboard', 'error');
-      });
+      ExportReportingModule.copySummaryText();
     }

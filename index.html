@@ -69,6 +69,114 @@
     .toast.error {
       background: #ef4444;
     }
+
+    .report-print-root {
+      display: none;
+      font-family: 'Inter', sans-serif;
+      color: #111827;
+    }
+
+    .report-print-root .report-title {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .report-print-root .report-subtitle {
+      font-size: 14px;
+      color: #4b5563;
+      margin-bottom: 12px;
+    }
+
+    .report-print-root .report-meta {
+      font-size: 12px;
+      color: #374151;
+      display: grid;
+      gap: 4px;
+      margin-bottom: 16px;
+    }
+
+    .report-print-root .report-section {
+      margin-bottom: 20px;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+
+    .report-print-root .report-section h2 {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .report-print-root table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .report-print-root th,
+    .report-print-root td {
+      border: 1px solid #d1d5db;
+      padding: 6px 8px;
+      font-size: 11px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .report-print-root thead {
+      display: table-header-group;
+    }
+
+    .report-print-root tr {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+
+    .report-print-root .report-total-row td {
+      font-weight: 700;
+      background: #f3f4f6;
+    }
+
+    .report-print-root .report-status {
+      margin-top: 10px;
+      font-size: 13px;
+    }
+
+    .report-print-root .report-empty {
+      padding: 8px 12px;
+      background: #f9fafb;
+      border: 1px dashed #d1d5db;
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    @media print {
+      body {
+        background: white;
+      }
+
+      body * {
+        visibility: hidden;
+      }
+
+      #report-print-root,
+      #report-print-root * {
+        visibility: visible;
+      }
+
+      #report-print-root {
+        display: block;
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        padding: 24px;
+      }
+
+      .report-print-root .report-section {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+    }
     
     @keyframes slideIn {
       from {
@@ -113,6 +221,7 @@
    </div>
   </div>
   <script src="./shim_sdk.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>
