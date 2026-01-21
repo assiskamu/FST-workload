@@ -1,3 +1,4 @@
+// Encoding: UTF-8
 let currentSection = 'home';
     let allRecords = [];
 
@@ -546,7 +547,7 @@ let currentSection = 'home';
       }
     }
 
-    // ADMIN DUTIES: Base points �� frequency factor
+    // ADMIN DUTIES: Base points 🧮 frequency factor
     function calculateAdminDutyScore(duty) {
       let basePoints = 0;
       if (duty.duty_type === 'Accreditation Work') basePoints = 8;
@@ -1049,7 +1050,7 @@ let currentSection = 'home';
                 </p>
                 <div id="reset-all-confirm" class="hidden mb-3">
                   <div class="bg-white border-2 border-red-400 rounded-lg p-4">
-                    <p class="text-sm font-bold text-red-900 mb-3">������� FINAL WARNING: This will delete EVERYTHING:</p>
+                    <p class="text-sm font-bold text-red-900 mb-3">⚠️ FINAL WARNING: This will delete EVERYTHING:</p>
                     <ul class="text-xs text-red-800 ml-4 list-disc space-y-1 mb-3">
                       <li><strong>Your staff profile</strong></li>
                       <li>All teaching, supervision, research records</li>
@@ -1212,7 +1213,7 @@ let currentSection = 'home';
               </div>
               
               <button type="submit" id="save-profile-btn" class="w-full px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
-                ���� Save Profile
+                📝 Save Profile
               </button>
             </form>
           </div>
@@ -1811,7 +1812,7 @@ let currentSection = 'home';
             <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
               <p class="text-sm font-semibold text-yellow-900 mb-2">Example Calculation:</p>
               <p class="text-xs text-gray-700">
-                ����� Lead, Ongoing: 5 × 1.0 × 1.0 = <strong>5.00</strong><br>
+                💡 Lead, Ongoing: 5 × 1.0 × 1.0 = <strong>5.00</strong><br>
                 • Co-Lead, Completed: 5 × 0.7 × 0.8 = <strong>2.80</strong><br>
                 • Member, Pending: 5 × 0.5 × 0.3 = <strong>0.75</strong><br>
                 <strong class="text-green-700">Total: 8.55 points</strong>
@@ -2028,7 +2029,7 @@ let currentSection = 'home';
 
           <!-- Add Publication Form -->
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 class="heading-font text-2xl font-bold mb-6">✍��� Scholarly Writing & Publications</h2>
+            <h2 class="heading-font text-2xl font-bold mb-6">📝 Scholarly Writing & Publications</h2>
             
             <form id="publication-form" onsubmit="savePublication(event)" class="space-y-6">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2204,7 +2205,7 @@ let currentSection = 'home';
       const result = await window.dataSdk.create(publicationData);
       
       btn.disabled = false;
-      btn.innerHTML = '�� Add Publication';
+      btn.innerHTML = '➕ Add Publication';
       
       if (result.isOk) {
         showToast('Publication added successfully!');
@@ -2441,12 +2442,12 @@ let currentSection = 'home';
               </p>
               <div class="text-xs text-gray-600 space-y-2">
                 <p><strong>Base Points by Duty Type:</strong></p>
-                <p>�� Accreditation Work = 8</p>
+                <p>• Accreditation Work = 8</p>
                 <p>• Curriculum Development = 6</p>
                 <p>• Committee Chair = 5</p>
                 <p>• Event Organizer = 4</p>
                 <p>• Exam Coordinator = 3</p>
-                <p>����� Committee Member = 2</p>
+                <p>• Committee Member = 2</p>
                 <p>• Other = 2</p>
                 <p class="mt-2"><strong>Frequency Factor:</strong></p>
                 <p>• Ongoing (Year-round) = 1.0</p>
@@ -2736,7 +2737,7 @@ let currentSection = 'home';
                       <div class="flex-1">
                         <div class="font-semibold text-gray-900">${service.service_title}</div>
                         <div class="text-sm text-gray-600 mt-1">
-                          ${service.service_type} • ${service.service_scope} �� ${service.service_organization}
+                          ${service.service_type} • ${service.service_scope} • ${service.service_organization}
                         </div>
                         <div class="text-xs text-gray-500 mt-1">
                           ${service.service_date}${service.service_duration > 0 ? ` • ${service.service_duration} hours` : ''}
@@ -3110,7 +3111,7 @@ let currentSection = 'home';
                         </div>
                         <div class="text-xs text-gray-500 mt-1">
                           ${prof.prof_year}
-                          ����� <span class="font-semibold text-green-700">Score: ${score.toFixed(2)}</span>
+                          📊 <span class="font-semibold text-green-700">Score: ${score.toFixed(2)}</span>
                         </div>
                         ${prof.prof_description ? `<div class="text-xs text-gray-500 mt-1">${prof.prof_description}</div>` : ''}
                       </div>
@@ -3213,7 +3214,7 @@ let currentSection = 'home';
               </p>
               <div class="text-xs text-gray-600 space-y-2">
                 <p><strong>Qualification Thresholds:</strong></p>
-                <p>• <strong>Non-Admin Academic Staff:</strong> �� ${NON_ADMIN_THRESHOLD} points</p>
+                <p>• <strong>Non-Admin Academic Staff:</strong> 📌 ${NON_ADMIN_THRESHOLD} points</p>
                 <p>• <strong>Admin Academic Staff (with allowance):</strong> ≥ ${ADMIN_THRESHOLD} points</p>
                 <p class="mt-3 text-gray-500 italic">
                   Note: Admin academic staff are those who hold administrative positions with allowance as recorded in the Staff Profile section.
@@ -3291,7 +3292,7 @@ let currentSection = 'home';
 
               <!-- Eligibility Result -->
               <div class="bg-gradient-to-r ${isQualified ? 'from-green-500 to-emerald-500' : 'from-red-500 to-rose-500'} rounded-xl shadow-lg p-8 text-white text-center">
-                <div class="text-6xl mb-4">${isQualified ? '��' : '��'}</div>
+                <div class="text-6xl mb-4">${isQualified ? '✅' : '❌'}</div>
                 <h3 class="text-3xl font-bold mb-2">${isQualified ? 'QUALIFIED' : 'NOT QUALIFIED'}</h3>
                 <p class="text-lg mb-4">for Teaching Assistant Allocation</p>
                 
@@ -3403,7 +3404,7 @@ let currentSection = 'home';
               </div>
               
               <div class="bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg p-5 border-l-4 border-purple-500">
-                <div class="text-sm font-semibold text-gray-600 mb-1">��� Supervision</div>
+                <div class="text-sm font-semibold text-gray-600 mb-1">🧑‍🏫 Supervision</div>
                 <div class="text-3xl font-bold text-purple-600">${scores.supervision.toFixed(2)}</div>
                 <div class="text-xs text-gray-500 mt-2">${getRecordsBySection('supervision').length} students</div>
               </div>
@@ -3415,7 +3416,7 @@ let currentSection = 'home';
               </div>
               
               <div class="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-lg p-5 border-l-4 border-indigo-500">
-                <div class="text-sm font-semibold text-gray-600 mb-1">�� Publications</div>
+                <div class="text-sm font-semibold text-gray-600 mb-1">📝 Publications</div>
                 <div class="text-3xl font-bold text-indigo-600">${scores.publications.toFixed(2)}</div>
                 <div class="text-xs text-gray-500 mt-2">${getRecordsBySection('publications').length} works</div>
               </div>
@@ -3427,7 +3428,7 @@ let currentSection = 'home';
               </div>
               
               <div class="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-lg p-5 border-l-4 border-amber-500">
-                <div class="text-sm font-semibold text-gray-600 mb-1">��� Admin Duties</div>
+                <div class="text-sm font-semibold text-gray-600 mb-1">📌 Admin Duties</div>
                 <div class="text-3xl font-bold text-amber-600">${scores.adminDuties.toFixed(2)}</div>
                 <div class="text-xs text-gray-500 mt-2">${getRecordsBySection('admin_duties').length} duties</div>
               </div>
