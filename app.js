@@ -3701,6 +3701,44 @@ let currentSection = 'home';
           }
           return stringValue;
         },
+        safeText(value, fallback = 'N/A') {
+          if (value === null || value === undefined || value === '') {
+            return fallback;
+          }
+          return String(value);
+        },
+        formatNumber(value, options = {}) {
+          if (value === null || value === undefined || value === '') return '';
+          const numeric = Number(value);
+          if (!Number.isFinite(numeric)) return '';
+          const {
+            minimumFractionDigits = 0,
+            maximumFractionDigits = 2
+          } = options;
+          return numeric.toLocaleString('en-MY', { minimumFractionDigits, maximumFractionDigits });
+        },
+        formatValue(value, type = 'text') {
+          if (type === 'score') {
+            return Utilities.formatNumber(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          }
+          if (type === 'currency') {
+            return Utilities.formatNumber(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          }
+          if (type === 'number') {
+            return Utilities.formatNumber(value, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+          }
+          if (type === 'date') {
+            return Utilities.safeText(value, '');
+          }
+          return Utilities.safeText(value, '');
+        },
+        normalizeValue(value, type = 'text') {
+          if (type === 'score' || type === 'currency' || type === 'number') {
+            const numeric = Number(value);
+            return Number.isFinite(numeric) ? numeric : '';
+          }
+          return value ?? '';
+        },
         downloadBlob(filename, blob) {
           const link = document.createElement('a');
           const url = URL.createObjectURL(blob);
@@ -3735,189 +3773,286 @@ let currentSection = 'home';
               ? profile.profile_other_admin_position
               : profile.profile_admin_position)
             : 'N/A';
+          const summaryByCategory = [
+            { category: 'Teaching', score: scores.teaching, count: recordsBySection.teaching.length },
+            { category: 'Supervision', score: scores.supervision, count: recordsBySection.supervision.length },
+            { category: 'Research', score: scores.research, count: recordsBySection.research.length },
+            { category: 'Publications', score: scores.publications, count: recordsBySection.publications.length },
+            { category: 'Admin Leadership', score: scores.adminLeadership, count: recordsBySection.administration.length },
+            { category: 'Admin Duties', score: scores.adminDuties, count: recordsBySection.admin_duties.length },
+            { category: 'Service', score: scores.service, count: recordsBySection.service.length },
+            { category: 'Laboratory', score: scores.laboratory, count: recordsBySection.laboratory.length },
+            { category: 'Professional', score: scores.professional, count: recordsBySection.professional.length }
+          ];
+          const totalCount = summaryByCategory.reduce((sum, row) => sum + row.count, 0);
+
+          const buildSection = (config) => {
+            const rows = config.records.map(record => {
+              const rowScore = config.scoreFn ? config.scoreFn(record) : 0;
+              return {
+                ...config.mapRow(record),
+                rowScore: Number.isFinite(rowScore) ? rowScore : 0
+              };
+            });
+            const sectionScoreTotal = rows.reduce((sum, row) => sum + (Number(row.rowScore) || 0), 0);
+            return {
+              key: config.key,
+              title: config.title,
+              columns: config.columns,
+              rows,
+              subtotal: {
+                sectionScoreTotal,
+                sectionCount: rows.length
+              }
+            };
+          };
 
           const sections = [
-            {
-              id: 'teaching',
+            buildSection({
+              key: 'teaching',
               title: 'Teaching',
-              columns: ['Course Code', 'Course Name', 'Credit Hours', 'Class Size', 'Lecture Hrs', 'Tutorial Hrs', 'Lab Hrs', 'Fieldwork Hrs', 'Semester', 'Role', 'Score'],
-              rows: recordsBySection.teaching.map(course => ([
-                course.course_code,
-                course.course_name,
-                course.course_credit_hours,
-                course.course_class_size,
-                course.course_lecture,
-                course.course_tutorial,
-                course.course_lab,
-                course.course_fieldwork,
-                course.course_semester === 'Other' ? course.course_semester_other : course.course_semester,
-                course.course_role,
-                calculateCourseScore(course).toFixed(2)
-              ]))
-            },
-            {
-              id: 'supervision',
+              records: recordsBySection.teaching,
+              scoreFn: calculateCourseScore,
+              columns: [
+                { key: 'course_code', label: 'Course Code', type: 'text' },
+                { key: 'course_name', label: 'Course Name', type: 'text' },
+                { key: 'course_credit_hours', label: 'Credit Hours', type: 'number' },
+                { key: 'course_class_size', label: 'Class Size', type: 'number' },
+                { key: 'course_lecture', label: 'Lecture Hrs', type: 'number' },
+                { key: 'course_tutorial', label: 'Tutorial Hrs', type: 'number' },
+                { key: 'course_lab', label: 'Lab Hrs', type: 'number' },
+                { key: 'course_fieldwork', label: 'Fieldwork Hrs', type: 'number' },
+                { key: 'course_semester', label: 'Semester', type: 'text' },
+                { key: 'course_role', label: 'Role', type: 'text' },
+                { key: 'rowScore', label: 'Score', type: 'score' }
+              ],
+              mapRow: (course) => ({
+                course_code: course.course_code,
+                course_name: course.course_name,
+                course_credit_hours: course.course_credit_hours,
+                course_class_size: course.course_class_size,
+                course_lecture: course.course_lecture,
+                course_tutorial: course.course_tutorial,
+                course_lab: course.course_lab,
+                course_fieldwork: course.course_fieldwork,
+                course_semester: course.course_semester === 'Other' ? course.course_semester_other : course.course_semester,
+                course_role: course.course_role
+              })
+            }),
+            buildSection({
+              key: 'supervision',
               title: 'Supervision',
-              columns: ['Student Name', 'Matric', 'Level', 'Role', 'Research Title', 'Year', 'Score'],
-              rows: recordsBySection.supervision.map(student => ([
-                student.student_name,
-                student.student_matric,
-                student.student_level,
-                student.student_role,
-                student.student_title,
-                student.student_year,
-                calculateSupervisionScore(student).toFixed(2)
-              ]))
-            },
-            {
-              id: 'research',
+              records: recordsBySection.supervision,
+              scoreFn: calculateSupervisionScore,
+              columns: [
+                { key: 'student_name', label: 'Student Name', type: 'text' },
+                { key: 'student_matric', label: 'Matric', type: 'text' },
+                { key: 'student_level', label: 'Level', type: 'text' },
+                { key: 'student_role', label: 'Role', type: 'text' },
+                { key: 'student_title', label: 'Research Title', type: 'text' },
+                { key: 'student_year', label: 'Year', type: 'number' },
+                { key: 'rowScore', label: 'Score', type: 'score' }
+              ],
+              mapRow: (student) => ({
+                student_name: student.student_name,
+                student_matric: student.student_matric,
+                student_level: student.student_level,
+                student_role: student.student_role,
+                student_title: student.student_title,
+                student_year: student.student_year
+              })
+            }),
+            buildSection({
+              key: 'research',
               title: 'Research Projects',
-              columns: ['Project Title', 'Grant Code', 'Role', 'Amount (RM)', 'Status', 'Year', 'Duration', 'Score'],
-              rows: recordsBySection.research.map(project => ([
-                project.research_title,
-                project.research_grant_code,
-                project.research_role,
-                project.research_amount,
-                project.research_status,
-                project.research_year,
-                project.research_duration,
-                calculateResearchScore(project).toFixed(2)
-              ]))
-            },
-            {
-              id: 'publications',
+              records: recordsBySection.research,
+              scoreFn: calculateResearchScore,
+              columns: [
+                { key: 'research_title', label: 'Project Title', type: 'text' },
+                { key: 'research_grant_code', label: 'Grant Code', type: 'text' },
+                { key: 'research_role', label: 'Role', type: 'text' },
+                { key: 'research_amount', label: 'Amount (RM)', type: 'currency' },
+                { key: 'research_status', label: 'Status', type: 'text' },
+                { key: 'research_year', label: 'Year', type: 'number' },
+                { key: 'research_duration', label: 'Duration (Years)', type: 'number' },
+                { key: 'rowScore', label: 'Score', type: 'score' }
+              ],
+              mapRow: (project) => ({
+                research_title: project.research_title,
+                research_grant_code: project.research_grant_code,
+                research_role: project.research_role,
+                research_amount: project.research_amount,
+                research_status: project.research_status,
+                research_year: project.research_year,
+                research_duration: project.research_duration
+              })
+            }),
+            buildSection({
+              key: 'publications',
               title: 'Publications',
-              columns: ['Title', 'Type', 'Index', 'Venue', 'Position', 'Year', 'Status', 'Score'],
-              rows: recordsBySection.publications.map(pub => ([
-                pub.pub_title,
-                pub.pub_type,
-                pub.pub_index,
-                pub.pub_venue,
-                pub.pub_position,
-                pub.pub_year,
-                pub.pub_status,
-                calculatePublicationScore(pub).toFixed(2)
-              ]))
-            },
-            {
-              id: 'administration',
+              records: recordsBySection.publications,
+              scoreFn: calculatePublicationScore,
+              columns: [
+                { key: 'pub_title', label: 'Title', type: 'text' },
+                { key: 'pub_type', label: 'Type', type: 'text' },
+                { key: 'pub_index', label: 'Index', type: 'text' },
+                { key: 'pub_venue', label: 'Venue', type: 'text' },
+                { key: 'pub_position', label: 'Position', type: 'text' },
+                { key: 'pub_year', label: 'Year', type: 'number' },
+                { key: 'pub_status', label: 'Status', type: 'text' },
+                { key: 'rowScore', label: 'Score', type: 'score' }
+              ],
+              mapRow: (pub) => ({
+                pub_title: pub.pub_title,
+                pub_type: pub.pub_type,
+                pub_index: pub.pub_index,
+                pub_venue: pub.pub_venue,
+                pub_position: pub.pub_position,
+                pub_year: pub.pub_year,
+                pub_status: pub.pub_status
+              })
+            }),
+            buildSection({
+              key: 'administration',
               title: 'Admin Leadership',
-              columns: ['Position', 'Faculty/Unit', 'Allowance (RM)', 'Start Date', 'End Date', 'Score'],
-              rows: recordsBySection.administration.map(admin => ([
-                admin.admin_position === 'Other' ? admin.admin_other_position : admin.admin_position,
-                admin.admin_faculty,
-                admin.admin_allowance ? admin.admin_allowance.toFixed(2) : 'N/A',
-                admin.admin_start_date,
-                admin.admin_end_date || 'Current',
-                calculateAdministrationScore(admin).toFixed(2)
-              ]))
-            },
-            {
-              id: 'admin_duties',
+              records: recordsBySection.administration,
+              scoreFn: calculateAdministrationScore,
+              columns: [
+                { key: 'admin_position', label: 'Position', type: 'text' },
+                { key: 'admin_faculty', label: 'Faculty/Unit', type: 'text' },
+                { key: 'admin_allowance', label: 'Allowance (RM)', type: 'currency' },
+                { key: 'admin_start_date', label: 'Start Date', type: 'date' },
+                { key: 'admin_end_date', label: 'End Date', type: 'date' },
+                { key: 'rowScore', label: 'Score', type: 'score' }
+              ],
+              mapRow: (admin) => ({
+                admin_position: admin.admin_position === 'Other' ? admin.admin_other_position : admin.admin_position,
+                admin_faculty: admin.admin_faculty,
+                admin_allowance: admin.admin_allowance,
+                admin_start_date: admin.admin_start_date,
+                admin_end_date: admin.admin_end_date || 'Current'
+              })
+            }),
+            buildSection({
+              key: 'admin_duties',
               title: 'Admin Duties',
-              columns: ['Duty Name', 'Type', 'Frequency', 'Year', 'Notes', 'Score'],
-              rows: recordsBySection.admin_duties.map(duty => ([
-                duty.duty_name,
-                duty.duty_type,
-                duty.duty_frequency,
-                duty.duty_year,
-                duty.duty_notes || 'N/A',
-                calculateAdminDutyScore(duty).toFixed(2)
-              ]))
-            },
-            {
-              id: 'service',
+              records: recordsBySection.admin_duties,
+              scoreFn: calculateAdminDutyScore,
+              columns: [
+                { key: 'duty_name', label: 'Duty Name', type: 'text' },
+                { key: 'duty_type', label: 'Type', type: 'text' },
+                { key: 'duty_frequency', label: 'Frequency', type: 'text' },
+                { key: 'duty_year', label: 'Year', type: 'number' },
+                { key: 'duty_notes', label: 'Notes', type: 'text' },
+                { key: 'rowScore', label: 'Score', type: 'score' }
+              ],
+              mapRow: (duty) => ({
+                duty_name: duty.duty_name,
+                duty_type: duty.duty_type,
+                duty_frequency: duty.duty_frequency,
+                duty_year: duty.duty_year,
+                duty_notes: duty.duty_notes
+              })
+            }),
+            buildSection({
+              key: 'service',
               title: 'Service & Engagement',
-              columns: ['Service Title', 'Type', 'Scope', 'Organization', 'Date', 'Duration (Hours)', 'Notes', 'Score'],
-              rows: recordsBySection.service.map(service => ([
-                service.service_title,
-                service.service_type,
-                service.service_scope,
-                service.service_organization,
-                service.service_date,
-                service.service_duration,
-                service.service_description || 'N/A',
-                calculateServiceScore(service).toFixed(2)
-              ]))
-            },
-            {
-              id: 'laboratory',
+              records: recordsBySection.service,
+              scoreFn: calculateServiceScore,
+              columns: [
+                { key: 'service_title', label: 'Service Title', type: 'text' },
+                { key: 'service_type', label: 'Type', type: 'text' },
+                { key: 'service_scope', label: 'Scope', type: 'text' },
+                { key: 'service_organization', label: 'Organization', type: 'text' },
+                { key: 'service_date', label: 'Date', type: 'date' },
+                { key: 'service_duration', label: 'Duration (Hours)', type: 'number' },
+                { key: 'service_description', label: 'Notes', type: 'text' },
+                { key: 'rowScore', label: 'Score', type: 'score' }
+              ],
+              mapRow: (service) => ({
+                service_title: service.service_title,
+                service_type: service.service_type,
+                service_scope: service.service_scope,
+                service_organization: service.service_organization,
+                service_date: service.service_date,
+                service_duration: service.service_duration,
+                service_description: service.service_description
+              })
+            }),
+            buildSection({
+              key: 'laboratory',
               title: 'Laboratory Responsibilities',
-              columns: ['Lab Name', 'Responsibility', 'Frequency', 'Year', 'Description', 'Score'],
-              rows: recordsBySection.laboratory.map(lab => ([
-                lab.lab_name,
-                lab.lab_responsibility,
-                lab.lab_frequency,
-                lab.lab_year,
-                lab.lab_description || 'N/A',
-                calculateLabScore(lab).toFixed(2)
-              ]))
-            },
-            {
-              id: 'professional',
+              records: recordsBySection.laboratory,
+              scoreFn: calculateLabScore,
+              columns: [
+                { key: 'lab_name', label: 'Lab Name', type: 'text' },
+                { key: 'lab_responsibility', label: 'Responsibility', type: 'text' },
+                { key: 'lab_frequency', label: 'Frequency', type: 'text' },
+                { key: 'lab_year', label: 'Year', type: 'number' },
+                { key: 'lab_description', label: 'Description', type: 'text' },
+                { key: 'rowScore', label: 'Score', type: 'score' }
+              ],
+              mapRow: (lab) => ({
+                lab_name: lab.lab_name,
+                lab_responsibility: lab.lab_responsibility,
+                lab_frequency: lab.lab_frequency,
+                lab_year: lab.lab_year,
+                lab_description: lab.lab_description
+              })
+            }),
+            buildSection({
+              key: 'professional',
               title: 'Professional Activities',
-              columns: ['Title', 'Type', 'Scope', 'Organization', 'Year', 'Description', 'Score'],
-              rows: recordsBySection.professional.map(prof => ([
-                prof.prof_title,
-                prof.prof_type,
-                prof.prof_scope,
-                prof.prof_organization,
-                prof.prof_year,
-                prof.prof_description || 'N/A',
-                calculateProfessionalScore(prof).toFixed(2)
-              ]))
-            }
+              records: recordsBySection.professional,
+              scoreFn: calculateProfessionalScore,
+              columns: [
+                { key: 'prof_title', label: 'Title', type: 'text' },
+                { key: 'prof_type', label: 'Type', type: 'text' },
+                { key: 'prof_scope', label: 'Scope', type: 'text' },
+                { key: 'prof_organization', label: 'Organization', type: 'text' },
+                { key: 'prof_year', label: 'Year', type: 'number' },
+                { key: 'prof_description', label: 'Description', type: 'text' },
+                { key: 'rowScore', label: 'Score', type: 'score' }
+              ],
+              mapRow: (prof) => ({
+                prof_title: prof.prof_title,
+                prof_type: prof.prof_type,
+                prof_scope: prof.prof_scope,
+                prof_organization: prof.prof_organization,
+                prof_year: prof.prof_year,
+                prof_description: prof.prof_description
+              })
+            })
           ];
-
-          const totals = {
-            entries: allRecords.length,
-            categories: {
-              teaching: recordsBySection.teaching.length,
-              supervision: recordsBySection.supervision.length,
-              research: recordsBySection.research.length,
-              publications: recordsBySection.publications.length,
-              administration: recordsBySection.administration.length,
-              admin_duties: recordsBySection.admin_duties.length,
-              service: recordsBySection.service.length,
-              laboratory: recordsBySection.laboratory.length,
-              professional: recordsBySection.professional.length
-            }
-          };
 
           return {
             meta: {
               title: config.app_title || defaultConfig.app_title,
               subtitle: config.app_subtitle || defaultConfig.app_subtitle,
               generatedAt,
+              staff: {
+                name: profile.profile_name,
+                id: profile.profile_staff_id,
+                category: profile.profile_category || 'N/A'
+              },
               staffName: profile.profile_name,
               staffId: profile.profile_staff_id,
               staffRank: profile.profile_rank || profile.profile_category,
               staffCategory: profile.profile_category || 'N/A',
+              rank: profile.profile_rank || profile.profile_category,
               programme: profile.profile_programme || 'N/A',
-              adminPosition
+              adminPosition,
+              filters: {}
             },
             sections,
-            tables: [
-              {
-                title: 'Workload Summary',
-                rows: [
-                  ['Teaching', scores.teaching.toFixed(2), totals.categories.teaching],
-                  ['Supervision', scores.supervision.toFixed(2), totals.categories.supervision],
-                  ['Research', scores.research.toFixed(2), totals.categories.research],
-                  ['Publications', scores.publications.toFixed(2), totals.categories.publications],
-                  ['Admin Leadership', scores.adminLeadership.toFixed(2), totals.categories.administration],
-                  ['Admin Duties', scores.adminDuties.toFixed(2), totals.categories.admin_duties],
-                  ['Service', scores.service.toFixed(2), totals.categories.service],
-                  ['Laboratory', scores.laboratory.toFixed(2), totals.categories.laboratory],
-                  ['Professional', scores.professional.toFixed(2), totals.categories.professional]
-                ]
+            summary: {
+              byCategory: summaryByCategory,
+              totalScore: scores.total,
+              totalCount,
+              status: {
+                label: status.label,
+                icon: status.icon
               }
-            ],
-            totals,
-            score: {
-              total: scores.total,
-              status: status.label,
-              icon: status.icon
             }
           };
         },
@@ -3932,17 +4067,19 @@ let currentSection = 'home';
               <div class="report-subtitle">${reportModel.meta.subtitle}</div>
               <div class="report-meta">
                 <div><strong>Generated:</strong> ${Utilities.formatDateTime(reportModel.meta.generatedAt)}</div>
-                <div><strong>Staff:</strong> ${reportModel.meta.staffName} (${reportModel.meta.staffId})</div>
-                <div><strong>Rank:</strong> ${reportModel.meta.staffRank}</div>
+                <div><strong>Staff:</strong> ${reportModel.meta.staff.name} (${reportModel.meta.staff.id})</div>
+                <div><strong>Rank:</strong> ${reportModel.meta.rank}</div>
                 <div><strong>Programme:</strong> ${reportModel.meta.programme}</div>
                 <div><strong>Admin Position:</strong> ${reportModel.meta.adminPosition}</div>
               </div>
             </div>
           `;
 
-          const summaryRows = reportModel.tables[0].rows.map(row => `
+          const summaryRows = reportModel.summary.byCategory.map(row => `
             <tr>
-              ${row.map(cell => `<td>${cell}</td>`).join('')}
+              <td>${row.category}</td>
+              <td>${Utilities.formatNumber(row.score, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td>${row.count}</td>
             </tr>
           `).join('');
 
@@ -3961,33 +4098,32 @@ let currentSection = 'home';
                   ${summaryRows}
                   <tr class="report-total-row">
                     <td>Total</td>
-                    <td>${reportModel.score.total.toFixed(2)}</td>
-                    <td>${reportModel.totals.entries}</td>
+                    <td>${Utilities.formatNumber(reportModel.summary.totalScore, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td>${reportModel.summary.totalCount}</td>
                   </tr>
                 </tbody>
               </table>
               <div class="report-status">
-                <strong>Status:</strong> ${reportModel.score.status} ${reportModel.score.icon}
+                <strong>Status:</strong> ${reportModel.summary.status.label} ${reportModel.summary.status.icon}
               </div>
             </section>
           `;
 
           const sectionsHtml = reportModel.sections.map(section => {
-            if (section.rows.length === 0) {
-              return `
-                <section class="report-section">
-                  <h2>${section.title}</h2>
-                  <div class="report-empty">No records available.</div>
-                </section>
+            const headers = section.columns.map(col => `<th>${col.label}</th>`).join('');
+            const rows = section.rows.length
+              ? section.rows.map(row => `
+                <tr>
+                  ${section.columns.map(col => `
+                    <td>${Utilities.formatValue(row[col.key], col.type)}</td>
+                  `).join('')}
+                </tr>
+              `).join('')
+              : `
+                <tr>
+                  <td colspan="${section.columns.length}" class="report-empty">No records.</td>
+                </tr>
               `;
-            }
-
-            const headers = section.columns.map(col => `<th>${col}</th>`).join('');
-            const rows = section.rows.map(row => `
-              <tr>
-                ${row.map(cell => `<td>${cell}</td>`).join('')}
-              </tr>
-            `).join('');
 
             return `
               <section class="report-section">
@@ -3998,15 +4134,43 @@ let currentSection = 'home';
                   </thead>
                   <tbody>${rows}</tbody>
                 </table>
+                <div class="report-subtotal">
+                  <strong>Subtotal:</strong>
+                  Score Total ${Utilities.formatNumber(section.subtotal.sectionScoreTotal, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  | Count ${section.subtotal.sectionCount}
+                </div>
               </section>
             `;
           }).join('');
+
+          const overallTotalsHtml = `
+            <section class="report-section">
+              <h2>Overall Totals</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Total Score</th>
+                    <th>Total Count</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="report-total-row">
+                    <td>${Utilities.formatNumber(reportModel.summary.totalScore, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td>${reportModel.summary.totalCount}</td>
+                    <td>${reportModel.summary.status.label} ${reportModel.summary.status.icon}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </section>
+          `;
 
           container.innerHTML = `
             <div class="report-body">
               ${headerHtml}
               ${summaryHtml}
               ${sectionsHtml}
+              ${overallTotalsHtml}
             </div>
           `;
 
@@ -4017,17 +4181,18 @@ let currentSection = 'home';
           lines.push(`${reportModel.meta.title} - SUMMARY`);
           lines.push('='.repeat(60));
           lines.push(`Generated: ${Utilities.formatDateTime(reportModel.meta.generatedAt)}`);
-          lines.push(`Staff: ${reportModel.meta.staffName} (${reportModel.meta.staffId})`);
-          lines.push(`Rank: ${reportModel.meta.staffRank}`);
+          lines.push(`Staff: ${reportModel.meta.staff.name} (${reportModel.meta.staff.id})`);
+          lines.push(`Rank: ${reportModel.meta.rank}`);
           lines.push('');
           lines.push('WORKLOAD SCORES');
           lines.push('-'.repeat(60));
-          reportModel.tables[0].rows.forEach(row => {
-            lines.push(`${row[0].padEnd(20)} ${row[1]}`);
+          reportModel.summary.byCategory.forEach(row => {
+            lines.push(`${row.category.padEnd(20)} ${row.score.toFixed(2)}`);
           });
           lines.push('-'.repeat(60));
-          lines.push(`TOTAL SCORE: ${reportModel.score.total.toFixed(2)}`);
-          lines.push(`STATUS: ${reportModel.score.status} ${reportModel.score.icon}`);
+          lines.push(`TOTAL SCORE: ${reportModel.summary.totalScore.toFixed(2)}`);
+          lines.push(`TOTAL COUNT: ${reportModel.summary.totalCount}`);
+          lines.push(`STATUS: ${reportModel.summary.status.label} ${reportModel.summary.status.icon}`);
           return lines.join('\n');
         }
       };
@@ -4045,28 +4210,53 @@ let currentSection = 'home';
             [reportModel.meta.subtitle],
             [],
             ['Generated', Utilities.formatDateTime(reportModel.meta.generatedAt)],
-            ['Staff Name', reportModel.meta.staffName],
-            ['Staff ID', reportModel.meta.staffId],
-            ['Rank', reportModel.meta.staffRank],
+            ['Staff Name', reportModel.meta.staff.name],
+            ['Staff ID', reportModel.meta.staff.id],
+            ['Rank', reportModel.meta.rank],
             ['Programme', reportModel.meta.programme],
             ['Admin Position', reportModel.meta.adminPosition],
             [],
             ['Category', 'Score', 'Count'],
-            ...reportModel.tables[0].rows,
-            ['Total', reportModel.score.total.toFixed(2), reportModel.totals.entries],
+            ...reportModel.summary.byCategory.map(row => [
+              row.category,
+              Utilities.normalizeValue(row.score, 'score'),
+              row.count
+            ]),
+            ['Total', Utilities.normalizeValue(reportModel.summary.totalScore, 'score'), reportModel.summary.totalCount],
             [],
-            ['Status', reportModel.score.status]
+            ['Status', reportModel.summary.status.label]
           ];
 
+          const setAutoWidths = (sheet, data) => {
+            if (!sheet || !data.length) return;
+            const colWidths = data[0].map((_, idx) => {
+              const maxLen = data.reduce((max, row) => {
+                const cell = row[idx];
+                if (cell === null || cell === undefined) return max;
+                return Math.max(max, String(cell).length);
+              }, 10);
+              return { wch: Math.min(Math.max(maxLen + 2, 12), 40) };
+            });
+            sheet['!cols'] = colWidths;
+          };
+
           const summarySheet = XLSX.utils.aoa_to_sheet(summarySheetData);
+          setAutoWidths(summarySheet, summarySheetData);
           XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
 
           reportModel.sections.forEach(section => {
-            if (section.rows.length === 0) {
-              return;
-            }
-            const sheetData = [section.columns, ...section.rows];
+            const header = section.columns.map(col => col.label);
+            const dataRows = section.rows.length
+              ? section.rows.map(row => section.columns.map(col => Utilities.normalizeValue(row[col.key], col.type)))
+              : [header.map((_, idx) => (idx === 0 ? 'No records' : ''))];
+            const subtotalRows = [
+              header.map(() => ''),
+              header.map((_, idx) => (idx === 0 ? 'Score Total' : idx === 1 ? section.subtotal.sectionScoreTotal : '')),
+              header.map((_, idx) => (idx === 0 ? 'Count' : idx === 1 ? section.subtotal.sectionCount : ''))
+            ];
+            const sheetData = [header, ...dataRows, ...subtotalRows];
             const sheet = XLSX.utils.aoa_to_sheet(sheetData);
+            setAutoWidths(sheet, sheetData);
             XLSX.utils.book_append_sheet(workbook, sheet, section.title.substring(0, 30));
           });
 
@@ -4075,16 +4265,60 @@ let currentSection = 'home';
           showToast('Excel report downloaded successfully!');
         },
         exportSummaryCSV(reportModel) {
+          const formatCsvValue = (value, type) => {
+            if (type === 'score') {
+              const numeric = Number(value);
+              return Number.isFinite(numeric) ? numeric.toFixed(2) : '';
+            }
+            if (type === 'currency' || type === 'number') {
+              const numeric = Number(value);
+              return Number.isFinite(numeric) ? numeric : '';
+            }
+            return Utilities.safeText(value, '');
+          };
           const rows = [
-            ['Staff Name', reportModel.meta.staffName],
-            ['Staff ID', reportModel.meta.staffId],
-            ['Generated', Utilities.formatDateTime(reportModel.meta.generatedAt)],
+            ['GeneratedAt', Utilities.formatDateTime(reportModel.meta.generatedAt)],
+            ['Staff', `${reportModel.meta.staff.name} (${reportModel.meta.staff.id})`],
+            ['Rank', reportModel.meta.rank],
+            ['Programme', reportModel.meta.programme],
+            ['Admin Position', reportModel.meta.adminPosition],
+            ['Filters', JSON.stringify(reportModel.meta.filters || {})],
             [],
+            ['SUMMARY_BY_CATEGORY'],
             ['Category', 'Score', 'Count'],
-            ...reportModel.tables[0].rows,
-            ['TOTAL', reportModel.score.total.toFixed(2), reportModel.totals.entries],
-            ['Status', reportModel.score.status]
+            ...reportModel.summary.byCategory.map(row => [
+              row.category,
+              row.score.toFixed(2),
+              row.count
+            ]),
+            ['TOTAL', reportModel.summary.totalScore.toFixed(2), reportModel.summary.totalCount],
+            ['Status', reportModel.summary.status.label],
+            []
           ];
+
+          reportModel.sections.forEach(section => {
+            rows.push([`SECTION: ${section.title}`]);
+            rows.push(section.columns.map(col => col.label));
+            if (section.rows.length) {
+              section.rows.forEach(row => {
+                rows.push(section.columns.map(col => formatCsvValue(row[col.key], col.type)));
+              });
+            } else {
+              rows.push(section.columns.map((_, idx) => (idx === 0 ? 'No records' : '')));
+            }
+            const subtotalRow = section.columns.map(() => '');
+            subtotalRow[0] = 'Subtotal Score';
+            subtotalRow[1] = section.subtotal.sectionScoreTotal.toFixed(2);
+            subtotalRow[2] = 'Count';
+            subtotalRow[3] = section.subtotal.sectionCount;
+            rows.push(subtotalRow);
+            rows.push([]);
+          });
+
+          rows.push(['OVERALL_TOTALS']);
+          rows.push(['Total Score', reportModel.summary.totalScore.toFixed(2)]);
+          rows.push(['Total Count', reportModel.summary.totalCount]);
+          rows.push(['Status', reportModel.summary.status.label]);
 
           const csv = rows.map(row => {
             if (row.length === 0) return '';
