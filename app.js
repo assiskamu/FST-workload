@@ -1,6 +1,11 @@
 // Encoding: UTF-8
+
+// =========================
+// App State & Configuration
+// =========================
 let currentSection = 'home';
-    let allRecords = [];
+let allRecords = [];
+let notifications = [];
 
     const sections = [
       { id: 'home', label: '🏠 Home', showBadge: false },
@@ -30,6 +35,125 @@ let currentSection = 'home';
       app_subtitle: 'Faculty of Science and Technology, Universiti Malaysia Sabah'
     };
 
+    // =========================
+    // Data Store (SDK + Fallback)
+    // =========================
+    const DataStore = (() => {
+      const STORAGE_KEY = 'fst_workload_v1';
+      let dataHandler = null;
+
+      const readStore = () => {
+        if (typeof localStorage === 'undefined') return { records: [], elementConfig: {} };
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return { records: [], elementConfig: {} };
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            return { records: parsed, elementConfig: {} };
+          }
+          return {
+            records: Array.isArray(parsed.records) ? parsed.records : [],
+            elementConfig: parsed.elementConfig && typeof parsed.elementConfig === 'object' ? parsed.elementConfig : {}
+          };
+        } catch (error) {
+          return { records: [], elementConfig: {} };
+        }
+      };
+
+      const readRecords = () => readStore().records;
+
+      const writeRecords = (records) => {
+        if (typeof localStorage === 'undefined') return;
+        try {
+          const store = readStore();
+          const nextStore = { ...store, records };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(nextStore));
+        } catch (error) {
+          // Ignore storage write errors (private mode, quota, etc.)
+        }
+      };
+
+      const generateId = () => `rec_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+
+      const notifyChange = (records) => {
+        if (dataHandler && typeof dataHandler.onDataChanged === 'function') {
+          dataHandler.onDataChanged([...records]);
+        }
+      };
+
+      const createFallbackSdk = () => ({
+        async init(handler) {
+          dataHandler = handler;
+          const records = readRecords();
+          notifyChange(records);
+          return { isOk: true };
+        },
+        async create(record) {
+          const records = readRecords();
+          const newRecord = { ...(record || {}) };
+          if (!newRecord.__backendId) {
+            newRecord.__backendId = generateId();
+          }
+          records.push(newRecord);
+          writeRecords(records);
+          notifyChange(records);
+          return { isOk: true, data: newRecord };
+        },
+        async update(record) {
+          if (!record) {
+            return { isOk: false, error: 'Invalid record' };
+          }
+          const records = readRecords();
+          const backendId = record.__backendId;
+          const index = backendId ? records.findIndex((item) => item.__backendId === backendId) : -1;
+          const updatedRecord = {
+            ...(index >= 0 ? records[index] : {}),
+            ...record,
+            __backendId: backendId || generateId()
+          };
+          if (index >= 0) {
+            records[index] = updatedRecord;
+          } else {
+            records.push(updatedRecord);
+          }
+          writeRecords(records);
+          notifyChange(records);
+          return { isOk: true, data: updatedRecord };
+        },
+        async delete(record) {
+          const records = readRecords();
+          const backendId = record?.__backendId;
+          if (!backendId) {
+            return { isOk: false, error: 'Invalid record' };
+          }
+          const index = records.findIndex((item) => item.__backendId === backendId);
+          if (index === -1) {
+            return { isOk: false, error: 'Record not found' };
+          }
+          const removed = records.splice(index, 1)[0];
+          writeRecords(records);
+          notifyChange(records);
+          return { isOk: true, data: removed };
+        }
+      });
+
+      const ensureSdk = () => {
+        if (window.dataSdk) {
+          return { sdk: window.dataSdk, isStandalone: false };
+        }
+        const fallbackSdk = createFallbackSdk();
+        window.dataSdk = fallbackSdk;
+        return { sdk: fallbackSdk, isStandalone: true };
+      };
+
+      return {
+        ensureSdk
+      };
+    })();
+
+    // =========================
+    // App Initialization
+    // =========================
     async function initializeApp() {
       const dataHandler = {
         onDataChanged(data) {
@@ -40,7 +164,13 @@ let currentSection = 'home';
         }
       };
 
-      const initResult = await window.dataSdk.init(dataHandler);
+      const { sdk, isStandalone } = DataStore.ensureSdk();
+
+      if (isStandalone) {
+        showStandaloneBanner();
+      }
+
+      const initResult = sdk?.init ? await sdk.init(dataHandler) : { isOk: false };
       
       if (!initResult.isOk) {
         showToast('Failed to initialize application', 'error');
@@ -137,6 +267,9 @@ let currentSection = 'home';
       renderSection('home');
     }
 
+    // =========================
+    // UI Utilities
+    // =========================
     function updateTotalEntries() {
       const counter = document.getElementById('total-entries');
       if (counter) {
@@ -144,25 +277,42 @@ let currentSection = 'home';
       }
     }
 
-    function toggleQuickActions() {
-      const menu = document.getElementById('quick-actions-menu');
+    function showStandaloneBanner() {
+      const bannerId = 'standalone-mode-banner';
+      if (document.getElementById(bannerId)) return;
+
+      const appRoot = document.getElementById('app');
+      if (!appRoot) return;
+
+      const banner = document.createElement('div');
+      banner.id = bannerId;
+      banner.className = 'bg-amber-50 border-b border-amber-200 text-amber-900 text-sm px-6 py-2 flex items-center justify-center gap-2';
+      banner.innerHTML = '<span>⚠️</span><span class="font-semibold">Standalone mode</span><span class="text-xs text-amber-700">Local storage is active.</span>';
+      appRoot.prepend(banner);
+    }
+
+    function toggleMenu(menuId, otherMenuIds = []) {
+      const menu = document.getElementById(menuId);
+      if (!menu) return;
       menu.classList.toggle('hidden');
-      document.getElementById('notifications-menu').classList.add('hidden');
-      document.getElementById('profile-menu').classList.add('hidden');
+      otherMenuIds.forEach((id) => {
+        const otherMenu = document.getElementById(id);
+        if (otherMenu) {
+          otherMenu.classList.add('hidden');
+        }
+      });
+    }
+
+    function toggleQuickActions() {
+      toggleMenu('quick-actions-menu', ['notifications-menu', 'profile-menu']);
     }
 
     function toggleNotifications() {
-      const menu = document.getElementById('notifications-menu');
-      menu.classList.toggle('hidden');
-      document.getElementById('quick-actions-menu').classList.add('hidden');
-      document.getElementById('profile-menu').classList.add('hidden');
+      toggleMenu('notifications-menu', ['quick-actions-menu', 'profile-menu']);
     }
 
     function toggleProfileMenu() {
-      const menu = document.getElementById('profile-menu');
-      menu.classList.toggle('hidden');
-      document.getElementById('quick-actions-menu').classList.add('hidden');
-      document.getElementById('notifications-menu').classList.add('hidden');
+      toggleMenu('profile-menu', ['quick-actions-menu', 'notifications-menu']);
     }
 
     function updateLiveScore() {
@@ -348,6 +498,9 @@ let currentSection = 'home';
       }
     }
 
+    // =========================
+    // Navigation & Section Renderers
+    // =========================
     function renderNavigation() {
       const nav = document.getElementById('sidebar-nav');
       
@@ -457,6 +610,9 @@ let currentSection = 'home';
       return allRecords.filter(r => r.section === section);
     }
 
+    // =========================
+    // Scoring & Calculations
+    // =========================
     function calculateScores() {
       const scores = {
         teaching: 0,
