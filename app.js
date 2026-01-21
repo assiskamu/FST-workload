@@ -7,6 +7,14 @@ let currentSection = 'home';
 let allRecords = [];
 let notifications = [];
 
+const APP_VERSION = '1.1.0';
+const SUBMIT_ENDPOINT = 'PASTE_APPS_SCRIPT_WEB_APP_URL_HERE';
+const SUBMISSION_HISTORY_KEY = 'fst_workload_submission_history_v1';
+const SUBMISSION_PENDING_KEY = 'fst_workload_submission_pending_v1';
+const SUBMIT_TOKEN_SESSION_KEY = 'fst_workload_submit_token_v1';
+const SUBMISSION_HISTORY_LIMIT = 25;
+let submissionState = { isSubmitting: false, lastError: null, lastPayload: null };
+
     const sections = [
       { id: 'home', label: '🏠 Home', showBadge: false },
       { id: 'profile', label: '👤 Staff Profile', showBadge: false },
@@ -580,6 +588,7 @@ let notifications = [];
           break;
         case 'results':
           contentArea.innerHTML = renderResults();
+          renderSubmissionStatus();
           break;
         default:
           contentArea.innerHTML = '<p>Section not found</p>';
@@ -608,6 +617,464 @@ let notifications = [];
 
     function getRecordsBySection(section) {
       return allRecords.filter(r => r.section === section);
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function readLocalJson(key, fallback) {
+      if (typeof localStorage === 'undefined') return fallback;
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return fallback;
+        return JSON.parse(raw);
+      } catch (error) {
+        return fallback;
+      }
+    }
+
+    function writeLocalJson(key, value) {
+      if (typeof localStorage === 'undefined') return;
+      try {
+        localStorage.setItem(key, JSON.stringify(value));
+      } catch (error) {
+        // Ignore storage write errors
+      }
+    }
+
+    function getSubmissionHistory() {
+      const history = readLocalJson(SUBMISSION_HISTORY_KEY, []);
+      return Array.isArray(history) ? history : [];
+    }
+
+    function addSubmissionHistory(entry) {
+      const history = getSubmissionHistory();
+      history.unshift(entry);
+      const trimmed = history.slice(0, SUBMISSION_HISTORY_LIMIT);
+      writeLocalJson(SUBMISSION_HISTORY_KEY, trimmed);
+    }
+
+    function getPendingSubmission() {
+      return readLocalJson(SUBMISSION_PENDING_KEY, null);
+    }
+
+    function setPendingSubmission(payload) {
+      writeLocalJson(SUBMISSION_PENDING_KEY, payload);
+    }
+
+    function clearPendingSubmission() {
+      if (typeof localStorage === 'undefined') return;
+      try {
+        localStorage.removeItem(SUBMISSION_PENDING_KEY);
+      } catch (error) {
+        // Ignore storage errors
+      }
+    }
+
+    function getSubmitToken() {
+      let token = null;
+      if (typeof sessionStorage !== 'undefined') {
+        try {
+          token = sessionStorage.getItem(SUBMIT_TOKEN_SESSION_KEY);
+        } catch (error) {
+          token = null;
+        }
+      }
+      if (!token) {
+        token = window.prompt('Enter the submission token provided by your administrator:');
+        if (!token) {
+          return null;
+        }
+        if (typeof sessionStorage !== 'undefined') {
+          try {
+            sessionStorage.setItem(SUBMIT_TOKEN_SESSION_KEY, token);
+          } catch (error) {
+            // Ignore storage errors
+          }
+        }
+      }
+      return token;
+    }
+
+    function clearSubmitToken() {
+      if (typeof sessionStorage === 'undefined') return;
+      try {
+        sessionStorage.removeItem(SUBMIT_TOKEN_SESSION_KEY);
+      } catch (error) {
+        // Ignore storage errors
+      }
+    }
+
+    function validateSubmissionState() {
+      const errors = [];
+      const profile = getProfile();
+
+      if (!profile) {
+        errors.push({ section: 'profile', message: 'Staff profile is required.' });
+      } else {
+        const profileFields = [
+          { key: 'profile_name', label: 'Full Name' },
+          { key: 'profile_staff_id', label: 'Staff ID' },
+          { key: 'profile_category', label: 'Staff Category' },
+          { key: 'profile_admin_position', label: 'Administrative Position' }
+        ];
+
+        profileFields.forEach(field => {
+          if (!profile[field.key]) {
+            errors.push({ section: 'profile', message: `${field.label} is required.` });
+          }
+        });
+
+        if (profile.profile_category === 'Academic Staff') {
+          if (!profile.profile_programme) {
+            errors.push({ section: 'profile', message: 'Programme is required for academic staff.' });
+          }
+          if (!profile.profile_rank) {
+            errors.push({ section: 'profile', message: 'Academic rank is required for academic staff.' });
+          }
+        }
+
+        if (profile.profile_admin_position === 'Other' && !profile.profile_other_admin_position) {
+          errors.push({ section: 'profile', message: 'Other administrative position must be specified.' });
+        }
+      }
+
+      const requiredBySection = {
+        teaching: ['course_code', 'course_name', 'course_credit_hours', 'course_class_size', 'course_lecture', 'course_semester', 'course_role'],
+        supervision: ['student_name', 'student_matric', 'student_level', 'student_role', 'student_title', 'student_year'],
+        research: ['research_title', 'research_grant_code', 'research_role', 'research_amount', 'research_status', 'research_year', 'research_duration'],
+        publications: ['pub_title', 'pub_type', 'pub_index', 'pub_venue', 'pub_position', 'pub_year', 'pub_status'],
+        administration: ['admin_position', 'admin_faculty', 'admin_start_date'],
+        admin_duties: ['duty_type', 'duty_name', 'duty_frequency', 'duty_year'],
+        service: ['service_type', 'service_scope', 'service_title', 'service_organization', 'service_date'],
+        laboratory: ['lab_responsibility', 'lab_name', 'lab_frequency', 'lab_year'],
+        professional: ['prof_type', 'prof_scope', 'prof_title', 'prof_organization', 'prof_year']
+      };
+
+      const numericBySection = {
+        teaching: ['course_credit_hours', 'course_class_size', 'course_lecture', 'course_tutorial', 'course_lab', 'course_fieldwork'],
+        supervision: ['student_year'],
+        research: ['research_amount', 'research_year', 'research_duration'],
+        publications: ['pub_year'],
+        administration: ['admin_allowance'],
+        admin_duties: [],
+        service: ['service_duration'],
+        laboratory: [],
+        professional: []
+      };
+
+      Object.keys(requiredBySection).forEach(sectionKey => {
+        const records = getRecordsBySection(sectionKey);
+        records.forEach((record, index) => {
+          requiredBySection[sectionKey].forEach(field => {
+            const value = record[field];
+            if (value === null || value === undefined || value === '') {
+              errors.push({
+                section: sectionKey,
+                message: `Missing ${field.replace(/_/g, ' ')} in ${sectionKey} entry #${index + 1}.`
+              });
+            }
+          });
+
+          if (sectionKey === 'teaching' && record.course_semester === 'Other' && !record.course_semester_other) {
+            errors.push({
+              section: 'teaching',
+              message: `Specify the semester for teaching entry #${index + 1}.`
+            });
+          }
+
+          if (sectionKey === 'administration' && record.admin_position === 'Other' && !record.admin_other_position) {
+            errors.push({
+              section: 'administration',
+              message: `Specify the leadership position for admin entry #${index + 1}.`
+            });
+          }
+
+          numericBySection[sectionKey].forEach(field => {
+            const value = record[field];
+            if (value === null || value === undefined || value === '') return;
+            const numeric = Number(value);
+            if (!Number.isFinite(numeric) || numeric < 0) {
+              errors.push({
+                section: sectionKey,
+                message: `Invalid number for ${field.replace(/_/g, ' ')} in ${sectionKey} entry #${index + 1}.`
+              });
+            }
+          });
+
+          if (sectionKey === 'teaching' && Number(record.course_class_size) <= 0) {
+            errors.push({
+              section: sectionKey,
+              message: `Class size must be greater than 0 in teaching entry #${index + 1}.`
+            });
+          }
+        });
+      });
+
+      return {
+        isValid: errors.length === 0,
+        errors
+      };
+    }
+
+    function deriveTermFromTeaching(teachingRecords) {
+      const terms = teachingRecords
+        .map(course => (course.course_semester === 'Other' ? course.course_semester_other : course.course_semester))
+        .filter(Boolean);
+
+      const uniqueTerms = Array.from(new Set(terms));
+      if (uniqueTerms.length === 0) {
+        return 'N/A';
+      }
+      if (uniqueTerms.length === 1) {
+        return uniqueTerms[0];
+      }
+      return uniqueTerms.join(' | ');
+    }
+
+    function calculateTotalHours(sectionsByKey) {
+      const teachingHours = (sectionsByKey.teaching || []).reduce((sum, course) => {
+        const total = Number(course.course_lecture || 0) +
+          Number(course.course_tutorial || 0) +
+          Number(course.course_lab || 0) +
+          Number(course.course_fieldwork || 0);
+        return sum + (Number.isFinite(total) ? total : 0);
+      }, 0);
+
+      const serviceHours = (sectionsByKey.service || []).reduce((sum, service) => {
+        const duration = Number(service.service_duration || 0);
+        return sum + (Number.isFinite(duration) ? duration : 0);
+      }, 0);
+
+      return Math.round((teachingHours + serviceHours) * 100) / 100;
+    }
+
+    function sanitizeRecord(record) {
+      if (!record || typeof record !== 'object') return {};
+      const { __backendId, section, ...rest } = record;
+      return { ...rest };
+    }
+
+    function buildSubmissionPayload() {
+      const profile = getProfile();
+      const sectionsPayload = {
+        teaching: getRecordsBySection('teaching').map(sanitizeRecord),
+        supervision: getRecordsBySection('supervision').map(sanitizeRecord),
+        research: getRecordsBySection('research').map(sanitizeRecord),
+        publications: getRecordsBySection('publications').map(sanitizeRecord),
+        adminLeadership: getRecordsBySection('administration').map(sanitizeRecord),
+        adminDuties: getRecordsBySection('admin_duties').map(sanitizeRecord),
+        service: getRecordsBySection('service').map(sanitizeRecord),
+        lab: getRecordsBySection('laboratory').map(sanitizeRecord),
+        professional: getRecordsBySection('professional').map(sanitizeRecord)
+      };
+
+      const scores = calculateScores();
+      const status = getWorkloadStatus(scores.total);
+      const totalHours = calculateTotalHours({
+        teaching: getRecordsBySection('teaching'),
+        service: getRecordsBySection('service')
+      });
+
+      const adminPosition = profile?.profile_admin_position === 'Other'
+        ? profile?.profile_other_admin_position
+        : profile?.profile_admin_position;
+
+      return {
+        appVersion: APP_VERSION,
+        generatedAtISO: new Date().toISOString(),
+        staffProfile: profile ? {
+          name: profile.profile_name,
+          staffId: profile.profile_staff_id,
+          category: profile.profile_category,
+          programme: profile.profile_programme || '',
+          rank: profile.profile_rank || '',
+          adminPosition: adminPosition || ''
+        } : null,
+        term: deriveTermFromTeaching(getRecordsBySection('teaching')),
+        sections: sectionsPayload,
+        totals: {
+          bySection: {
+            teaching: scores.teaching,
+            supervision: scores.supervision,
+            research: scores.research,
+            publications: scores.publications,
+            adminLeadership: scores.adminLeadership,
+            adminDuties: scores.adminDuties,
+            service: scores.service,
+            lab: scores.laboratory,
+            professional: scores.professional
+          },
+          totalScore: scores.total,
+          totalHours,
+          status: status.label
+        }
+      };
+    }
+
+    function renderSubmissionStatus() {
+      const container = document.getElementById('submission-status');
+      if (!container) return;
+
+      setSubmitButtonState(submissionState.isSubmitting);
+
+      const pending = getPendingSubmission();
+      if (pending) {
+        container.classList.remove('hidden');
+        container.innerHTML = `
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-900">
+            <div>
+              <strong>Pending submission detected.</strong>
+              <span class="block text-xs text-amber-800">Retry to send the last report payload to the server.</span>
+            </div>
+            <button onclick="retrySubmission()" class="px-4 py-2 bg-amber-600 text-white rounded-lg font-semibold hover:bg-amber-700 text-sm">
+              Retry Submission
+            </button>
+          </div>
+        `;
+        return;
+      }
+
+      if (submissionState.lastError) {
+        container.classList.remove('hidden');
+        container.innerHTML = `
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-800">
+            <div>
+              <strong>Submission failed:</strong>
+              <span class="block text-xs text-red-700">${escapeHtml(submissionState.lastError)}</span>
+            </div>
+            <button onclick="retrySubmission()" class="px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 text-sm">
+              Retry Submission
+            </button>
+          </div>
+        `;
+        return;
+      }
+
+      container.classList.add('hidden');
+      container.innerHTML = '';
+    }
+
+    function setSubmitButtonState(isSubmitting) {
+      const submitButton = document.getElementById('submit-report');
+      if (!submitButton) return;
+      submitButton.disabled = isSubmitting;
+      submitButton.innerHTML = isSubmitting
+        ? '<span class="loading-spinner"></span><span>Submitting...</span>'
+        : '<span>🚀</span> Submit Report';
+      submitButton.classList.toggle('opacity-70', isSubmitting);
+      submitButton.classList.toggle('cursor-not-allowed', isSubmitting);
+      submitButton.classList.add('flex', 'items-center', 'gap-2');
+    }
+
+    async function submitReport() {
+      if (submissionState.isSubmitting) return;
+
+      if (!SUBMIT_ENDPOINT || SUBMIT_ENDPOINT.includes('PASTE_APPS_SCRIPT_WEB_APP_URL_HERE')) {
+        showToast('Submission endpoint not configured yet.', 'error');
+        submissionState.lastError = 'Submission endpoint not configured.';
+        renderSubmissionStatus();
+        return;
+      }
+
+      const validation = validateSubmissionState();
+      if (!validation.isValid) {
+        const errorList = validation.errors.slice(0, 5).map(error => `<li>${escapeHtml(error.message)}</li>`).join('');
+        const moreCount = validation.errors.length > 5 ? ` and ${validation.errors.length - 5} more.` : '.';
+        showToast('Please fix validation errors before submitting.', 'error');
+        submissionState.lastError = `Validation failed${moreCount}`;
+        const container = document.getElementById('submission-status');
+        if (container) {
+          container.classList.remove('hidden');
+          container.innerHTML = `
+            <div class="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-800">
+              <strong>Validation issues:</strong>
+              <ul class="list-disc ml-5 mt-2 space-y-1">${errorList}</ul>
+              ${validation.errors.length > 5 ? `<div class="text-xs mt-2">Showing first 5 of ${validation.errors.length} issues.</div>` : ''}
+            </div>
+          `;
+        }
+        return;
+      }
+
+      const token = getSubmitToken();
+      if (!token) {
+        showToast('Submission cancelled. Token required.', 'error');
+        return;
+      }
+
+      const payload = buildSubmissionPayload();
+      submissionState.lastPayload = payload;
+      submissionState.lastError = null;
+      setPendingSubmission(payload);
+      submissionState.isSubmitting = true;
+      setSubmitButtonState(true);
+
+      try {
+        const response = await fetch(SUBMIT_ENDPOINT, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Submit-Token': token
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (response.status === 401 || response.status === 403) {
+          clearSubmitToken();
+          throw new Error('Unauthorized. Please re-enter your submission token.');
+        }
+
+        if (!response.ok) {
+          throw new Error(`Server responded with ${response.status}.`);
+        }
+
+        const data = await response.json();
+        if (!data || !data.ok) {
+          throw new Error(data?.error || 'Submission failed.');
+        }
+
+        clearPendingSubmission();
+        const entry = {
+          submissionId: data.submissionId,
+          generatedAtISO: payload.generatedAtISO,
+          term: payload.term,
+          staffName: payload.staffProfile?.name || 'Unknown',
+          status: payload.totals.status,
+          serverTimestamp: data.serverTimestamp
+        };
+        addSubmissionHistory(entry);
+        showToast(`Submitted successfully! ID: ${data.submissionId}`);
+        submissionState.lastError = null;
+        renderSubmissionStatus();
+      } catch (error) {
+        const message = error?.message || 'Submission failed due to a network error.';
+        submissionState.lastError = message;
+        showToast(`Submission failed: ${message}`, 'error');
+        renderSubmissionStatus();
+      } finally {
+        submissionState.isSubmitting = false;
+        setSubmitButtonState(false);
+      }
+    }
+
+    function retrySubmission() {
+      if (submissionState.isSubmitting) return;
+      const pending = getPendingSubmission();
+      if (!pending) {
+        showToast('No pending submission found.', 'error');
+        submissionState.lastError = 'No pending submission available.';
+        renderSubmissionStatus();
+        return;
+      }
+      submissionState.lastPayload = pending;
+      submitReport();
     }
 
     // =========================
@@ -3532,9 +3999,13 @@ let notifications = [];
                 <button onclick="copyToClipboard()" class="px-4 py-2 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition flex items-center gap-2 text-sm">
                   <span>📑</span> Copy Summary
                 </button>
+                <button id="submit-report" onclick="submitReport()" class="px-4 py-2 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700 transition flex items-center gap-2 text-sm">
+                  <span>🚀</span> Submit Report
+                </button>
               </div>
             </div>
           </div>
+          <div id="submission-status" class="hidden"></div>
 
           <!-- Total Score Card -->
           <div class="bg-gradient-to-r from-sky-500 to-blue-600 rounded-2xl shadow-xl p-8 text-white text-center">
