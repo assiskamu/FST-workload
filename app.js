@@ -2114,7 +2114,7 @@ if (!data || !data.ok) {
                   <label for="course-semester-other" class="block text-sm font-semibold text-gray-700 mb-2">Specify Semester *</label>
                   <input type="text" id="course-semester-other"
                          class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="e.g., Summer 2024">
+                         placeholder="e.g., Semester 3 2025/2026">
                 </div>
                 
                 <div>
