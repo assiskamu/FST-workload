@@ -8,7 +8,7 @@ let allRecords = [];
 let notifications = [];
 
 const APP_VERSION = '1.1.0';
-const SUBMIT_ENDPOINT = 'https://script.google.com/macros/s/AKfycbyTsPksFmodHQjVrXsUrQMo67QIULr86N4sXA0xKV4GmwB4BitFAgbX4hBV2MVbkJRcog/exec';
+const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyTsPksFmodHQjVrXsUrQMo67QIULr86N4sXA0xKV4GmwB4BitFAgbX4hBV2MVbkJRcog/exec';
 const SUBMIT_ENDPOINT_KEY = 'fst_workload_submit_endpoint_v1';
 const SUBMISSION_HISTORY_KEY = 'fst_workload_submission_history_v1';
 const SUBMISSION_PENDING_KEY = 'fst_workload_submission_pending_v1';
@@ -682,8 +682,8 @@ let submissionState = { isSubmitting: false, lastError: null, lastPayload: null 
     }
 
     function readSubmitEndpoint() {
-      if (SUBMIT_ENDPOINT && !SUBMIT_ENDPOINT.includes('PASTE_APPS_SCRIPT_WEB_APP_URL_HERE')) {
-        return SUBMIT_ENDPOINT;
+      if (GAS_WEBAPP_URL && !GAS_WEBAPP_URL.includes('PASTE_APPS_SCRIPT_WEB_APP_URL_HERE')) {
+        return GAS_WEBAPP_URL;
       }
       if (typeof localStorage === 'undefined') return '';
       try {
@@ -1013,6 +1013,7 @@ function getSubmitToken() {
     async function submitReport() {
       if (submissionState.isSubmitting) return;
 
+      console.log('[submit] clicked');
       let endpoint = readSubmitEndpoint();
       if (!endpoint) {
         showToast('Submission endpoint not configured yet.', 'error');
@@ -1026,6 +1027,7 @@ function getSubmitToken() {
         renderSubmissionStatus();
         showToast('Submission endpoint saved. Submitting report...', 'success');
       }
+      console.log('[submit] endpoint=', endpoint);
 
       const validation = validateSubmissionState();
       if (!validation.isValid) {
@@ -1057,6 +1059,7 @@ function getSubmitToken() {
         payload.clientSubmissionId = payload.clientSubmissionId
           || `WL-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         submissionState.lastPayload = payload;
+        console.log('[submit] payload bytes=', JSON.stringify(payload).length);
 
         const data = await postViaForm(endpoint, payload);
 
@@ -1093,24 +1096,38 @@ function getSubmitToken() {
     }
 
     function postViaForm(endpoint, payloadObj) {
-      return new Promise((resolve) => {
-        const iframe = document.createElement('iframe');
-        iframe.name = 'submit_iframe_' + Date.now();
-        iframe.style.display = 'none';
-        document.body.appendChild(iframe);
+      return new Promise((resolve, reject) => {
+        if (!endpoint) {
+          reject(new Error('Submission endpoint not configured.'));
+          return;
+        }
 
-        const form = document.createElement('form');
-        form.action = endpoint;
-        form.method = 'POST';
-        form.target = iframe.name;
+        let iframe;
+        let form;
+        try {
+          iframe = document.createElement('iframe');
+          iframe.name = 'submit_iframe_' + Date.now();
+          iframe.style.display = 'none';
+          document.body.appendChild(iframe);
 
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'payload';
-        input.value = JSON.stringify(payloadObj);
-        form.appendChild(input);
+          form = document.createElement('form');
+          form.action = endpoint;
+          form.method = 'POST';
+          form.target = iframe.name;
 
-        document.body.appendChild(form);
+          const input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = 'payload';
+          input.value = JSON.stringify(payloadObj);
+          form.appendChild(input);
+
+          document.body.appendChild(form);
+        } catch (error) {
+          try { if (form) document.body.removeChild(form); } catch (e) {}
+          try { if (iframe) document.body.removeChild(iframe); } catch (e) {}
+          reject(new Error('Failed to create submission form.'));
+          return;
+        }
 
         iframe.onload = () => {
           // Kita anggap server terima; browser tak bagi kita baca response (tak perlu).
@@ -1134,6 +1151,15 @@ function getSubmitToken() {
       }
       submissionState.lastPayload = pending;
       submitReport();
+    }
+
+    function bindSubmitButton() {
+      document.addEventListener('click', (event) => {
+        const submitButton = event.target.closest('#submit-report');
+        if (!submitButton) return;
+        event.preventDefault();
+        submitReport();
+      });
     }
 
     // =========================
@@ -4054,7 +4080,7 @@ function getSubmitToken() {
                 <button onclick="copyToClipboard()" class="px-4 py-2 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition flex items-center gap-2 text-sm">
                   <span>📑</span> Copy Summary
                 </button>
-                <button id="submit-report" onclick="submitReport()" class="px-4 py-2 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700 transition flex items-center gap-2 text-sm">
+                <button id="submit-report" class="px-4 py-2 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700 transition flex items-center gap-2 text-sm">
                   <span>🚀</span> Submit Report
                 </button>
               </div>
@@ -4278,7 +4304,10 @@ function getSubmitToken() {
       }
     }
 
-    document.addEventListener('DOMContentLoaded', initializeApp);
+    document.addEventListener('DOMContentLoaded', () => {
+      initializeApp();
+      bindSubmitButton();
+    });
 
     // Reset Functions
     function showClearActivitiesConfirm() {
