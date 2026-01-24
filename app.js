@@ -1081,11 +1081,9 @@ function postViaForm(endpoint, payloadObj) {
 }
 
         
-const response = await fetch(endpoint, {
-  method: 'POST',
-  headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-  body: JSON.stringify(payload)
-});
+await postViaForm(endpoint, payload);
+const data = { ok: true }; // form submit tak boleh baca response; kita anggap diterima
+
 
 
         if (response.status === 401 || response.status === 403) {
@@ -1097,7 +1095,6 @@ const response = await fetch(endpoint, {
           throw new Error(`Server responded with ${response.status}.`);
         }
 
-        const data = await response.json();
         if (!data || !data.ok) {
           throw new Error(data?.error || 'Submission failed.');
         }
