@@ -720,30 +720,11 @@ let submissionState = { isSubmitting: false, lastError: null, lastPayload: null 
       renderSubmissionStatus();
     }
 
-    function getSubmitToken() {
-      let token = null;
-      if (typeof sessionStorage !== 'undefined') {
-        try {
-          token = sessionStorage.getItem(SUBMIT_TOKEN_SESSION_KEY);
-        } catch (error) {
-          token = null;
-        }
-      }
-      if (!token) {
-        token = window.prompt('Enter the submission token provided by your administrator:');
-        if (!token) {
-          return null;
-        }
-        if (typeof sessionStorage !== 'undefined') {
-          try {
-            sessionStorage.setItem(SUBMIT_TOKEN_SESSION_KEY, token);
-          } catch (error) {
-            // Ignore storage errors
-          }
-        }
-      }
-      return token;
-    }
+function getSubmitToken() {
+  // Hardcoded token (no prompt)
+  return 'WL-2026-9F3c1D7a0b4E8c2A-6a5B4c3D2e1F0a9B';
+}
+
 
     function clearSubmitToken() {
       if (typeof sessionStorage === 'undefined') return;
