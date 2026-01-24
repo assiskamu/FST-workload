@@ -2046,21 +2046,21 @@ if (!data || !data.ok) {
                   <label for="course-code" class="block text-sm font-semibold text-gray-700 mb-2">Course Code *</label>
                   <input type="text" id="course-code" required 
                          class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="e.g., CS101">
+                         placeholder="e.g., SJ24102">
                 </div>
                 
                 <div>
                   <label for="course-name" class="block text-sm font-semibold text-gray-700 mb-2">Course Name *</label>
                   <input type="text" id="course-name" required 
                          class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="e.g., Introduction to Programming">
+                         placeholder="e.g., Monetary Economics">
                 </div>
                 
                 <div>
                   <label for="course-credit-hours" class="block text-sm font-semibold text-gray-700 mb-2">Credit Hours *</label>
                   <input type="number" id="course-credit-hours" required min="0" step="1"
                          class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="3">
+                         placeholder="2">
                 </div>
                 
                 <div>
@@ -2074,14 +2074,14 @@ if (!data || !data.ok) {
                   <label for="course-lecture" class="block text-sm font-semibold text-gray-700 mb-2">Lecture Hours (per semester) *</label>
                   <input type="number" id="course-lecture" required min="0" step="0.5"
                          class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="42">
+                         placeholder="22">
                 </div>
                 
                 <div>
                   <label for="course-tutorial" class="block text-sm font-semibold text-gray-700 mb-2">Tutorial Hours (per semester)</label>
                   <input type="number" id="course-tutorial" min="0" step="0.5" value="0"
                          class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="14">
+                         placeholder="6">
                 </div>
                 
                 <div>
@@ -2102,10 +2102,10 @@ if (!data || !data.ok) {
                   <label for="course-semester" class="block text-sm font-semibold text-gray-700 mb-2">Semester *</label>
                   <select id="course-semester" required onchange="toggleOtherSemester()" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
                     <option value="">Select Semester</option>
-                    <option value="Semester 1 2024/2025">Semester 1 2024/2025</option>
-                    <option value="Semester 2 2024/2025">Semester 2 2024/2025</option>
-                    <option value="Semester 1 2023/2024">Semester 1 2023/2024</option>
-                    <option value="Semester 2 2023/2024">Semester 2 2023/2024</option>
+                    <option value="Semester 1 2025/2026">Semester 1 2025/2026</option>
+                    <option value="Semester 2 2025/2026">Semester 2 2025/2026</option>
+                    <option value="Semester 1 2026/2027">Semester 1 2026/2027</option>
+                    <option value="Semester 2 2026/2027">Semester 2 2026/2027</option>
                     <option value="Other">Other</option>
                   </select>
                 </div>
@@ -2959,13 +2959,13 @@ if (!data || !data.ok) {
                   <label for="admin-position" class="block text-sm font-semibold text-gray-700 mb-2">Leadership Position *</label>
                   <select id="admin-position" required onchange="toggleOtherAdminPositionField()" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
                     <option value="">Select Position</option>
-                    <option value="Dean">Dean (20 points)</option>
-                    <option value="Deputy Dean">Deputy Dean (15 points)</option>
-                    <option value="Centre Director">Centre Director (12 points)</option>
-                    <option value="Head of Programme">Head of Programme (10 points)</option>
-                    <option value="Postgraduate Coordinator">Postgraduate Coordinator (8 points)</option>
-                    <option value="Programme Coordinator">Programme Coordinator (6 points)</option>
-                    <option value="Other">Other Position (5 points)</option>
+                    <option value="Dean">Dean</option>
+                    <option value="Deputy Dean">Deputy Dean</option>
+                    <option value="Centre Director">Centre Director</option>
+                    <option value="Head of Programme">Head of Programme</option>
+                    <option value="Postgraduate Coordinator">Postgraduate Coordinator</option>
+                    <option value="Programme Coordinator">Programme Coordinator</option>
+                    <option value="Other">Other Position</option>
                   </select>
                 </div>
                 
