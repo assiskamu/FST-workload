@@ -721,7 +721,6 @@ let submissionState = { isSubmitting: false, lastError: null, lastPayload: null 
     }
 
 function getSubmitToken() {
-  // Hardcoded token (no prompt)
   return 'WL-2026-9F3c1D7a0b4E8c2A-6a5B4c3D2e1F0a9B';
 }
 
