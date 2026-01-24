@@ -40,21 +40,38 @@ function doGet(e) {
 
 function doPost(e) {
   try {
-    const token = getHeaderValue_(e, 'X-Submit-Token');
     const expected = getSubmitToken_();
 
     if (!expected) {
       return createCorsResponse_({ ok: false, error: 'Server not configured: SUBMIT_TOKEN missing.' }, true);
     }
+
+    let payload = null;
+    if (e && e.postData && e.postData.contents) {
+      try {
+        payload = JSON.parse(e.postData.contents);
+      } catch (error) {
+        payload = null;
+      }
+    }
+    if (!payload && e && e.parameter && e.parameter.payload) {
+      try {
+        payload = JSON.parse(e.parameter.payload);
+      } catch (error) {
+        payload = null;
+      }
+    }
+    if (!payload) {
+      return createCorsResponse_({ ok: false, error: 'Missing request body' }, true, 400);
+    }
+
+    const tokenHeader = getHeaderValue_(e, 'X-Submit-Token');
+    const tokenBody = payload.submitToken;
+    const token = tokenHeader || tokenBody;
     if (!token || token !== expected) {
       return createCorsResponse_({ ok: false, error: 'Unauthorized' }, true, 401);
     }
 
-    if (!e || !e.postData || !e.postData.contents) {
-      return createCorsResponse_({ ok: false, error: 'Missing request body' }, true, 400);
-    }
-
-    const payload = JSON.parse(e.postData.contents);
     const errors = validatePayload_(payload);
     if (errors.length) {
       return createCorsResponse_({ ok: false, error: 'Validation failed', details: errors }, true, 400);
@@ -64,7 +81,7 @@ function doPost(e) {
     lock.waitLock(20000);
 
     try {
-      const submissionId = generateSubmissionId_();
+      const submissionId = payload.clientSubmissionId || generateSubmissionId_();
       const serverTimestamp = new Date().toISOString();
 
       const ss = SpreadsheetApp.openById(getSpreadsheetId_());
