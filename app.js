@@ -2318,14 +2318,14 @@ if (!data || !data.ok) {
                   <label for="student-name" class="block text-sm font-semibold text-gray-700 mb-2">Student Name *</label>
                   <input type="text" id="student-name" required 
                          class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="e.g., John Smith">
+                         placeholder="e.g., Vallerie Peter">
                 </div>
                 
                 <div>
                   <label for="student-matric" class="block text-sm font-semibold text-gray-700 mb-2">Matric Number *</label>
                   <input type="text" id="student-matric" required
                          class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="e.g., A12345678">
+                         placeholder="e.g., MS2421011T">
                 </div>
                 
                 <div>
@@ -2351,7 +2351,7 @@ if (!data || !data.ok) {
                   <label for="student-title" class="block text-sm font-semibold text-gray-700 mb-2">Research Title *</label>
                   <input type="text" id="student-title" required
                          class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="e.g., Machine Learning Applications in Healthcare">
+                         placeholder="e.g., Dynamic Panel Data Model">
                 </div>
                 
                 <div>
