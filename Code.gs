@@ -39,42 +39,75 @@ function doGet(e) {
 }
 
 function doPost(e) {
+  function jsonResponse(payload, isError, statusCode) {
+    return createCorsResponse_(payload, isError, statusCode);
+  }
+
+  function parseQueryString_(queryString) {
+    const params = {};
+    if (!queryString) return params;
+    queryString.split('&').forEach(part => {
+      if (!part) return;
+      const eqIndex = part.indexOf('=');
+      const rawKey = eqIndex >= 0 ? part.slice(0, eqIndex) : part;
+      const rawValue = eqIndex >= 0 ? part.slice(eqIndex + 1) : '';
+      if (!rawKey) return;
+      const key = decodeURIComponent(rawKey.replace(/\+/g, ' '));
+      const value = decodeURIComponent(rawValue.replace(/\+/g, ' '));
+      params[key] = value;
+    });
+    return params;
+  }
+
   try {
     const expected = getSubmitToken_();
 
     if (!expected) {
-      return createCorsResponse_({ ok: false, error: 'Server not configured: SUBMIT_TOKEN missing.' }, true);
+      return jsonResponse({ ok: false, error: 'Server not configured: SUBMIT_TOKEN missing.' }, true);
     }
 
     let payload = null;
-    if (e && e.postData && e.postData.contents) {
+    let payloadStr = (e && e.parameter && e.parameter.payload) ? e.parameter.payload : '';
+    if (payloadStr) {
       try {
-        payload = JSON.parse(e.postData.contents);
+        payload = JSON.parse(payloadStr);
       } catch (error) {
         payload = null;
       }
-    }
-    if (!payload && e && e.parameter && e.parameter.payload) {
-      try {
-        payload = JSON.parse(e.parameter.payload);
-      } catch (error) {
-        payload = null;
-      }
-    }
-    if (!payload) {
-      return createCorsResponse_({ ok: false, error: 'Missing request body' }, true, 400);
     }
 
-    const tokenHeader = getHeaderValue_(e, 'X-Submit-Token');
-    const tokenBody = payload.submitToken;
-    const token = tokenHeader || tokenBody;
+    if (!payload && e && e.postData && typeof e.postData.contents === 'string') {
+      const contents = e.postData.contents;
+      const params = parseQueryString_(contents);
+      if (params.payload) {
+        payloadStr = params.payload;
+        try {
+          payload = JSON.parse(payloadStr);
+        } catch (error) {
+          payload = null;
+        }
+      }
+      if (!payload) {
+        try {
+          payload = JSON.parse(contents);
+        } catch (error) {
+          payload = null;
+        }
+      }
+    }
+
+    if (!payload) {
+      return jsonResponse({ ok: false, error: 'Missing request body' }, true, 400);
+    }
+
+    const token = payload.submitToken;
     if (!token || token !== expected) {
-      return createCorsResponse_({ ok: false, error: 'Unauthorized' }, true, 401);
+      return jsonResponse({ ok: false, error: 'Unauthorized' }, true, 401);
     }
 
     const errors = validatePayload_(payload);
     if (errors.length) {
-      return createCorsResponse_({ ok: false, error: 'Validation failed', details: errors }, true, 400);
+      return jsonResponse({ ok: false, error: 'Validation failed', details: errors }, true, 400);
     }
 
     const lock = LockService.getScriptLock();
@@ -91,15 +124,16 @@ function doPost(e) {
       ensureSheet_(ss, SHEET_RECORDS, HEADERS_RECORDS);
 
       writeSubmissionsRow_(ss, payload, submissionId, serverTimestamp);
+      SpreadsheetApp.flush();
       writeSectionSummaryRows_(ss, payload, submissionId, serverTimestamp);
       writeRecordsRows_(ss, payload, submissionId, serverTimestamp);
 
-      return createCorsResponse_({ ok: true, submissionId, serverTimestamp });
+      return jsonResponse({ ok: true, submissionId, serverTimestamp });
     } finally {
       lock.releaseLock();
     }
   } catch (err) {
-    return createCorsResponse_({ ok: false, error: err && err.message ? err.message : 'Server error' }, true, 500);
+    return jsonResponse({ ok: false, error: err && err.message ? err.message : 'Server error' }, true, 500);
   }
 }
 
