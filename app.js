@@ -1049,6 +1049,38 @@ const payload = buildSubmissionPayload();
 // Put token inside body to avoid custom header preflight
 payload.submitToken = getSubmitToken();
 
+function postViaForm(endpoint, payloadObj) {
+  return new Promise((resolve) => {
+    const iframe = document.createElement('iframe');
+    iframe.name = 'submit_iframe_' + Date.now();
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+
+    const form = document.createElement('form');
+    form.action = endpoint;
+    form.method = 'POST';
+    form.target = iframe.name;
+
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'payload';
+    input.value = JSON.stringify(payloadObj);
+    form.appendChild(input);
+
+    document.body.appendChild(form);
+
+    iframe.onload = () => {
+      // Kita anggap server terima; browser tak bagi kita baca response (tak perlu).
+      try { document.body.removeChild(form); } catch (e) {}
+      try { document.body.removeChild(iframe); } catch (e) {}
+      resolve({ ok: true });
+    };
+
+    form.submit();
+  });
+}
+
+        
 const response = await fetch(endpoint, {
   method: 'POST',
   headers: { 'Content-Type': 'text/plain;charset=utf-8' },
