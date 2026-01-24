@@ -1086,10 +1086,10 @@ const data = { ok: true }; // form submit tak boleh baca response; kita anggap d
 
 
 
-        if (response.status === 401 || response.status === 403) {
-          clearSubmitToken();
-          throw new Error('Unauthorized. Please re-enter your submission token.');
-        }
+        // NOTE: We submit via hidden form/iframe (postViaForm), so there is no fetch() Response object.
+// We cannot read HTTP status due to cross-origin.
+// If the iframe load completes, we treat it as "delivered".
+
 
         if (!response.ok) {
           throw new Error(`Server responded with ${response.status}.`);
