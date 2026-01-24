@@ -25,9 +25,9 @@ let submissionState = { isSubmitting: false, lastError: null, lastPayload: null 
       { id: 'publications', label: '📄 Publications', showBadge: true },
       { id: 'administration', label: '🏛️ Admin Leadership', showBadge: true },
       { id: 'admin_duties', label: '📋 Admin Duties', showBadge: true },
-      { id: 'service', label: '🤝 Service', showBadge: false },
-      { id: 'laboratory', label: '🧪 Laboratory', showBadge: false },
-      { id: 'professional', label: '💼 Professional', showBadge: false },
+      { id: 'service', label: '🤝 Service', showBadge: true },
+      { id: 'laboratory', label: '🧪 Laboratory', showBadge: true },
+      { id: 'professional', label: '💼 Professional', showBadge: true },
       { id: 'assistants', label: '👨‍🏫 Assistants', showBadge: false },
       { id: 'results', label: '📊 Results', showBadge: false }
     ];
@@ -519,7 +519,10 @@ let submissionState = { isSubmitting: false, lastError: null, lastPayload: null 
         research: allRecords.filter(r => r.section === 'research').length,
         publications: allRecords.filter(r => r.section === 'publications').length,
         administration: allRecords.filter(r => r.section === 'administration').length,
-        admin_duties: allRecords.filter(r => r.section === 'admin_duties').length
+        admin_duties: allRecords.filter(r => r.section === 'admin_duties').length,
+        service: getRecordsBySection('service').length,
+        laboratory: getRecordsBySection('laboratory').length,
+        professional: getRecordsBySection('professional').length
       };
 
       nav.innerHTML = sections.map(section => `
@@ -1044,79 +1047,42 @@ function getSubmitToken() {
         return;
       }
 
-const payload = buildSubmissionPayload();
+      submissionState.isSubmitting = true;
+      submissionState.lastError = null;
+      setSubmitButtonState(true);
 
-// Put token inside body to avoid custom header preflight
-payload.submitToken = getSubmitToken();
+      try {
+        const payload = buildSubmissionPayload();
+        payload.submitToken = getSubmitToken();
+        payload.clientSubmissionId = payload.clientSubmissionId
+          || `WL-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        submissionState.lastPayload = payload;
 
-function postViaForm(endpoint, payloadObj) {
-  return new Promise((resolve) => {
-    const iframe = document.createElement('iframe');
-    iframe.name = 'submit_iframe_' + Date.now();
-    iframe.style.display = 'none';
-    document.body.appendChild(iframe);
-
-    const form = document.createElement('form');
-    form.action = endpoint;
-    form.method = 'POST';
-    form.target = iframe.name;
-
-    const input = document.createElement('input');
-    input.type = 'hidden';
-    input.name = 'payload';
-    input.value = JSON.stringify(payloadObj);
-    form.appendChild(input);
-
-    document.body.appendChild(form);
-
-    iframe.onload = () => {
-      // Kita anggap server terima; browser tak bagi kita baca response (tak perlu).
-      try { document.body.removeChild(form); } catch (e) {}
-      try { document.body.removeChild(iframe); } catch (e) {}
-      resolve({ ok: true });
-    };
-
-    form.submit();
-  });
-}
-
-        
-const data = await postViaForm(endpoint, payload); // postViaForm resolve { ok: true } atau throw error
-
-// Jangan guna response.status / response.ok di sini — memang tiada "response" untuk form submit
-if (!data || !data.ok) {
-  throw new Error('Submission failed (no ok response).');
-}
-
-
-
-
-        // NOTE: We submit via hidden form/iframe (postViaForm), so there is no fetch() Response object.
-// We cannot read HTTP status due to cross-origin.
-// If the iframe load completes, we treat it as "delivered".
-
+        const data = await postViaForm(endpoint, payload);
 
         if (!data || !data.ok) {
           throw new Error(data?.error || 'Submission failed.');
         }
 
         clearPendingSubmission();
+        const submissionId = payload.clientSubmissionId;
         const entry = {
-          submissionId: data.submissionId,
+          submissionId,
           generatedAtISO: payload.generatedAtISO,
           term: payload.term,
           staffName: payload.staffProfile?.name || 'Unknown',
           status: payload.totals.status,
-          serverTimestamp: data.serverTimestamp
+          serverTimestamp: ''
         };
         addSubmissionHistory(entry);
-        showToast(`Submitted successfully! ID: ${data.submissionId}`);
+        showToast(`Submitted successfully! ID: ${submissionId}`);
         submissionState.lastError = null;
         renderSubmissionStatus();
-     try {
-  // kod dalam try (apa-apa yang ada sebelum catch) 
-    } catch (error) {
+      } catch (error) {
         const message = error?.message || 'Submission failed due to a network error.';
+        if (submissionState.lastPayload) {
+          setPendingSubmission(submissionState.lastPayload);
+        }
         submissionState.lastError = message;
         showToast(`Submission failed: ${message}`, 'error');
         renderSubmissionStatus();
@@ -1124,6 +1090,37 @@ if (!data || !data.ok) {
         submissionState.isSubmitting = false;
         setSubmitButtonState(false);
       }
+    }
+
+    function postViaForm(endpoint, payloadObj) {
+      return new Promise((resolve) => {
+        const iframe = document.createElement('iframe');
+        iframe.name = 'submit_iframe_' + Date.now();
+        iframe.style.display = 'none';
+        document.body.appendChild(iframe);
+
+        const form = document.createElement('form');
+        form.action = endpoint;
+        form.method = 'POST';
+        form.target = iframe.name;
+
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'payload';
+        input.value = JSON.stringify(payloadObj);
+        form.appendChild(input);
+
+        document.body.appendChild(form);
+
+        iframe.onload = () => {
+          // Kita anggap server terima; browser tak bagi kita baca response (tak perlu).
+          try { document.body.removeChild(form); } catch (e) {}
+          try { document.body.removeChild(iframe); } catch (e) {}
+          resolve({ ok: true });
+        };
+
+        form.submit();
+      });
     }
 
     function retrySubmission() {
@@ -1322,7 +1319,7 @@ if (!data || !data.ok) {
       else if (service.service_scope === 'Regional') scopeFactor = 1.0;
       else if (service.service_scope === 'Local') scopeFactor = 0.8;
       
-      const durationHours = service.service_hours || 0;
+      const durationHours = Number(service.service_duration ?? service.service_hours ?? 0);
       const hoursFactor = Math.min(durationHours / 20, 2.0);
       
       return Math.round(basePoints * scopeFactor * hoursFactor * 100) / 100;
