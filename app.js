@@ -1083,7 +1083,9 @@ const response = await fetch(endpoint, {
         showToast(`Submitted successfully! ID: ${data.submissionId}`);
         submissionState.lastError = null;
         renderSubmissionStatus();
-      } catch (error) {
+     try {
+  // kod dalam try (apa-apa yang ada sebelum catch) 
+    } catch (error) {
         const message = error?.message || 'Submission failed due to a network error.';
         submissionState.lastError = message;
         showToast(`Submission failed: ${message}`, 'error');
