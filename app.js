@@ -8,7 +8,7 @@ let allRecords = [];
 let notifications = [];
 
 const APP_VERSION = '1.1.0';
-const SUBMIT_ENDPOINT = 'PASTE_APPS_SCRIPT_WEB_APP_URL_HERE';
+const SUBMIT_ENDPOINT = 'https://script.google.com/macros/s/AKfycbyTsPksFmodHQjVrXsUrQMo67QIULr86N4sXA0xKV4GmwB4BitFAgbX4hBV2MVbkJRcog/exec';
 const SUBMIT_ENDPOINT_KEY = 'fst_workload_submit_endpoint_v1';
 const SUBMISSION_HISTORY_KEY = 'fst_workload_submission_history_v1';
 const SUBMISSION_PENDING_KEY = 'fst_workload_submission_pending_v1';
