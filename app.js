@@ -1849,18 +1849,14 @@ let submissionState = { isSubmitting: false, lastError: null, lastPayload: null 
                   <label for="profile-programme" class="block text-sm font-semibold text-gray-700 mb-2">Programme *</label>
                   <select id="profile-programme" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
                     <option value="">Select Programme</option>
-                    <option value="UH6011 Environmental Science (Resources Management)">UH6011 Environmental Science (Resources Management)</option>
-                    <option value="UH6021 Environmental Science (Conservation)">UH6021 Environmental Science (Conservation)</option>
-                    <option value="UH6031 Environmental Science (Eco-Tourism)">UH6031 Environmental Science (Eco-Tourism)</option>
-                    <option value="UH6041 Marine Science">UH6041 Marine Science</option>
-                    <option value="UH6051 Plant Technology">UH6051 Plant Technology</option>
-                    <option value="UH6061 Animal Science and Agribusiness">UH6061 Animal Science and Agribusiness</option>
-                    <option value="UH6071 Food Science and Nutrition">UH6071 Food Science and Nutrition</option>
-                    <option value="UH6081 Biotechnology">UH6081 Biotechnology</option>
-                    <option value="UH6091 Chemistry with Marketing">UH6091 Chemistry with Marketing</option>
-                    <option value="UH6101 Geology">UH6101 Geology</option>
-                    <option value="UH6111 Industrial Chemistry">UH6111 Industrial Chemistry</option>
-                    <option value="UH6121 Aquaculture">UH6121 Aquaculture</option>
+                    <option value="UH6422001 Environmental Science">UH6422001 Environmental Science</option>
+                    <option value="UH6441001 Industrial Physics">UH6441001 Industrial Physics</option>
+                    <option value="UH6443002 Geology">UH6443002 Geology</option>
+                    <option value="UH6443003 Marine Science">UH6443003 Marine Science</option>
+                    <option value="UH6461001 Mathematics with Economics">UH6461001 Mathematics with Economics</option>
+                    <option value="UH6461002 Mathematics Computer Graphics">UH6461002 Mathematics Computer Graphics</option>
+                    <option value="UH6545001 Biotechnology">UH6545001 Biotechnology</option>
+                    <option value="UH6545002 Industrial Chemistry">UH6545002 Industrial Chemistry</option>
                   </select>
                 </div>
                 
