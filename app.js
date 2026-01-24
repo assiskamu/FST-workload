@@ -726,6 +726,7 @@ function getSubmitToken() {
 }
 
 
+
     function clearSubmitToken() {
       if (typeof sessionStorage === 'undefined') return;
       try {
@@ -1044,28 +1045,17 @@ function getSubmitToken() {
         return;
       }
 
-      const token = getSubmitToken();
-      if (!token) {
-        showToast('Submission cancelled. Token required.', 'error');
-        return;
-      }
+const payload = buildSubmissionPayload();
 
-      const payload = buildSubmissionPayload();
-      submissionState.lastPayload = payload;
-      submissionState.lastError = null;
-      setPendingSubmission(payload);
-      submissionState.isSubmitting = true;
-      setSubmitButtonState(true);
+// Put token inside body to avoid custom header preflight
+payload.submitToken = getSubmitToken();
 
-      try {
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Submit-Token': token
-          },
-          body: JSON.stringify(payload)
-        });
+const response = await fetch(endpoint, {
+  method: 'POST',
+  headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+  body: JSON.stringify(payload)
+});
+
 
         if (response.status === 401 || response.status === 403) {
           clearSubmitToken();
