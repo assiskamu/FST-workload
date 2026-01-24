@@ -1,190 +1,99 @@
-// Google Apps Script Web App backend for FST Workload submissions.
+// ===== FST Workload Web App Backend (writes to 3 tabs template) =====
 
 const PROPERTY_SUBMIT_TOKEN = 'SUBMIT_TOKEN';
 const PROPERTY_SPREADSHEET_ID = 'SPREADSHEET_ID';
 const PROPERTY_ALLOWED_ORIGIN = 'ALLOWED_ORIGIN';
 
-const SUMMARY_HEADERS = [
-  'submissionId',
-  'serverTimestamp',
-  'generatedAtISO',
-  'appVersion',
-  'term',
-  'staffName',
-  'staffId',
-  'staffCategory',
-  'staffProgramme',
-  'staffRank',
-  'adminPosition',
-  'totalScore',
-  'totalHours',
-  'status'
+const SHEET_SUBMISSIONS = 'submissions';
+const SHEET_SECTION_SUMMARY = 'section_summary';
+const SHEET_RECORDS = 'records';
+
+// Keep headers aligned with your template
+const HEADERS_SUBMISSIONS = [
+  'serverTimestamp','submissionId','appVersion','generatedAtISO','term',
+  'staffName','staffId','category','programme','rank','adminPosition',
+  'totalScore','totalHours','status',
+  'score_teaching','score_supervision','score_research','score_publications',
+  'score_adminLeadership','score_adminDuties','score_service','score_lab','score_professional',
+  'count_teaching','count_supervision','count_research','count_publications',
+  'count_adminLeadership','count_adminDuties','count_service','count_lab','count_professional',
+  'payloadJson'
 ];
 
-const SECTION_CONFIG = {
-  teaching: {
-    sheetName: 'teaching_items',
-    fields: [
-      'course_code',
-      'course_name',
-      'course_credit_hours',
-      'course_class_size',
-      'course_lecture',
-      'course_tutorial',
-      'course_lab',
-      'course_fieldwork',
-      'course_semester',
-      'course_semester_other',
-      'course_role',
-      'created_at'
-    ]
-  },
-  supervision: {
-    sheetName: 'supervision_items',
-    fields: [
-      'student_name',
-      'student_matric',
-      'student_level',
-      'student_role',
-      'student_title',
-      'student_year',
-      'created_at'
-    ]
-  },
-  research: {
-    sheetName: 'research_items',
-    fields: [
-      'research_title',
-      'research_grant_code',
-      'research_role',
-      'research_amount',
-      'research_status',
-      'research_year',
-      'research_duration',
-      'created_at'
-    ]
-  },
-  publications: {
-    sheetName: 'publications_items',
-    fields: [
-      'pub_title',
-      'pub_type',
-      'pub_index',
-      'pub_venue',
-      'pub_position',
-      'pub_year',
-      'pub_status',
-      'created_at'
-    ]
-  },
-  adminLeadership: {
-    sheetName: 'admin_leadership_items',
-    fields: [
-      'admin_position',
-      'admin_other_position',
-      'admin_faculty',
-      'admin_allowance',
-      'admin_start_date',
-      'admin_end_date',
-      'created_at'
-    ]
-  },
-  adminDuties: {
-    sheetName: 'admin_duties_items',
-    fields: [
-      'duty_type',
-      'duty_name',
-      'duty_frequency',
-      'duty_year',
-      'duty_notes',
-      'created_at'
-    ]
-  },
-  service: {
-    sheetName: 'service_items',
-    fields: [
-      'service_type',
-      'service_title',
-      'service_scope',
-      'service_organization',
-      'service_date',
-      'service_duration',
-      'service_description',
-      'created_at'
-    ]
-  },
-  lab: {
-    sheetName: 'lab_items',
-    fields: [
-      'lab_responsibility',
-      'lab_name',
-      'lab_frequency',
-      'lab_year',
-      'lab_description',
-      'created_at'
-    ]
-  },
-  professional: {
-    sheetName: 'professional_items',
-    fields: [
-      'prof_type',
-      'prof_scope',
-      'prof_title',
-      'prof_organization',
-      'prof_year',
-      'prof_description',
-      'created_at'
-    ]
-  }
-};
+const HEADERS_SECTION_SUMMARY = [
+  'serverTimestamp','submissionId','generatedAtISO','term','staffName','staffId',
+  'category','programme','rank','adminPosition',
+  'sectionKey','sectionScore','sectionCount'
+];
 
-function doOptions() {
-  return createCorsResponse_({ ok: true });
+const HEADERS_RECORDS = [
+  'serverTimestamp','submissionId','generatedAtISO','term','staffName','staffId',
+  'sectionKey','recordIndex','recordJson'
+];
+
+// ---- Web handlers ----
+
+function doGet(e) {
+  // Simple health check + CORS
+  return createCorsResponse_({ ok: true, message: 'FST Workload backend is running.' });
 }
 
 function doPost(e) {
   try {
     const token = getHeaderValue_(e, 'X-Submit-Token');
-    if (!token || token !== getSubmitToken_()) {
-      return createCorsResponse_({ ok: false, error: 'Unauthorized' }, true);
+    const expected = getSubmitToken_();
+
+    if (!expected) {
+      return createCorsResponse_({ ok: false, error: 'Server not configured: SUBMIT_TOKEN missing.' }, true);
+    }
+    if (!token || token !== expected) {
+      return createCorsResponse_({ ok: false, error: 'Unauthorized' }, true, 401);
     }
 
     if (!e || !e.postData || !e.postData.contents) {
-      return createCorsResponse_({ ok: false, error: 'Missing request body' }, true);
+      return createCorsResponse_({ ok: false, error: 'Missing request body' }, true, 400);
     }
 
     const payload = JSON.parse(e.postData.contents);
     const errors = validatePayload_(payload);
     if (errors.length) {
-      return createCorsResponse_({ ok: false, error: 'Validation failed', details: errors }, true);
+      return createCorsResponse_({ ok: false, error: 'Validation failed', details: errors }, true, 400);
     }
 
-    const submissionId = generateSubmissionId_();
-    const serverTimestamp = new Date().toISOString();
+    const lock = LockService.getScriptLock();
+    lock.waitLock(20000);
 
-    const spreadsheet = SpreadsheetApp.openById(getSpreadsheetId_());
-    writeSummaryRow_(spreadsheet, payload, submissionId, serverTimestamp);
-    writeSectionRows_(spreadsheet, payload, submissionId, serverTimestamp);
+    try {
+      const submissionId = generateSubmissionId_();
+      const serverTimestamp = new Date().toISOString();
 
-    return createCorsResponse_({ ok: true, submissionId, serverTimestamp });
-  } catch (error) {
-    return createCorsResponse_({ ok: false, error: error.message || 'Server error' }, true);
+      const ss = SpreadsheetApp.openById(getSpreadsheetId_());
+
+      ensureSheet_(ss, SHEET_SUBMISSIONS, HEADERS_SUBMISSIONS);
+      ensureSheet_(ss, SHEET_SECTION_SUMMARY, HEADERS_SECTION_SUMMARY);
+      ensureSheet_(ss, SHEET_RECORDS, HEADERS_RECORDS);
+
+      writeSubmissionsRow_(ss, payload, submissionId, serverTimestamp);
+      writeSectionSummaryRows_(ss, payload, submissionId, serverTimestamp);
+      writeRecordsRows_(ss, payload, submissionId, serverTimestamp);
+
+      return createCorsResponse_({ ok: true, submissionId, serverTimestamp });
+    } finally {
+      lock.releaseLock();
+    }
+  } catch (err) {
+    return createCorsResponse_({ ok: false, error: err && err.message ? err.message : 'Server error' }, true, 500);
   }
 }
 
+// ---- Validation ----
+
 function validatePayload_(payload) {
   const errors = [];
+  if (!payload || typeof payload !== 'object') return ['Payload must be a JSON object.'];
 
-  if (!payload || typeof payload !== 'object') {
-    return ['Payload must be a JSON object.'];
-  }
-
-  const requiredTop = ['appVersion', 'generatedAtISO', 'staffProfile', 'term', 'sections', 'totals'];
-  requiredTop.forEach(field => {
-    if (!payload[field]) {
-      errors.push(`Missing ${field}.`);
-    }
-  });
+  if (!payload.generatedAtISO) errors.push('generatedAtISO is required.');
+  if (!payload.appVersion) errors.push('appVersion is required.');
 
   const staff = payload.staffProfile || {};
   if (!staff.name) errors.push('staffProfile.name is required.');
@@ -195,85 +104,173 @@ function validatePayload_(payload) {
   if (!isFiniteNumber_(totals.totalHours)) errors.push('totals.totalHours must be a number.');
   if (!totals.status) errors.push('totals.status is required.');
 
-  const bySection = totals.bySection || {};
-  Object.keys(SECTION_CONFIG).forEach(key => {
-    const sectionScore = bySection[key];
-    if (!isFiniteNumber_(sectionScore)) {
-      errors.push(`totals.bySection.${key} must be a number.`);
-    }
+  // Sections keys expected from frontend payload
+  const sections = payload.sections || {};
+  const requiredSectionKeys = [
+    'teaching','supervision','research','publications',
+    'adminLeadership','adminDuties','service','lab','professional'
+  ];
+  requiredSectionKeys.forEach(k => {
+    if (!Array.isArray(sections[k])) errors.push(`sections.${k} must be an array.`);
   });
 
-  const sections = payload.sections || {};
-  Object.keys(SECTION_CONFIG).forEach(key => {
-    const items = sections[key];
-    if (!Array.isArray(items)) {
-      errors.push(`sections.${key} must be an array.`);
-    }
+  // totals.bySection keys
+  const bySection = (totals.bySection || {});
+  const requiredScoreKeys = [
+    'teaching','supervision','research','publications',
+    'adminLeadership','adminDuties','service','lab','professional'
+  ];
+  requiredScoreKeys.forEach(k => {
+    if (!isFiniteNumber_(bySection[k])) errors.push(`totals.bySection.${k} must be a number.`);
   });
 
   return errors;
 }
 
-function writeSummaryRow_(spreadsheet, payload, submissionId, serverTimestamp) {
-  const sheet = getOrCreateSheet_(spreadsheet, 'submissions', SUMMARY_HEADERS);
+// ---- Writes ----
+
+function writeSubmissionsRow_(ss, payload, submissionId, serverTimestamp) {
+  const sheet = ss.getSheetByName(SHEET_SUBMISSIONS);
+
   const staff = payload.staffProfile || {};
+  const totals = payload.totals || {};
+  const scores = (totals.bySection || {});
+  const sections = payload.sections || {};
+
+  const counts = {
+    teaching: (sections.teaching || []).length,
+    supervision: (sections.supervision || []).length,
+    research: (sections.research || []).length,
+    publications: (sections.publications || []).length,
+    adminLeadership: (sections.adminLeadership || []).length,
+    adminDuties: (sections.adminDuties || []).length,
+    service: (sections.service || []).length,
+    lab: (sections.lab || []).length,
+    professional: (sections.professional || []).length
+  };
+
   const row = [
-    submissionId,
     serverTimestamp,
-    payload.generatedAtISO,
+    submissionId,
     payload.appVersion,
-    payload.term,
+    payload.generatedAtISO,
+    payload.term || '',
     staff.name || '',
     staff.staffId || '',
     staff.category || '',
     staff.programme || '',
     staff.rank || '',
     staff.adminPosition || '',
-    payload.totals.totalScore,
-    payload.totals.totalHours,
-    payload.totals.status
+    Number(totals.totalScore || 0),
+    Number(totals.totalHours || 0),
+    totals.status || '',
+
+    Number(scores.teaching || 0),
+    Number(scores.supervision || 0),
+    Number(scores.research || 0),
+    Number(scores.publications || 0),
+    Number(scores.adminLeadership || 0),
+    Number(scores.adminDuties || 0),
+    Number(scores.service || 0),
+    Number(scores.lab || 0),
+    Number(scores.professional || 0),
+
+    counts.teaching,
+    counts.supervision,
+    counts.research,
+    counts.publications,
+    counts.adminLeadership,
+    counts.adminDuties,
+    counts.service,
+    counts.lab,
+    counts.professional,
+
+    JSON.stringify(payload)
   ];
+
   sheet.appendRow(row);
 }
 
-function writeSectionRows_(spreadsheet, payload, submissionId, serverTimestamp) {
-  const baseColumns = ['submissionId', 'serverTimestamp', 'generatedAtISO', 'term', 'staffName', 'staffId'];
+function writeSectionSummaryRows_(ss, payload, submissionId, serverTimestamp) {
+  const sheet = ss.getSheetByName(SHEET_SECTION_SUMMARY);
 
-  Object.keys(SECTION_CONFIG).forEach(key => {
-    const config = SECTION_CONFIG[key];
-    const items = (payload.sections && payload.sections[key]) || [];
-    if (!items.length) return;
+  const staff = payload.staffProfile || {};
+  const totals = payload.totals || {};
+  const scores = (totals.bySection || {});
+  const sections = payload.sections || {};
 
-    const headers = baseColumns.concat(config.fields);
-    const sheet = getOrCreateSheet_(spreadsheet, config.sheetName, headers);
+  const sectionKeys = [
+    'teaching','supervision','research','publications',
+    'adminLeadership','adminDuties','service','lab','professional'
+  ];
 
-    const rows = items.map(item => {
-      const row = [
-        submissionId,
-        serverTimestamp,
-        payload.generatedAtISO,
-        payload.term,
-        payload.staffProfile?.name || '',
-        payload.staffProfile?.staffId || ''
-      ];
-      config.fields.forEach(field => {
-        row.push(item && item[field] !== undefined ? item[field] : '');
-      });
-      return row;
-    });
+  const rows = sectionKeys.map(k => ([
+    serverTimestamp,
+    submissionId,
+    payload.generatedAtISO,
+    payload.term || '',
+    staff.name || '',
+    staff.staffId || '',
+    staff.category || '',
+    staff.programme || '',
+    staff.rank || '',
+    staff.adminPosition || '',
+    k,
+    Number(scores[k] || 0),
+    (sections[k] || []).length
+  ]));
 
-    const startRow = sheet.getLastRow() + 1;
-    sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
-  });
+  const startRow = sheet.getLastRow() + 1;
+  sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
 }
 
-function getOrCreateSheet_(spreadsheet, sheetName, headers) {
-  let sheet = spreadsheet.getSheetByName(sheetName);
-  if (!sheet) {
-    sheet = spreadsheet.insertSheet(sheetName);
-  }
-  if (sheet.getLastRow() === 0) {
-    sheet.appendRow(headers);
+function writeRecordsRows_(ss, payload, submissionId, serverTimestamp) {
+  const sheet = ss.getSheetByName(SHEET_RECORDS);
+
+  const staff = payload.staffProfile || {};
+  const sections = payload.sections || {};
+
+  const sectionKeys = [
+    'teaching','supervision','research','publications',
+    'adminLeadership','adminDuties','service','lab','professional'
+  ];
+
+  const rows = [];
+  sectionKeys.forEach(k => {
+    const items = sections[k] || [];
+    items.forEach((item, idx) => {
+      rows.push([
+        serverTimestamp,
+        submissionId,
+        payload.generatedAtISO,
+        payload.term || '',
+        staff.name || '',
+        staff.staffId || '',
+        k,
+        idx + 1,
+        JSON.stringify(item || {})
+      ]);
+    });
+  });
+
+  if (!rows.length) return;
+  const startRow = sheet.getLastRow() + 1;
+  sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
+}
+
+// ---- Helpers ----
+
+function ensureSheet_(ss, name, headers) {
+  let sheet = ss.getSheetByName(name);
+  if (!sheet) sheet = ss.insertSheet(name);
+
+  const lastCol = sheet.getLastColumn();
+  const hasHeader = sheet.getLastRow() >= 1 && lastCol >= headers.length;
+
+  if (!hasHeader) {
+    sheet.clear();
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sheet.setFrozenRows(1);
   }
   return sheet;
 }
@@ -289,11 +286,9 @@ function getSubmitToken_() {
 }
 
 function getSpreadsheetId_() {
-  const sheetId = PropertiesService.getScriptProperties().getProperty(PROPERTY_SPREADSHEET_ID);
-  if (!sheetId) {
-    throw new Error('SPREADSHEET_ID is not configured in Script Properties.');
-  }
-  return sheetId;
+  const id = PropertiesService.getScriptProperties().getProperty(PROPERTY_SPREADSHEET_ID);
+  if (!id) throw new Error('SPREADSHEET_ID is not configured in Script Properties.');
+  return id;
 }
 
 function getAllowedOrigin_() {
@@ -306,19 +301,24 @@ function getHeaderValue_(e, headerName) {
   return headers[headerName] || headers[lowerName] || '';
 }
 
-function isFiniteNumber_(value) {
-  return typeof value === 'number' && isFinite(value);
+function isFiniteNumber_(v) {
+  return typeof v === 'number' && isFinite(v);
 }
 
-function createCorsResponse_(payload, isError) {
+function createCorsResponse_(payload, isError, statusCode) {
   const output = ContentService.createTextOutput(JSON.stringify(payload));
   output.setMimeType(ContentService.MimeType.JSON);
+
   const origin = getAllowedOrigin_();
+
+  // Some runtimes support setHeader
   if (output.setHeader) {
     output.setHeader('Access-Control-Allow-Origin', origin);
-    output.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    output.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
     output.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Submit-Token');
     output.setHeader('Access-Control-Max-Age', '3600');
+    // Status code header isn't officially standard here, but kept for debugging
+    if (statusCode) output.setHeader('X-Status-Code', String(statusCode));
   }
   return output;
 }
