@@ -1081,8 +1081,13 @@ function postViaForm(endpoint, payloadObj) {
 }
 
         
-await postViaForm(endpoint, payload);
-const data = { ok: true }; // form submit tak boleh baca response; kita anggap diterima
+const data = await postViaForm(endpoint, payload); // postViaForm resolve { ok: true } atau throw error
+
+// Jangan guna response.status / response.ok di sini — memang tiada "response" untuk form submit
+if (!data || !data.ok) {
+  throw new Error('Submission failed (no ok response).');
+}
+
 
 
 
@@ -1090,10 +1095,6 @@ const data = { ok: true }; // form submit tak boleh baca response; kita anggap d
 // We cannot read HTTP status due to cross-origin.
 // If the iframe load completes, we treat it as "delivered".
 
-
-        if (!response.ok) {
-          throw new Error(`Server responded with ${response.status}.`);
-        }
 
         if (!data || !data.ok) {
           throw new Error(data?.error || 'Submission failed.');
