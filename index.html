@@ -200,29 +200,41 @@
  <body class="h-full bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
   <div id="app" class="h-full overflow-auto w-full"><!-- Header -->
    <header class="bg-white border-b border-gray-200 sticky top-0 z-40">
-    <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-     <div class="flex items-center gap-4"><img src="https://upload.wikimedia.org/wikipedia/ms/8/8f/Logo-ums%28normalbg%29.png" alt="UMS Logo" loading="lazy" class="h-16 w-auto" onerror="this.style.display='none';">
-      <div>
-       <h1 class="heading-font text-3xl font-bold text-gray-900">FST UMS Workload Calculator</h1>
-       <p class="text-sm text-gray-600 mt-1">Faculty of Science and Technology, Universiti Malaysia Sabah</p>
+    <div class="max-w-7xl mx-auto px-4 md:px-6 py-4 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+     <div class="flex items-start gap-3 md:items-center">
+      <button id="mobile-nav-toggle" class="md:hidden inline-flex items-center justify-center rounded-lg border border-gray-200 p-2 text-gray-600 hover:bg-gray-50" aria-label="Open navigation" aria-expanded="false" aria-controls="mobile-sidebar">
+       <span aria-hidden="true">☰</span>
+      </button>
+      <div class="flex flex-wrap items-center gap-3">
+       <img src="https://upload.wikimedia.org/wikipedia/ms/8/8f/Logo-ums%28normalbg%29.png" alt="UMS Logo" loading="lazy" class="h-12 w-auto md:h-16" onerror="this.style.display='none';">
+       <div class="min-w-0">
+        <h1 class="heading-font text-2xl md:text-3xl font-bold text-gray-900 leading-tight">FST UMS Workload Calculator</h1>
+        <p class="text-xs md:text-sm text-gray-600 mt-1">Faculty of Science and Technology, Universiti Malaysia Sabah</p>
+       </div>
       </div>
      </div>
-     <div class="text-right">
+     <div class="text-left md:text-right w-full md:w-auto">
       <div class="text-sm text-gray-600">
        Total Entries
       </div>
-      <div id="total-entries" class="text-2xl font-bold text-sky-600">
+      <div id="total-entries" class="text-xl md:text-2xl font-bold text-sky-600">
        0
       </div>
      </div>
     </div>
    </header>
-   <div class="flex h-full w-full"><!-- Sidebar Navigation -->
-    <aside class="w-64 bg-white border-r border-gray-200 overflow-y-auto">
+   <div class="relative flex h-full w-full"><!-- Sidebar Navigation -->
+    <div id="mobile-nav-overlay" class="fixed inset-0 z-40 bg-black/50 opacity-0 pointer-events-none transition-opacity md:hidden" role="button" aria-label="Close navigation overlay"></div>
+    <aside id="mobile-sidebar" class="fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 overflow-y-auto transform -translate-x-full transition-transform duration-300 ease-in-out md:static md:inset-auto md:z-auto md:translate-x-0" role="navigation" aria-label="Primary navigation" aria-hidden="true">
+     <div class="flex items-center justify-end px-4 py-3 border-b border-gray-200 md:hidden">
+      <button id="mobile-nav-close" class="inline-flex items-center justify-center rounded-lg border border-gray-200 p-2 text-gray-600 hover:bg-gray-50" aria-label="Close navigation">
+       <span aria-hidden="true">✕</span>
+      </button>
+     </div>
      <nav id="sidebar-nav" class="p-4 space-y-2"><!-- Navigation buttons will be rendered here -->
      </nav>
     </aside><!-- Main Content -->
-    <main id="main-content" class="flex-1 overflow-y-auto p-6"><!-- Content will be dynamically rendered here -->
+    <main id="main-content" class="flex-1 min-w-0 overflow-y-auto p-4 md:p-6"><!-- Content will be dynamically rendered here -->
     </main>
    </div>
   </div>
