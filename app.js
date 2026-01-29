@@ -324,6 +324,99 @@ let submissionState = { isSubmitting: false, lastError: null, lastPayload: null 
       toggleMenu('profile-menu', ['quick-actions-menu', 'notifications-menu']);
     }
 
+    function openMobileNav() {
+      const sidebar = document.getElementById('mobile-sidebar');
+      const overlay = document.getElementById('mobile-nav-overlay');
+      const toggle = document.getElementById('mobile-nav-toggle');
+
+      if (!sidebar || !overlay) return;
+
+      sidebar.classList.remove('-translate-x-full');
+      sidebar.classList.add('translate-x-0');
+      overlay.classList.remove('opacity-0', 'pointer-events-none');
+      overlay.classList.add('opacity-100');
+      sidebar.setAttribute('aria-hidden', 'false');
+      if (toggle) {
+        toggle.setAttribute('aria-expanded', 'true');
+      }
+      document.body.classList.add('overflow-hidden');
+    }
+
+    function closeMobileNav() {
+      const sidebar = document.getElementById('mobile-sidebar');
+      const overlay = document.getElementById('mobile-nav-overlay');
+      const toggle = document.getElementById('mobile-nav-toggle');
+
+      if (!sidebar || !overlay) return;
+
+      sidebar.classList.add('-translate-x-full');
+      sidebar.classList.remove('translate-x-0');
+      overlay.classList.add('opacity-0', 'pointer-events-none');
+      overlay.classList.remove('opacity-100');
+      sidebar.setAttribute('aria-hidden', 'true');
+      if (toggle) {
+        toggle.setAttribute('aria-expanded', 'false');
+      }
+      document.body.classList.remove('overflow-hidden');
+    }
+
+    function toggleMobileNav() {
+      const sidebar = document.getElementById('mobile-sidebar');
+      if (!sidebar) return;
+      if (sidebar.classList.contains('translate-x-0')) {
+        closeMobileNav();
+      } else {
+        openMobileNav();
+      }
+    }
+
+    function syncMobileNavAria() {
+      const sidebar = document.getElementById('mobile-sidebar');
+      const toggle = document.getElementById('mobile-nav-toggle');
+      if (!sidebar || !toggle) return;
+      const isMobile = window.matchMedia('(max-width: 767px)').matches;
+      if (!isMobile) {
+        sidebar.setAttribute('aria-hidden', 'false');
+        toggle.setAttribute('aria-expanded', 'false');
+        document.body.classList.remove('overflow-hidden');
+        return;
+      }
+      const isOpen = sidebar.classList.contains('translate-x-0');
+      sidebar.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+      toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    }
+
+    function setupMobileNav() {
+      const toggle = document.getElementById('mobile-nav-toggle');
+      const overlay = document.getElementById('mobile-nav-overlay');
+      const closeButton = document.getElementById('mobile-nav-close');
+
+      if (toggle) {
+        toggle.addEventListener('click', toggleMobileNav);
+      }
+      if (overlay) {
+        overlay.addEventListener('click', closeMobileNav);
+      }
+      if (closeButton) {
+        closeButton.addEventListener('click', closeMobileNav);
+      }
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          closeMobileNav();
+        }
+      });
+
+      window.addEventListener('resize', () => {
+        if (window.matchMedia('(min-width: 768px)').matches) {
+          closeMobileNav();
+        }
+        syncMobileNavAria();
+      });
+
+      syncMobileNavAria();
+    }
+
     function updateLiveScore() {
       const scores = calculateScores();
       const status = getWorkloadStatus(scores.total);
@@ -543,6 +636,9 @@ let submissionState = { isSubmitting: false, lastError: null, lastPayload: null 
 
     function navigateToSection(sectionId) {
       currentSection = sectionId;
+      if (window.matchMedia('(max-width: 767px)').matches) {
+        closeMobileNav();
+      }
       renderNavigation();
       renderSection(sectionId);
       updateBreadcrumb();
@@ -4307,6 +4403,7 @@ function getSubmitToken() {
     document.addEventListener('DOMContentLoaded', () => {
       initializeApp();
       bindSubmitButton();
+      setupMobileNav();
     });
 
     // Reset Functions
@@ -4797,23 +4894,25 @@ function getSubmitToken() {
           const summaryHtml = `
             <section class="report-section">
               <h2>Workload Summary</h2>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Category</th>
-                    <th>Score</th>
-                    <th>Count</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${summaryRows}
-                  <tr class="report-total-row">
-                    <td>Total</td>
-                    <td>${Utilities.formatNumber(reportModel.summary.totalScore, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                    <td>${reportModel.summary.totalCount}</td>
-                  </tr>
-                </tbody>
-              </table>
+              <div class="overflow-x-auto">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Category</th>
+                      <th>Score</th>
+                      <th>Count</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${summaryRows}
+                    <tr class="report-total-row">
+                      <td>Total</td>
+                      <td>${Utilities.formatNumber(reportModel.summary.totalScore, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td>${reportModel.summary.totalCount}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
               <div class="report-status">
                 <strong>Status:</strong> ${reportModel.summary.status.label} ${reportModel.summary.status.icon}
               </div>
@@ -4839,12 +4938,14 @@ function getSubmitToken() {
             return `
               <section class="report-section">
                 <h2>${section.title}</h2>
-                <table>
-                  <thead>
-                    <tr>${headers}</tr>
-                  </thead>
-                  <tbody>${rows}</tbody>
-                </table>
+                <div class="overflow-x-auto">
+                  <table>
+                    <thead>
+                      <tr>${headers}</tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                  </table>
+                </div>
                 <div class="report-subtotal">
                   <strong>Subtotal:</strong>
                   Score Total ${Utilities.formatNumber(section.subtotal.sectionScoreTotal, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -4857,22 +4958,24 @@ function getSubmitToken() {
           const overallTotalsHtml = `
             <section class="report-section">
               <h2>Overall Totals</h2>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Total Score</th>
-                    <th>Total Count</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr class="report-total-row">
-                    <td>${Utilities.formatNumber(reportModel.summary.totalScore, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                    <td>${reportModel.summary.totalCount}</td>
-                    <td>${reportModel.summary.status.label} ${reportModel.summary.status.icon}</td>
-                  </tr>
-                </tbody>
-              </table>
+              <div class="overflow-x-auto">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Total Score</th>
+                      <th>Total Count</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr class="report-total-row">
+                      <td>${Utilities.formatNumber(reportModel.summary.totalScore, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td>${reportModel.summary.totalCount}</td>
+                      <td>${reportModel.summary.status.label} ${reportModel.summary.status.icon}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </section>
           `;
 
