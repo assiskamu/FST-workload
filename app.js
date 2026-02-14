@@ -666,24 +666,31 @@ let submissionState = { isSubmitting: false, lastError: null, lastPayload: null 
           break;
         case 'research':
           contentArea.innerHTML = renderResearch();
+          setupResearchEventListeners();
           break;
         case 'publications':
           contentArea.innerHTML = renderPublications();
+          setupPublicationsEventListeners();
           break;
         case 'administration':
           contentArea.innerHTML = renderAdministration();
+          setupAdministrationEventListeners();
           break;
         case 'admin_duties':
           contentArea.innerHTML = renderAdminDuties();
+          setupAdminDutiesEventListeners();
           break;
         case 'service':
           contentArea.innerHTML = renderService();
+          setupServiceEventListeners();
           break;
         case 'laboratory':
           contentArea.innerHTML = renderLaboratory();
+          setupLaboratoryEventListeners();
           break;
         case 'professional':
           contentArea.innerHTML = renderProfessional();
+          setupProfessionalEventListeners();
           break;
         case 'assistants':
           contentArea.innerHTML = renderAssistants();
@@ -1427,135 +1434,227 @@ function getSubmitToken() {
     }
 
     // ADMIN DUTIES: Base points 🧮 frequency factor
+    function getAdminDutyBasePoints(dutyType) {
+      if (dutyType === 'Accreditation Work') return 8;
+      if (dutyType === 'Curriculum Development') return 6;
+      if (dutyType === 'Committee Chair') return 5;
+      if (dutyType === 'Event Organizer') return 4;
+      if (dutyType === 'Exam Coordinator') return 3;
+      if (dutyType === 'Committee Member') return 2;
+      return 2;
+    }
+
+    function getDutyFrequencyFactor(frequency) {
+      if (frequency === 'Ongoing in Reporting Period') return 1.0;
+      if (frequency === 'Per Semester') return 0.6;
+      if (frequency === 'One-Time Event') return 0.3;
+      return 0;
+    }
+
+    function getAdminDutyEntryBreakdown(duty) {
+      if (!duty?.duty_type || !duty?.duty_frequency) {
+        return { base_points: 0, frequency_factor: 0, entry_points: 0, is_counted: false };
+      }
+      const basePoints = getAdminDutyBasePoints(duty.duty_type);
+      const frequencyFactor = getDutyFrequencyFactor(duty.duty_frequency);
+      const entryPoints = Math.round(basePoints * frequencyFactor * 100) / 100;
+      return { base_points: basePoints, frequency_factor: frequencyFactor, entry_points: entryPoints, is_counted: true };
+    }
+
     function calculateAdminDutyScore(duty) {
-      let basePoints = 0;
-      if (duty.duty_type === 'Accreditation Work') basePoints = 8;
-      else if (duty.duty_type === 'Curriculum Development') basePoints = 6;
-      else if (duty.duty_type === 'Committee Chair') basePoints = 5;
-      else if (duty.duty_type === 'Event Organizer') basePoints = 4;
-      else if (duty.duty_type === 'Exam Coordinator') basePoints = 3;
-      else if (duty.duty_type === 'Committee Member') basePoints = 2;
-      else basePoints = 2; // Other
-      
-      let frequencyFactor = 1.0;
-      if (duty.duty_frequency === 'Per Semester') frequencyFactor = 0.5;
-      else if (duty.duty_frequency === 'One-Time Event') frequencyFactor = 0.3;
-      
-      return Math.round(basePoints * frequencyFactor * 100) / 100;
+      return getAdminDutyEntryBreakdown(duty).entry_points;
+    }
+
+    function getResearchRoleFactor(role) {
+      if (role === 'lead') return 1.0;
+      if (role === 'co-lead') return 0.7;
+      if (role === 'member') return 0.5;
+      return 0;
+    }
+
+    function getResearchActivityFactor(activity) {
+      if (activity === 'active') return 1.0;
+      if (activity === 'limited_admin') return 0.5;
+      if (activity === 'none') return 0.0;
+      return 0;
+    }
+
+    function getResearchEntryBreakdown(research) {
+      if (!research?.research_role || !research?.research_activity) {
+        return { base_points: 5, role_factor: 0, activity_factor: 0, entry_points: 0, is_counted: false };
+      }
+      const basePoints = 5;
+      const roleFactor = getResearchRoleFactor(research.research_role);
+      const activityFactor = getResearchActivityFactor(research.research_activity);
+      const entryPoints = Math.round(basePoints * roleFactor * activityFactor * 100) / 100;
+      return { base_points: basePoints, role_factor: roleFactor, activity_factor: activityFactor, entry_points: entryPoints, is_counted: true };
     }
 
     function calculateResearchScore(research) {
-      const basePoints = 5;
-      
-      let roleFactor = 1.0;
-      if (research.research_role === 'lead') roleFactor = 1.0;
-      else if (research.research_role === 'co-lead') roleFactor = 0.7;
-      else if (research.research_role === 'member') roleFactor = 0.5;
-      
-      let statusFactor = 1.0;
-      if (research.research_status === 'ongoing') statusFactor = 1.0;
-      else if (research.research_status === 'completed') statusFactor = 0.8;
-      else if (research.research_status === 'pending') statusFactor = 0.3;
-      
-      return Math.round(basePoints * roleFactor * statusFactor * 100) / 100;
+      return getResearchEntryBreakdown(research).entry_points;
+    }
+
+    function getPublicationBasePoints(type) {
+      if (type === 'journal') return 10;
+      if (type === 'conference') return 6;
+      if (type === 'chapter') return 8;
+      if (type === 'proceeding') return 5;
+      return 3;
+    }
+
+    function getWritingStageFactor(stage) {
+      if (stage === 'drafting') return 1.0;
+      if (stage === 'revising') return 0.8;
+      if (stage === 'responding_reviewers') return 0.9;
+      if (stage === 'proofing') return 0.5;
+      if (stage === 'no_activity') return 0.0;
+      return 0;
+    }
+
+    function getPublicationEntryBreakdown(pub) {
+      if (!pub?.pub_type || !pub?.pub_stage) {
+        return { base_points: 0, stage_factor: 0, entry_points: 0, is_counted: false };
+      }
+      const basePoints = getPublicationBasePoints(pub.pub_type);
+      const stageFactor = getWritingStageFactor(pub.pub_stage);
+      const entryPoints = Math.round(basePoints * stageFactor * 100) / 100;
+      return { base_points: basePoints, stage_factor: stageFactor, entry_points: entryPoints, is_counted: true };
     }
 
     function calculatePublicationScore(pub) {
-      let basePoints = 0;
-      if (pub.pub_type === 'journal') basePoints = 10;
-      else if (pub.pub_type === 'conference') basePoints = 6;
-      else if (pub.pub_type === 'book') basePoints = 15;
-      else if (pub.pub_type === 'chapter') basePoints = 8;
-      else if (pub.pub_type === 'proceeding') basePoints = 5;
-      
-      let indexFactor = 1.0;
-      if (pub.pub_index === 'Q1') indexFactor = 2.0;
-      else if (pub.pub_index === 'Q2') indexFactor = 1.5;
-      else if (pub.pub_index === 'Q3') indexFactor = 1.3;
-      else if (pub.pub_index === 'Q4') indexFactor = 1.1;
-      else if (pub.pub_index === 'Scopus' || pub.pub_index === 'WoS') indexFactor = 1.2;
-      else if (pub.pub_index === 'Other') indexFactor = 0.8;
-      
-      let positionFactor = 1.0;
-      if (pub.pub_position === 'first') positionFactor = 1.0;
-      else if (pub.pub_position === 'corresponding') positionFactor = 0.9;
-      else if (pub.pub_position === 'co-author') positionFactor = 0.5;
-      
-      let statusFactor = 1.0;
-      if (pub.pub_status === 'published') statusFactor = 1.0;
-      else if (pub.pub_status === 'accepted') statusFactor = 0.8;
-      else if (pub.pub_status === 'under-review') statusFactor = 0.3;
-      
-      return Math.round(basePoints * indexFactor * positionFactor * statusFactor * 100) / 100;
+      return getPublicationEntryBreakdown(pub).entry_points;
+    }
+
+    function getAdministrationBasePoints(position) {
+      if (position === 'Dean') return 20;
+      if (position === 'Deputy Dean') return 15;
+      if (position === 'Centre Director') return 12;
+      if (position === 'Head of Programme') return 10;
+      if (position === 'Postgraduate Coordinator') return 8;
+      if (position === 'Programme Coordinator') return 6;
+      return 5;
+    }
+
+    function getActiveFractionInReportingPeriod(startDate, endDate) {
+      const profile = getProfile();
+      const reportStart = new Date(profile?.profile_start_date || `${new Date().getFullYear()}-01-01`);
+      const reportEnd = new Date(profile?.profile_end_date || `${new Date().getFullYear()}-12-31`);
+      const roleStart = startDate ? new Date(startDate) : reportStart;
+      const roleEnd = endDate ? new Date(endDate) : reportEnd;
+      const overlapStart = new Date(Math.max(reportStart.getTime(), roleStart.getTime()));
+      const overlapEnd = new Date(Math.min(reportEnd.getTime(), roleEnd.getTime()));
+      const reportingDays = Math.max(1, Math.floor((reportEnd - reportStart) / (1000 * 60 * 60 * 24)) + 1);
+      const overlapDays = overlapEnd >= overlapStart ? Math.floor((overlapEnd - overlapStart) / (1000 * 60 * 60 * 24)) + 1 : 0;
+      return Math.max(0, Math.min(1, overlapDays / reportingDays));
+    }
+
+    function getAdministrationEntryBreakdown(admin) {
+      if (!admin?.admin_position || !admin?.admin_start_date) {
+        return { base_points: 0, active_fraction: 0, entry_points: 0, is_counted: false };
+      }
+      const basePoints = getAdministrationBasePoints(admin.admin_position);
+      const activeFraction = getActiveFractionInReportingPeriod(admin.admin_start_date, admin.admin_end_date);
+      const entryPoints = Math.round(basePoints * activeFraction * 100) / 100;
+      return { base_points: basePoints, active_fraction: activeFraction, entry_points: entryPoints, is_counted: true };
     }
 
     function calculateAdministrationScore(admin) {
-      const position = admin.admin_position;
-      
-      if (position === 'Dean') return 20;
-      else if (position === 'Deputy Dean') return 15;
-      else if (position === 'Centre Director') return 12;
-      else if (position === 'Head of Programme') return 10;
-      else if (position === 'Postgraduate Coordinator') return 8;
-      else if (position === 'Programme Coordinator') return 6;
-      else return 5;
+      return getAdministrationEntryBreakdown(admin).entry_points;
+    }
+
+    function getServiceBasePoints(type) {
+      if (type === 'Community Outreach') return 8;
+      if (type === 'Volunteer Teaching') return 7;
+      if (type === 'Public Lecture') return 6;
+      if (type === 'Consulting') return 5;
+      if (type === 'Mentorship') return 4;
+      return 3;
+    }
+
+    function getServiceDurationFactor(hours) {
+      const durationHours = Number(hours || 0);
+      if (durationHours < 2) return 0.5;
+      if (durationHours <= 6) return 1.0;
+      if (durationHours <= 15) return 1.5;
+      return 2.0;
+    }
+
+    function getServiceEntryBreakdown(service) {
+      if (!service?.service_type) {
+        return { base_points: 0, duration_factor: 0, duration_hours: 0, entry_points: 0, is_counted: false };
+      }
+      const basePoints = getServiceBasePoints(service.service_type);
+      const durationHours = Number(service.service_duration ?? service.service_hours ?? 0);
+      const durationFactor = getServiceDurationFactor(durationHours);
+      const entryPoints = Math.round(basePoints * durationFactor * 100) / 100;
+      return { base_points: basePoints, duration_factor: durationFactor, duration_hours: durationHours, entry_points: entryPoints, is_counted: true };
     }
 
     function calculateServiceScore(service) {
-      let basePoints = 0;
-      if (service.service_type === 'Community Outreach') basePoints = 8;
-      else if (service.service_type === 'Volunteer Teaching') basePoints = 7;
-      else if (service.service_type === 'Public Lecture') basePoints = 6;
-      else if (service.service_type === 'Consulting') basePoints = 5;
-      else if (service.service_type === 'Mentorship') basePoints = 4;
-      else basePoints = 3;
-      
-      let scopeFactor = 1.0;
-      if (service.service_scope === 'International') scopeFactor = 1.5;
-      else if (service.service_scope === 'National') scopeFactor = 1.2;
-      else if (service.service_scope === 'Regional') scopeFactor = 1.0;
-      else if (service.service_scope === 'Local') scopeFactor = 0.8;
-      
-      const durationHours = Number(service.service_duration ?? service.service_hours ?? 0);
-      const hoursFactor = Math.min(durationHours / 20, 2.0);
-      
-      return Math.round(basePoints * scopeFactor * hoursFactor * 100) / 100;
+      return getServiceEntryBreakdown(service).entry_points;
+    }
+
+    function getLabBasePoints(resp) {
+      if (resp === 'Lab Coordinator') return 10;
+      if (resp === 'Safety Officer') return 8;
+      if (resp === 'Equipment Manager') return 7;
+      if (resp === 'Inventory Manager') return 6;
+      if (resp === 'SOP Development') return 5;
+      if (resp === 'Lab Supervisor') return 4;
+      return 3;
+    }
+
+    function getLabFrequencyFactor(freq) {
+      if (freq === 'Ongoing within reporting period') return 1.0;
+      if (freq === 'Per semester occurrence') return 0.6;
+      if (freq === 'Per course supported') return 0.3;
+      return 0;
+    }
+
+    function getLabEntryBreakdown(lab) {
+      if (!lab?.lab_responsibility || !lab?.lab_frequency) {
+        return { base_points: 0, frequency_factor: 0, course_count: 1, entry_points: 0, is_counted: false };
+      }
+      const basePoints = getLabBasePoints(lab.lab_responsibility);
+      const frequencyFactor = getLabFrequencyFactor(lab.lab_frequency);
+      const courseCount = lab.lab_frequency === 'Per course supported' ? Math.max(1, Number(lab.number_of_courses_supported || 1)) : 1;
+      const entryPoints = Math.round(basePoints * frequencyFactor * courseCount * 100) / 100;
+      return { base_points: basePoints, frequency_factor: frequencyFactor, course_count: courseCount, entry_points: entryPoints, is_counted: true };
     }
 
     function calculateLabScore(lab) {
-      let basePoints = 0;
-      if (lab.lab_responsibility === 'Lab Coordinator') basePoints = 10;
-      else if (lab.lab_responsibility === 'Safety Officer') basePoints = 8;
-      else if (lab.lab_responsibility === 'Equipment Manager') basePoints = 7;
-      else if (lab.lab_responsibility === 'Inventory Manager') basePoints = 6;
-      else if (lab.lab_responsibility === 'SOP Development') basePoints = 5;
-      else if (lab.lab_responsibility === 'Lab Supervisor') basePoints = 4;
-      else basePoints = 3;
-      
-      let frequencyFactor = 1.0;
-      if (lab.lab_frequency === 'Full-Time') frequencyFactor = 1.0;
-      else if (lab.lab_frequency === 'Per Semester') frequencyFactor = 0.5;
-      else if (lab.lab_frequency === 'Per Course') frequencyFactor = 0.3;
-      
-      return Math.round(basePoints * frequencyFactor * 100) / 100;
+      return getLabEntryBreakdown(lab).entry_points;
+    }
+
+    function getProfessionalBasePoints(prof) {
+      if (prof.prof_type === 'Professional Body Leadership') return 10;
+      if (prof.prof_type === 'Professional Certification') return 8;
+      if (prof.prof_type === 'Conference Organizer') return 7;
+      if (prof.prof_type === 'Editorial Board') return 6;
+      if (prof.prof_type === 'Professional Training') return 5;
+      if (prof.prof_type === 'Membership') return prof.prof_position ? 4 : 2;
+      return 3;
+    }
+
+    function getEffortFactor(band) {
+      if (band === 'low') return 0.5;
+      if (band === 'standard') return 1.0;
+      if (band === 'high') return 1.5;
+      return 0;
+    }
+
+    function getProfessionalEntryBreakdown(prof) {
+      if (!prof?.prof_type || !prof?.prof_effort_band) {
+        return { base_points: 0, effort_factor: 0, entry_points: 0, is_counted: false };
+      }
+      const basePoints = getProfessionalBasePoints(prof);
+      const effortFactor = getEffortFactor(prof.prof_effort_band);
+      const entryPoints = Math.round(basePoints * effortFactor * 100) / 100;
+      return { base_points: basePoints, effort_factor: effortFactor, entry_points: entryPoints, is_counted: true };
     }
 
     function calculateProfessionalScore(prof) {
-      let basePoints = 0;
-      if (prof.prof_type === 'Professional Body Leadership') basePoints = 10;
-      else if (prof.prof_type === 'Professional Certification') basePoints = 8;
-      else if (prof.prof_type === 'Conference Organizer') basePoints = 7;
-      else if (prof.prof_type === 'Editorial Board') basePoints = 6;
-      else if (prof.prof_type === 'Professional Training') basePoints = 5;
-      else if (prof.prof_type === 'Membership') basePoints = 3;
-      else basePoints = 3;
-      
-      let scopeFactor = 1.0;
-      if (prof.prof_scope === 'International') scopeFactor = 1.5;
-      else if (prof.prof_scope === 'National') scopeFactor = 1.2;
-      else if (prof.prof_scope === 'Regional') scopeFactor = 1.0;
-      
-      return Math.round(basePoints * scopeFactor * 100) / 100;
+      return getProfessionalEntryBreakdown(prof).entry_points;
     }
 
     function getWorkloadStatus(totalScore) {
@@ -3094,159 +3193,66 @@ function getSubmitToken() {
 
     function renderResearch() {
       const projects = getRecordsBySection('research');
-      
+
       return `
         <div class="space-y-6">
-          <!-- Scoring Formula Card -->
           <div class="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl shadow-sm border-2 border-green-200 p-6">
-            <h3 class="font-bold text-lg text-green-900 mb-3">🧮 Research Score Calculation Formula</h3>
-            
-            <div class="bg-white rounded-lg p-4 mb-4">
-              <p class="text-sm text-gray-700 mb-3">
-                <strong>Score = Base Points × Role Factor × Status Factor</strong>
-              </p>
-              <div class="text-xs text-gray-600 space-y-2">
-                <p><strong>Base Points:</strong> 5 (fixed for all projects)</p>
-                
-                <p class="mt-2"><strong>Role Factor:</strong></p>
-                <p>• Lead Researcher = 1.0</p>
-                <p>• Co-Lead Researcher = 0.7</p>
-                <p>• Research Member = 0.5</p>
-                
-                <p class="mt-2"><strong>Status Factor:</strong></p>
-                <p>• Ongoing = 1.0</p>
-                <p>• Completed = 0.8</p>
-                <p>• Pending Approval = 0.3</p>
-              </div>
+            <h3 class="font-bold text-lg text-green-900 mb-3">🧮 Research Workload Proxy</h3>
+            <div class="bg-white rounded-lg p-4 mb-4 text-xs text-gray-700 space-y-3">
+              <p><strong>project_points = base_points × role_factor × reporting_period_activity_factor</strong></p>
+              <p><strong>Base points table:</strong> Research project item = 5 points</p>
+              <p><strong>Role factors:</strong> Lead 1.0, Co-Lead 0.7, Member 0.5</p>
+              <p><strong>Reporting period activity factors:</strong> Active work 1.0, Limited admin only 0.5, No activity 0.0</p>
             </div>
-            
-            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
-              <p class="text-sm font-semibold text-yellow-900 mb-2">Example Calculation:</p>
-              <p class="text-xs text-gray-700">
-                💡 Lead, Ongoing: 5 × 1.0 × 1.0 = <strong>5.00</strong><br>
-                • Co-Lead, Completed: 5 × 0.7 × 0.8 = <strong>2.80</strong><br>
-                • Member, Pending: 5 × 0.5 × 0.3 = <strong>0.75</strong><br>
-                <strong class="text-green-700">Total: 8.55 points</strong>
-              </p>
+            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded text-xs text-gray-700">
+              <strong>Example:</strong> Co-Lead with active work → 5 × 0.7 × 1.0 = 3.50 points.
             </div>
+            <div id="research_live_preview" class="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs text-gray-700"></div>
           </div>
 
-          <!-- Add Research Project Form -->
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 class="heading-font text-2xl font-bold mb-6">🔬 Research Projects</h2>
-            
             <form id="research-form" onsubmit="saveResearch(event)" class="space-y-6">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="md:col-span-2">
-                  <label for="research-title" class="block text-sm font-semibold text-gray-700 mb-2">Project Title *</label>
-                  <input type="text" id="research-title" required 
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="e.g., AI for Healthcare Diagnostics">
-                </div>
-                
-                <div>
-                  <label for="research-grant-code" class="block text-sm font-semibold text-gray-700 mb-2">Grant Code *</label>
-                  <input type="text" id="research-grant-code" required 
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="e.g., SDK0123-2024">
-                </div>
-                
-                <div>
-                  <label for="research-role" class="block text-sm font-semibold text-gray-700 mb-2">Your Role *</label>
-                  <select id="research-role" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
-                    <option value="">Select Role</option>
-                    <option value="lead">Lead Researcher</option>
-                    <option value="co-lead">Co-Lead Researcher</option>
-                    <option value="member">Research Member</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label for="research-amount" class="block text-sm font-semibold text-gray-700 mb-2">Grant Amount (RM) *</label>
-                  <input type="number" id="research-amount" required min="0" step="0.01"
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="50000.00">
-                </div>
-                
-                <div>
-                  <label for="research-status" class="block text-sm font-semibold text-gray-700 mb-2">Status *</label>
-                  <select id="research-status" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
-                    <option value="">Select Status</option>
-                    <option value="ongoing">Ongoing</option>
-                    <option value="completed">Completed</option>
-                    <option value="pending">Pending Approval</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label for="research-year" class="block text-sm font-semibold text-gray-700 mb-2">Start Year *</label>
-                  <input type="number" id="research-year" required min="2000" max="2030"
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="2024">
-                </div>
-                
-                <div>
-                  <label for="research-duration" class="block text-sm font-semibold text-gray-700 mb-2">Duration (years) *</label>
-                  <input type="number" id="research-duration" required min="1" max="10" step="0.5"
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="2.0">
-                </div>
+                <div class="md:col-span-2"><label for="research-title" class="block text-sm font-semibold text-gray-700 mb-2">Project Title *</label><input type="text" id="research-title" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="research-grant-code" class="block text-sm font-semibold text-gray-700 mb-2">Grant Code *</label><input type="text" id="research-grant-code" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="research-role" class="block text-sm font-semibold text-gray-700 mb-2">Your Role *</label><select id="research-role" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select Role</option><option value="lead">Lead Researcher</option><option value="co-lead">Co-Lead Researcher</option><option value="member">Research Member</option></select></div>
+                <div><label for="research-amount" class="block text-sm font-semibold text-gray-700 mb-2">Grant Amount (RM) *</label><input type="number" id="research-amount" required min="0" step="0.01" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="research-status" class="block text-sm font-semibold text-gray-700 mb-2">Status (descriptive only) *</label><select id="research-status" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="ongoing">Ongoing</option><option value="completed">Completed</option><option value="pending">Pending Approval</option></select></div>
+                <div><label for="research-activity" class="block text-sm font-semibold text-gray-700 mb-2">Reporting Period Activity *</label><select id="research-activity" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select Activity</option><option value="active">Active work in reporting period (1.0)</option><option value="limited_admin">Limited admin only in reporting period (0.5)</option><option value="none">No activity in reporting period (0.0)</option></select></div>
+                <div><label for="research-year" class="block text-sm font-semibold text-gray-700 mb-2">Start Year *</label><input type="number" id="research-year" required min="2000" max="2035" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
               </div>
-              
-              <div class="flex justify-between">
-                <button type="button" onclick="navigateToSection('supervision')" class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300">
-                  ← Previous
-                </button>
-                <button type="submit" id="save-research-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
-                  ➕ Add Project
-                </button>
-              </div>
+              <div class="flex justify-end"><button type="submit" id="save-research-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add Research Item</button></div>
             </form>
           </div>
-          
-          ${projects.length > 0 ? `
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h3 class="font-bold text-lg mb-4">Research Projects (${projects.length})</h3>
-              <div class="space-y-3">
-                ${projects.map(proj => {
-                  const score = calculateResearchScore(proj);
-                  const roleLabel = proj.research_role === 'lead' ? 'Lead Researcher' : 
-                                   proj.research_role === 'co-lead' ? 'Co-Lead Researcher' : 'Research Member';
-                  const statusLabel = proj.research_status === 'ongoing' ? 'Ongoing' : 
-                                     proj.research_status === 'completed' ? 'Completed' : 'Pending Approval';
-                  
-                  return `
-                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
-                      <div class="flex-1">
-                        <div class="font-semibold text-gray-900">${proj.research_title}</div>
-                        <div class="text-sm text-gray-600 mt-1">
-                          ${proj.research_grant_code} • ${roleLabel} • RM ${parseFloat(proj.research_amount).toLocaleString('en-MY', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                        </div>
-                        <div class="text-xs text-gray-500 mt-1">
-                          ${proj.research_year} • ${proj.research_duration} years • ${statusLabel}
-                        </div>
-                        <div class="text-xs text-gray-500 mt-1">
-                          <span class="font-semibold text-green-700">Score: ${score.toFixed(2)}</span>
-                        </div>
-                      </div>
-                      <button type="button" onclick="deleteResearchProject('${proj.__backendId}')" 
-                              class="ml-4 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium text-sm">
-                        Delete
-                      </button>
-                    </div>
-                  `;
-                }).join('')}
-              </div>
-            </div>
-          ` : ''}
 
-          <div class="flex justify-end">
-            <button onclick="navigateToSection('publications')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
-              Next: Publications →
-            </button>
-          </div>
+          <div class="flex justify-between"><button onclick="navigateToSection('supervision')" class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300">Previous</button><button onclick="navigateToSection('publications')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Next</button></div>
         </div>
       `;
+    }
+
+    function setupResearchEventListeners() {
+      renderResearchLivePreview();
+      const form = document.getElementById('research-form');
+      if (!form) return;
+      form.querySelectorAll('input, select').forEach((field) => {
+        field.addEventListener('input', renderResearchLivePreview);
+        field.addEventListener('change', renderResearchLivePreview);
+      });
+    }
+
+    function renderResearchLivePreview() {
+      const preview = document.getElementById('research_live_preview');
+      if (!preview) return;
+      const saved = getRecordsBySection('research');
+      const savedTotal = Math.round(saved.reduce((sum, item) => sum + calculateResearchScore(item), 0) * 100) / 100;
+      const draft = {
+        research_role: document.getElementById('research-role')?.value || '',
+        research_activity: document.getElementById('research-activity')?.value || ''
+      };
+      const draftBreakdown = getResearchEntryBreakdown(draft);
+      const withDraft = Math.round((savedTotal + draftBreakdown.entry_points) * 100) / 100;
+      preview.innerHTML = `<p class="font-semibold text-gray-900 mb-2">Live preview</p><p>Draft item points: ${draftBreakdown.base_points} × ${draftBreakdown.role_factor} × ${draftBreakdown.activity_factor} = <strong>${draftBreakdown.entry_points.toFixed(2)}</strong></p><p><strong>Saved total:</strong> ${savedTotal.toFixed(2)}</p><p><strong>Saved + draft total:</strong> ${withDraft.toFixed(2)}</p>`;
     }
 
     async function saveResearch(event) {
@@ -3268,19 +3274,20 @@ function getSubmitToken() {
         research_role: document.getElementById('research-role').value,
         research_amount: parseFloat(document.getElementById('research-amount').value),
         research_status: document.getElementById('research-status').value,
+        research_activity: document.getElementById('research-activity').value,
         research_year: parseInt(document.getElementById('research-year').value),
-        research_duration: parseFloat(document.getElementById('research-duration').value),
         created_at: new Date().toISOString()
       };
       
       const result = await window.dataSdk.create(researchData);
       
       btn.disabled = false;
-      btn.innerHTML = '➕ Add Project';
+      btn.innerHTML = 'Add Research Item';
       
       if (result.isOk) {
         showToast('Research project added successfully!');
         document.getElementById('research-form').reset();
+        renderResearchLivePreview();
       } else {
         showToast('Failed to add research project', 'error');
       }
@@ -3301,192 +3308,59 @@ function getSubmitToken() {
 
     function renderPublications() {
       const publications = getRecordsBySection('publications');
-      
+
       return `
         <div class="space-y-6">
-          <!-- Scoring Formula Card -->
           <div class="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl shadow-sm border-2 border-emerald-200 p-6">
-            <h3 class="font-bold text-lg text-emerald-900 mb-3">🧮 Publications Score Calculation Formula</h3>
-            
-            <div class="bg-white rounded-lg p-4 mb-4">
-              <p class="text-sm text-gray-700 mb-3">
-                <strong>Score = Base Points × Indexing Factor × Author Position Factor × Status Factor</strong>
-              </p>
-              <div class="text-xs text-gray-600 space-y-2">
-                <p><strong>Base Points (by type):</strong></p>
-                <p>• Journal Article = 10 | Conference Paper = 6 | Book = 15 | Book Chapter = 8 | Proceeding = 5</p>
-                
-                <p class="mt-2"><strong>Indexing Factor:</strong></p>
-                <p>• Q1 = 2.0 | Q2 = 1.5 | Q3 = 1.3 | Q4 = 1.1 | Scopus = 1.2 | WoS = 1.2 | Other Indexed = 0.8</p>
-                
-                <p class="mt-2"><strong>Author Position Factor:</strong></p>
-                <p>• First Author = 1.0 | Corresponding Author = 1.0 | Co-Author = 0.5</p>
-                
-                <p class="mt-2"><strong>Status Factor:</strong></p>
-                <p>• Published = 1.0 | Accepted = 0.8 | Under Review = 0.3</p>
-              </div>
+            <h3 class="font-bold text-lg text-emerald-900 mb-2">🧮 Scholarly Writing and Publications</h3>
+            <p class="text-xs text-gray-700 mb-3">Points reflect writing work completed in the reporting period (workload proxy, not publication quality/prestige).</p>
+            <div class="bg-white rounded-lg p-4 mb-4 text-xs text-gray-700 space-y-2">
+              <p><strong>item_points = base_points_by_item_type × stage_factor</strong></p>
+              <p><strong>Base points:</strong> Journal manuscript 10, Conference paper 6, Book chapter 8, Proceeding 5, Other 3.</p>
+              <p><strong>Writing stage factors:</strong> Drafting 1.0, Revising 0.8, Responding to reviewers 0.9, Proofing/final checks 0.5, No activity 0.0.</p>
             </div>
-            
-            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
-              <p class="text-sm font-semibold text-yellow-900 mb-2">Example Calculation:</p>
-              <p class="text-xs text-gray-700">
-                • Journal (Q1, First Author, Published): 10 × 2.0 × 1.0 × 1.0 = <strong>20.0</strong><br>
-                • Conference (Scopus, Co-Author, Accepted): 6 × 1.2 × 0.5 × 0.8 = <strong>2.88</strong><br>
-                • Book Chapter (Other, Corresponding, Published): 8 × 0.8 × 1.0 × 1.0 = <strong>6.4</strong><br>
-                <strong class="text-green-700">Total: 29.28 points</strong>
-              </p>
-            </div>
+            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded text-xs text-gray-700"><strong>Example:</strong> Journal manuscript in revising stage: 10 × 0.8 = 8.00 points.</div>
+            <div id="publications_live_preview" class="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs text-gray-700"></div>
           </div>
-
-          <!-- Add Publication Form -->
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 class="heading-font text-2xl font-bold mb-6">📝 Scholarly Writing & Publications</h2>
-            
+            <h2 class="heading-font text-2xl font-bold mb-6">📝 Scholarly Writing and Publications</h2>
             <form id="publication-form" onsubmit="savePublication(event)" class="space-y-6">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="md:col-span-2">
-                  <label for="pub-title" class="block text-sm font-semibold text-gray-700 mb-2">Publication Title *</label>
-                  <input type="text" id="pub-title" required 
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="e.g., Machine Learning Applications in Marine Biology">
-                </div>
-                
-                <div>
-                  <label for="pub-type" class="block text-sm font-semibold text-gray-700 mb-2">Publication Type *</label>
-                  <select id="pub-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
-                    <option value="">Select Type</option>
-                    <option value="journal">Journal Article</option>
-                    <option value="conference">Conference Paper</option>
-                    <option value="book">Book</option>
-                    <option value="chapter">Book Chapter</option>
-                    <option value="proceeding">Proceeding</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label for="pub-index" class="block text-sm font-semibold text-gray-700 mb-2">Indexing *</label>
-                  <select id="pub-index" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
-                    <option value="">Select Indexing</option>
-                    <option value="Q1">Q1</option>
-                    <option value="Q2">Q2</option>
-                    <option value="Q3">Q3</option>
-                    <option value="Q4">Q4</option>
-                    <option value="Scopus">Scopus</option>
-                    <option value="WoS">Web of Science (WoS)</option>
-                    <option value="Other">Other Indexed</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label for="pub-venue" class="block text-sm font-semibold text-gray-700 mb-2">Journal/Conference Name *</label>
-                  <input type="text" id="pub-venue" required 
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="e.g., Journal of Marine Science">
-                </div>
-                
-                <div>
-                  <label for="pub-position" class="block text-sm font-semibold text-gray-700 mb-2">Author Position *</label>
-                  <select id="pub-position" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
-                    <option value="">Select Position</option>
-                    <option value="first">First Author</option>
-                    <option value="corresponding">Corresponding Author</option>
-                    <option value="co-author">Co-Author</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label for="pub-year" class="block text-sm font-semibold text-gray-700 mb-2">Publication Year *</label>
-                  <input type="number" id="pub-year" required min="2000" max="2030"
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="2024">
-                </div>
-                
-                <div>
-                  <label for="pub-status" class="block text-sm font-semibold text-gray-700 mb-2">Status *</label>
-                  <select id="pub-status" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
-                    <option value="">Select Status</option>
-                    <option value="published">Published</option>
-                    <option value="accepted">Accepted</option>
-                    <option value="under-review">Under Review</option>
-                  </select>
-                </div>
+                <div class="md:col-span-2"><label for="pub-title" class="block text-sm font-semibold text-gray-700 mb-2">Writing Item Title *</label><input type="text" id="pub-title" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="pub-type" class="block text-sm font-semibold text-gray-700 mb-2">Item Type *</label><select id="pub-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select Type</option><option value="journal">Journal manuscript</option><option value="conference">Conference paper</option><option value="chapter">Book chapter</option><option value="proceeding">Proceeding</option><option value="other">Other</option></select></div>
+                <div><label for="pub-stage" class="block text-sm font-semibold text-gray-700 mb-2">Writing Stage *</label><select id="pub-stage" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select Stage</option><option value="drafting">Drafting (1.0)</option><option value="revising">Revising (0.8)</option><option value="responding_reviewers">Responding to reviewers (0.9)</option><option value="proofing">Proofing and final checks (0.5)</option><option value="no_activity">No activity in reporting period (0.0)</option></select></div>
+                <div><label for="pub-index" class="block text-sm font-semibold text-gray-700 mb-2">Indexing (descriptive only) *</label><select id="pub-index" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="Q1">Q1</option><option value="Q2">Q2</option><option value="Q3">Q3</option><option value="Q4">Q4</option><option value="Scopus">Scopus</option><option value="WoS">Web of Science</option><option value="Other">Other</option></select></div>
+                <div><label for="pub-position" class="block text-sm font-semibold text-gray-700 mb-2">Author Position (descriptive only) *</label><select id="pub-position" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="first">First Author</option><option value="corresponding">Corresponding Author</option><option value="co-author">Co-Author</option></select></div>
+                <div><label for="pub-venue" class="block text-sm font-semibold text-gray-700 mb-2">Journal/Conference Name *</label><input type="text" id="pub-venue" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="pub-year" class="block text-sm font-semibold text-gray-700 mb-2">Year *</label><input type="number" id="pub-year" required min="2000" max="2035" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
               </div>
-              
-              <div class="flex justify-between">
-                <button type="button" onclick="navigateToSection('research')" class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300">
-                  ← Previous
-                </button>
-                <button type="submit" id="save-pub-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
-                  ➕ Add Publication
-                </button>
-              </div>
+              <div class="flex justify-end"><button type="submit" id="save-pub-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add Publication Item</button></div>
             </form>
           </div>
-          
-          ${publications.length > 0 ? `
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h3 class="font-bold text-lg mb-4">Publications (${publications.length})</h3>
-              <div class="space-y-3">
-                ${publications.map(pub => {
-                  const score = calculatePublicationScore(pub);
-                  
-                  // Format type name
-                  const typeNames = {
-                    'journal': 'Journal',
-                    'conference': 'Conference',
-                    'book': 'Book',
-                    'chapter': 'Chapter',
-                    'proceeding': 'Proceeding'
-                  };
-                  
-                  // Format position
-                  const positionNames = {
-                    'first': 'First Author',
-                    'corresponding': 'Corresponding',
-                    'co-author': 'Co-Author'
-                  };
-                  
-                  // Format status
-                  const statusNames = {
-                    'published': 'Published',
-                    'accepted': 'Accepted',
-                    'under-review': 'Under Review'
-                  };
-                  
-                  return `
-                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
-                      <div class="flex-1">
-                        <div class="font-semibold text-gray-900">${pub.pub_title}</div>
-                        <div class="text-sm text-gray-600 mt-1">
-                          <span class="inline-block px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-semibold mr-2">${typeNames[pub.pub_type] || pub.pub_type}</span>
-                          <span class="inline-block px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-semibold">${pub.pub_index}</span>
-                        </div>
-                        <div class="text-sm text-gray-600 mt-1">
-                          ${pub.pub_venue} • ${pub.pub_year}
-                        </div>
-                        <div class="text-xs text-gray-500 mt-1">
-                          ${statusNames[pub.pub_status] || pub.pub_status} • ${positionNames[pub.pub_position] || pub.pub_position}
-                          • <span class="font-semibold text-green-700">Score: ${score.toFixed(2)}</span>
-                        </div>
-                      </div>
-                      <button type="button" onclick="deletePublication('${pub.__backendId}')" 
-                              class="ml-4 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium text-sm">
-                        Delete
-                      </button>
-                    </div>
-                  `;
-                }).join('')}
-              </div>
-            </div>
-          ` : ''}
-
-          <div class="flex justify-end">
-            <button onclick="navigateToSection('administration')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
-              Next: Admin Leadership →
-            </button>
-          </div>
+          <div class="flex justify-between"><button onclick="navigateToSection('research')" class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300">Previous</button><button onclick="navigateToSection('administration')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Next</button></div>
         </div>
       `;
+    }
+
+    function setupPublicationsEventListeners() {
+      renderPublicationsLivePreview();
+      const form = document.getElementById('publication-form');
+      if (!form) return;
+      form.querySelectorAll('input, select').forEach((field) => {
+        field.addEventListener('input', renderPublicationsLivePreview);
+        field.addEventListener('change', renderPublicationsLivePreview);
+      });
+    }
+
+    function renderPublicationsLivePreview() {
+      const preview = document.getElementById('publications_live_preview');
+      if (!preview) return;
+      const saved = getRecordsBySection('publications');
+      const savedTotal = Math.round(saved.reduce((sum, item) => sum + calculatePublicationScore(item), 0) * 100) / 100;
+      const draft = { pub_type: document.getElementById('pub-type')?.value || '', pub_stage: document.getElementById('pub-stage')?.value || '' };
+      const draftBreakdown = getPublicationEntryBreakdown(draft);
+      const combined = Math.round((savedTotal + draftBreakdown.entry_points) * 100) / 100;
+      preview.innerHTML = `<p class="font-semibold text-gray-900 mb-2">Live preview</p><p>Draft item points: ${draftBreakdown.base_points} × ${draftBreakdown.stage_factor} = <strong>${draftBreakdown.entry_points.toFixed(2)}</strong></p><p><strong>Saved total:</strong> ${savedTotal.toFixed(2)}</p><p><strong>Saved + draft total:</strong> ${combined.toFixed(2)}</p>`;
     }
 
     async function savePublication(event) {
@@ -3509,18 +3383,20 @@ function getSubmitToken() {
         pub_venue: document.getElementById('pub-venue').value,
         pub_position: document.getElementById('pub-position').value,
         pub_year: parseInt(document.getElementById('pub-year').value),
-        pub_status: document.getElementById('pub-status').value,
+        pub_stage: document.getElementById('pub-stage').value,
+        pub_status: 'descriptive',
         created_at: new Date().toISOString()
       };
       
       const result = await window.dataSdk.create(publicationData);
       
       btn.disabled = false;
-      btn.innerHTML = '➕ Add Publication';
+      btn.innerHTML = 'Add Publication Item';
       
       if (result.isOk) {
         showToast('Publication added successfully!');
         document.getElementById('publication-form').reset();
+        renderPublicationsLivePreview();
       } else {
         showToast('Failed to add publication', 'error');
       }
@@ -3541,149 +3417,54 @@ function getSubmitToken() {
 
     function renderAdministration() {
       const positions = getRecordsBySection('administration');
-      
       return `
-        <div class="space-y-6">
-          <!-- Scoring Guide Card -->
-          <div class="bg-gradient-to-r from-rose-50 to-red-50 rounded-xl shadow-sm border-2 border-rose-200 p-6">
-            <h3 class="font-bold text-lg text-rose-900 mb-3">🧮 Admin Leadership Scoring (Fixed Points)</h3>
-            
-            <div class="bg-white rounded-lg p-4 mb-4">
-              <p class="text-sm text-gray-700 mb-3">
-                <strong>Score = Position Points (Fixed)</strong>
-              </p>
-              <div class="text-xs text-gray-600 space-y-1">
-                <p>• Dean = <strong>20</strong> | Deputy Dean = <strong>15</strong> | Centre Director = <strong>12</strong></p>
-                <p>• Head of Programme = <strong>10</strong> | Postgraduate Coordinator = <strong>8</strong></p>
-                <p>• Programme Coordinator = <strong>6</strong> | Other = <strong>5</strong></p>
-              </div>
-            </div>
-            
-            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded mb-4">
-              <p class="text-sm font-semibold text-yellow-900 mb-2">⚠️ Important Guidelines:</p>
-              <div class="text-xs text-gray-700 space-y-1">
-                <p>✓ Only record <strong>formal leadership positions with allowance/trust</strong></p>
-                <p>✓ Choose the correct position category (don't use "Other" if your position is listed)</p>
-                <p>✗ Don't record committee memberships here (use Admin Duties instead)</p>
-                <p>✗ Avoid double counting the same position</p>
-              </div>
-            </div>
-            
-            <div class="bg-emerald-50 border-l-4 border-emerald-400 p-4 rounded">
-              <p class="text-sm font-semibold text-emerald-900 mb-2">Example:</p>
-              <p class="text-xs text-gray-700">
-                • Head of Programme (UH6461001) = 10.0<br>
-                • Postgraduate Coordinator (FST) = 8.0<br>
-                <strong class="text-green-700">Total Admin Leadership Score = 18.0 points</strong>
-              </p>
-            </div>
+      <div class="space-y-6">
+        <div class="bg-gradient-to-r from-rose-50 to-red-50 rounded-xl shadow-sm border-2 border-rose-200 p-6">
+          <h3 class="font-bold text-lg text-rose-900 mb-3">🧮 Admin Leadership Workload Proxy</h3>
+          <div class="bg-white rounded-lg p-4 mb-4 text-xs text-gray-700 space-y-2">
+            <p><strong>position_points = base_position_points × active_fraction</strong></p>
+            <p><strong>Base points:</strong> Dean 20, Deputy Dean 15, Centre Director 12, Head of Programme 10, Postgraduate Coordinator 8, Programme Coordinator 6, Other 5.</p>
+            <p><strong>active_fraction = overlap_days / reporting_days</strong>, clamped 0 to 1 using role start/end and profile reporting period dates.</p>
           </div>
-
-          <!-- Add Position Form -->
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 class="heading-font text-2xl font-bold mb-6">🏛️ Administrative Leadership Positions</h2>
-            
-            <form id="administration-form" onsubmit="saveAdministration(event)" class="space-y-6">
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="md:col-span-2">
-                  <label for="admin-position" class="block text-sm font-semibold text-gray-700 mb-2">Leadership Position *</label>
-                  <select id="admin-position" required onchange="toggleOtherAdminPositionField()" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
-                    <option value="">Select Position</option>
-                    <option value="Dean">Dean</option>
-                    <option value="Deputy Dean">Deputy Dean</option>
-                    <option value="Centre Director">Centre Director</option>
-                    <option value="Head of Programme">Head of Programme</option>
-                    <option value="Postgraduate Coordinator">Postgraduate Coordinator</option>
-                    <option value="Programme Coordinator">Programme Coordinator</option>
-                    <option value="Other">Other Position</option>
-                  </select>
-                </div>
-                
-                <div id="other-admin-position-field" class="md:col-span-2" style="display: none;">
-                  <label for="admin-other-position" class="block text-sm font-semibold text-gray-700 mb-2">Specify Position *</label>
-                  <input type="text" id="admin-other-position"
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="Enter exact position title">
-                </div>
-                
-                <div>
-                  <label for="admin-faculty" class="block text-sm font-semibold text-gray-700 mb-2">Faculty/Department/Unit *</label>
-                  <input type="text" id="admin-faculty" required
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="e.g., Faculty of Science and Technology">
-                </div>
-                
-                <div>
-                  <label for="admin-allowance" class="block text-sm font-semibold text-gray-700 mb-2">Monthly Allowance (RM)</label>
-                  <input type="number" id="admin-allowance" min="0" step="0.01"
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="0.00">
-                </div>
-                
-                <div>
-                  <label for="admin-start-date" class="block text-sm font-semibold text-gray-700 mb-2">Start Date *</label>
-                  <input type="date" id="admin-start-date" required
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
-                </div>
-                
-                <div>
-                  <label for="admin-end-date" class="block text-sm font-semibold text-gray-700 mb-2">End Date (leave blank if current)</label>
-                  <input type="date" id="admin-end-date"
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
-                </div>
-              </div>
-              
-              <div class="flex justify-between">
-                <button type="button" onclick="navigateToSection('publications')" class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300">
-                  ← Previous
-                </button>
-                <button type="submit" id="save-administration-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
-                  ➕ Add Leadership Position
-                </button>
-              </div>
-            </form>
-          </div>
-          
-          ${positions.length > 0 ? `
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h3 class="font-bold text-lg mb-4">Your Leadership Positions (${positions.length})</h3>
-              <div class="space-y-3">
-                ${positions.map(pos => {
-                  const score = calculateAdministrationScore(pos);
-                  const position = pos.admin_position === 'Other' ? pos.admin_other_position : pos.admin_position;
-                  
-                  return `
-                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
-                      <div class="flex-1">
-                        <div class="font-semibold text-gray-900">${position}</div>
-                        <div class="text-sm text-gray-600 mt-1">
-                          ${pos.admin_faculty}${pos.admin_allowance ? ` • RM${pos.admin_allowance.toFixed(2)}/month` : ''}
-                        </div>
-                        <div class="text-xs text-gray-500 mt-1">
-                          ${pos.admin_start_date}${pos.admin_end_date ? ` to ${pos.admin_end_date}` : ' (Current)'}
-                        </div>
-                        <div class="text-xs text-gray-500 mt-1">
-                          <span class="font-semibold text-green-700">Score: ${score.toFixed(1)}</span>
-                        </div>
-                      </div>
-                      <button type="button" onclick="deleteAdministration('${pos.__backendId}')" 
-                              class="ml-4 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium text-sm">
-                        Delete
-                      </button>
-                    </div>
-                  `;
-                }).join('')}
-              </div>
-            </div>
-          ` : ''}
-
-          <div class="flex justify-end">
-            <button onclick="navigateToSection('admin_duties')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
-              Next: Admin Duties →
-            </button>
-          </div>
+          <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded text-xs text-gray-700"><strong>Example:</strong> Head of Programme (10 pts), active for 183 of 366 reporting days: 10 × (183/366) = 5.00 points.</div>
+          <div id="administration_live_preview" class="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs text-gray-700"></div>
         </div>
-      `;
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 class="heading-font text-2xl font-bold mb-6">🏛️ Administrative Leadership Positions</h2>
+          <form id="administration-form" onsubmit="saveAdministration(event)" class="space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div class="md:col-span-2"><label for="admin-position" class="block text-sm font-semibold text-gray-700 mb-2">Leadership Position *</label><select id="admin-position" required onchange="toggleOtherAdminPositionField()" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select Position</option><option value="Dean">Dean</option><option value="Deputy Dean">Deputy Dean</option><option value="Centre Director">Centre Director</option><option value="Head of Programme">Head of Programme</option><option value="Postgraduate Coordinator">Postgraduate Coordinator</option><option value="Programme Coordinator">Programme Coordinator</option><option value="Other">Other Position</option></select></div>
+              <div id="other-admin-position-field" class="md:col-span-2" style="display:none;"><label for="admin-other-position" class="block text-sm font-semibold text-gray-700 mb-2">Specify Position *</label><input type="text" id="admin-other-position" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+              <div><label for="admin-faculty" class="block text-sm font-semibold text-gray-700 mb-2">Faculty/Department/Unit *</label><input type="text" id="admin-faculty" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+              <div><label for="admin-allowance" class="block text-sm font-semibold text-gray-700 mb-2">Monthly Allowance (descriptive only)</label><input type="number" id="admin-allowance" min="0" step="0.01" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+              <div><label for="admin-start-date" class="block text-sm font-semibold text-gray-700 mb-2">Start Date *</label><input type="date" id="admin-start-date" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+              <div><label for="admin-end-date" class="block text-sm font-semibold text-gray-700 mb-2">End Date</label><input type="date" id="admin-end-date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+            </div>
+            <div class="flex justify-end"><button type="submit" id="save-administration-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add Leadership Item</button></div>
+          </form>
+        </div>
+        <div class="flex justify-between"><button onclick="navigateToSection('publications')" class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300">Previous</button><button onclick="navigateToSection('admin_duties')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Next</button></div>
+      </div>`;
+    }
+
+    function setupAdministrationEventListeners() {
+      renderAdministrationLivePreview();
+      const form = document.getElementById('administration-form');
+      if (!form) return;
+      form.querySelectorAll('input, select').forEach((field) => {
+        field.addEventListener('input', renderAdministrationLivePreview);
+        field.addEventListener('change', renderAdministrationLivePreview);
+      });
+    }
+
+    function renderAdministrationLivePreview() {
+      const preview = document.getElementById('administration_live_preview');
+      if (!preview) return;
+      const saved = getRecordsBySection('administration');
+      const savedTotal = Math.round(saved.reduce((sum, item) => sum + calculateAdministrationScore(item), 0) * 100) / 100;
+      const draft = { admin_position: document.getElementById('admin-position')?.value || '', admin_start_date: document.getElementById('admin-start-date')?.value || '', admin_end_date: document.getElementById('admin-end-date')?.value || '' };
+      const bd = getAdministrationEntryBreakdown(draft);
+      preview.innerHTML = `<p class="font-semibold text-gray-900 mb-2">Live preview</p><p>Draft item points: ${bd.base_points} × ${bd.active_fraction.toFixed(3)} = <strong>${bd.entry_points.toFixed(2)}</strong></p><p><strong>Saved total:</strong> ${savedTotal.toFixed(2)}</p><p><strong>Saved + draft total:</strong> ${(savedTotal + bd.entry_points).toFixed(2)}</p>`;
     }
 
     async function saveAdministration(event) {
@@ -3714,11 +3495,12 @@ function getSubmitToken() {
       const result = await window.dataSdk.create(administrationData);
       
       btn.disabled = false;
-      btn.innerHTML = '➕ Add Leadership Position';
+      btn.innerHTML = 'Add Leadership Item';
       
       if (result.isOk) {
         showToast('Leadership position added successfully!');
         document.getElementById('administration-form').reset();
+        renderAdministrationLivePreview();
         document.getElementById('other-admin-position-field').style.display = 'none';
       } else {
         showToast('Failed to add leadership position', 'error');
@@ -3739,146 +3521,35 @@ function getSubmitToken() {
     }
 
     function renderAdminDuties() {
-      const duties = getRecordsBySection('admin_duties');
-      
       return `
-        <div class="space-y-6">
-          <!-- Calculation Formula Card -->
-          <div class="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl shadow-sm border-2 border-amber-200 p-6">
-            <h3 class="font-bold text-lg text-amber-900 mb-3">🧮 Administrative Duties Scoring Formula</h3>
-            
-            <div class="bg-white rounded-lg p-4 mb-4">
-              <p class="text-sm text-gray-700 mb-3">
-                <strong>Score = Base Points × Frequency Factor</strong>
-              </p>
-              <div class="text-xs text-gray-600 space-y-2">
-                <p><strong>Base Points by Duty Type:</strong></p>
-                <p>• Accreditation Work = 8</p>
-                <p>• Curriculum Development = 6</p>
-                <p>• Committee Chair = 5</p>
-                <p>• Event Organizer = 4</p>
-                <p>• Exam Coordinator = 3</p>
-                <p>• Committee Member = 2</p>
-                <p>• Other = 2</p>
-                <p class="mt-2"><strong>Frequency Factor:</strong></p>
-                <p>• Ongoing (Year-round) = 1.0</p>
-                <p>• Per Semester = 0.5</p>
-                <p>• One-Time Event = 0.3</p>
-              </div>
-            </div>
-            
-            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
-              <p class="text-sm font-semibold text-yellow-900 mb-2">Example:</p>
-              <p class="text-xs text-gray-700">
-                • Accreditation Work (Ongoing): 8 × 1.0 = 8.0<br>
-                • Committee Chair (Per Semester): 5 × 0.5 = 2.5<br>
-                • Event Organizer (One-Time): 4 × 0.3 = 1.2<br>
-                <strong class="text-green-700">Total: 11.7 points</strong>
-              </p>
-            </div>
+      <div class="space-y-6">
+        <div class="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl shadow-sm border-2 border-amber-200 p-6">
+          <h3 class="font-bold text-lg text-amber-900 mb-3">🧮 Admin Duties Workload Proxy</h3>
+          <div class="bg-white rounded-lg p-4 mb-4 text-xs text-gray-700 space-y-2">
+            <p><strong>item_points = base_points_by_duty_type × frequency_factor</strong></p>
+            <p><strong>Frequency factors:</strong> Ongoing in reporting period 1.0, Per semester 0.6, One-time event 0.3.</p>
           </div>
-
-          <!-- Add Duty Form -->
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 class="heading-font text-2xl font-bold mb-6">📋 Administrative Duties & Committees</h2>
-            
-            <form id="admin-duty-form" onsubmit="saveAdminDuty(event)" class="space-y-6">
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label for="duty-type" class="block text-sm font-semibold text-gray-700 mb-2">Duty Type *</label>
-                  <select id="duty-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
-                    <option value="">Select Type</option>
-                    <option value="Accreditation Work">Accreditation Work</option>
-                    <option value="Curriculum Development">Curriculum Development</option>
-                    <option value="Committee Chair">Committee Chair</option>
-                    <option value="Event Organizer">Event Organizer</option>
-                    <option value="Exam Coordinator">Exam Coordinator</option>
-                    <option value="Committee Member">Committee Member</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label for="duty-name" class="block text-sm font-semibold text-gray-700 mb-2">Duty Name/Description *</label>
-                  <input type="text" id="duty-name" required 
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="e.g., MQA Accreditation Committee">
-                </div>
-                
-                <div>
-                  <label for="duty-frequency" class="block text-sm font-semibold text-gray-700 mb-2">Frequency *</label>
-                  <select id="duty-frequency" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
-                    <option value="">Select Frequency</option>
-                    <option value="Ongoing">Ongoing (Year-round) – 1.0</option>
-                    <option value="Per Semester">Per Semester – 0.5</option>
-                    <option value="One-Time Event">One-Time Event – 0.3</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label for="duty-year" class="block text-sm font-semibold text-gray-700 mb-2">Academic Year *</label>
-                  <input type="text" id="duty-year" required
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="e.g., 2024/2025">
-                </div>
-                
-                <div class="md:col-span-2">
-                  <label for="duty-notes" class="block text-sm font-semibold text-gray-700 mb-2">Additional Notes</label>
-                  <textarea id="duty-notes" rows="3"
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="Brief description of duties and responsibilities"></textarea>
-                </div>
-              </div>
-              
-              <div class="flex justify-between">
-                <button type="button" onclick="navigateToSection('administration')" class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300">
-                  ← Previous
-                </button>
-                <button type="submit" id="save-duty-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
-                  ➕ Add Duty
-                </button>
-              </div>
-            </form>
-          </div>
-          
-          ${duties.length > 0 ? `
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h3 class="font-bold text-lg mb-4">Administrative Duties (${duties.length})</h3>
-              <div class="space-y-3">
-                ${duties.map(duty => {
-                  const score = calculateAdminDutyScore(duty);
-                  
-                  return `
-                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
-                      <div class="flex-1">
-                        <div class="font-semibold text-gray-900">${duty.duty_name}</div>
-                        <div class="text-sm text-gray-600 mt-1">
-                          ${duty.duty_type} • ${duty.duty_frequency} • ${duty.duty_year}
-                        </div>
-                        ${duty.duty_notes ? `<div class="text-xs text-gray-500 mt-1">${duty.duty_notes}</div>` : ''}
-                        <div class="text-xs text-gray-500 mt-1">
-                          <span class="font-semibold text-green-700">Score: ${score}</span>
-                        </div>
-                      </div>
-                      <button type="button" onclick="deleteAdminDuty('${duty.__backendId}')" 
-                              class="ml-4 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium text-sm">
-                        Delete
-                      </button>
-                    </div>
-                  `;
-                }).join('')}
-              </div>
-            </div>
-          ` : ''}
-
-          <div class="flex justify-end">
-            <button onclick="navigateToSection('results')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
-              View Results →
-            </button>
-          </div>
+          <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded text-xs text-gray-700"><strong>Example:</strong> Curriculum Development (6) per semester (0.6) = 3.60 points.</div>
+          <div id="admin_duties_live_preview" class="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs"></div>
         </div>
-      `;
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 class="heading-font text-2xl font-bold mb-6">📋 Administrative Duties</h2>
+          <form id="duty-form" onsubmit="saveAdminDuty(event)" class="space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div><label for="duty-type" class="block text-sm font-semibold text-gray-700 mb-2">Duty Type *</label><select id="duty-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Accreditation Work">Accreditation Work</option><option value="Curriculum Development">Curriculum Development</option><option value="Committee Chair">Committee Chair</option><option value="Event Organizer">Event Organizer</option><option value="Exam Coordinator">Exam Coordinator</option><option value="Committee Member">Committee Member</option><option value="Other">Other</option></select></div>
+              <div><label for="duty-frequency" class="block text-sm font-semibold text-gray-700 mb-2">Frequency *</label><select id="duty-frequency" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Ongoing in Reporting Period">Ongoing in reporting period (1.0)</option><option value="Per Semester">Per semester (0.6)</option><option value="One-Time Event">One-time event (0.3)</option></select></div>
+              <div class="md:col-span-2"><label for="duty-title" class="block text-sm font-semibold text-gray-700 mb-2">Duty Title *</label><input id="duty-title" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+              <div><label for="duty-year" class="block text-sm font-semibold text-gray-700 mb-2">Year *</label><input id="duty-year" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+            </div>
+            <div class="flex justify-end"><button type="submit" id="save-duty-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add Duty Item</button></div>
+          </form>
+        </div>
+        <div class="flex justify-between"><button onclick="navigateToSection('administration')" class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300">Previous</button><button onclick="navigateToSection('service')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Next</button></div>
+      </div>`;
     }
+
+    function setupAdminDutiesEventListeners() { renderAdminDutiesLivePreview(); const f=document.getElementById('duty-form'); if(!f) return; f.querySelectorAll('input,select').forEach(el=>{el.addEventListener('input',renderAdminDutiesLivePreview); el.addEventListener('change',renderAdminDutiesLivePreview);}); }
+    function renderAdminDutiesLivePreview() { const p=document.getElementById('admin_duties_live_preview'); if(!p) return; const saved=getRecordsBySection('admin_duties'); const savedTotal=Math.round(saved.reduce((a,b)=>a+calculateAdminDutyScore(b),0)*100)/100; const bd=getAdminDutyEntryBreakdown({duty_type:document.getElementById('duty-type')?.value||'',duty_frequency:document.getElementById('duty-frequency')?.value||''}); p.innerHTML=`<p class="font-semibold mb-2">Live preview</p><p>Draft item points: ${bd.base_points} × ${bd.frequency_factor} = <strong>${bd.entry_points.toFixed(2)}</strong></p><p><strong>Saved total:</strong> ${savedTotal.toFixed(2)}</p><p><strong>Saved + draft total:</strong> ${(savedTotal+bd.entry_points).toFixed(2)}</p>`; }
 
     async function saveAdminDuty(event) {
       event.preventDefault();
@@ -3905,7 +3576,7 @@ function getSubmitToken() {
       const result = await window.dataSdk.create(dutyData);
       
       btn.disabled = false;
-      btn.innerHTML = '➕ Add Duty';
+      btn.innerHTML = 'Add Duty Item';
       
       if (result.isOk) {
         showToast('Administrative duty added successfully!');
@@ -3929,152 +3600,13 @@ function getSubmitToken() {
     }
 
     function renderService() {
-      const services = getRecordsBySection('service');
-      
       return `
-        <div class="space-y-6">
-          <!-- Formula Card -->
-          <div class="bg-gradient-to-r from-rose-50 to-pink-50 rounded-xl shadow-sm border-2 border-rose-200 p-6">
-            <h3 class="font-bold text-lg text-rose-900 mb-3">🧮 Service & Engagement Score Calculation Formula</h3>
-            
-            <div class="bg-white rounded-lg p-4 mb-4">
-              <p class="text-sm text-gray-700 mb-3">
-                <strong>Score = Base Points × Scope Factor</strong>
-              </p>
-              <div class="text-xs text-gray-600 space-y-2">
-                <p><strong>Base Points by Service Type:</strong></p>
-                <p>• External Examiner = 8 | Keynote Speaker = 7 | Invited Speaker = 5</p>
-                <p>• Journal Reviewer = 4 | Conference Reviewer = 3 | Community Outreach = 3</p>
-                <p>• Media Engagement = 2 | Other = 2</p>
-                
-                <p class="mt-2"><strong>Scope Factor:</strong></p>
-                <p>• International = 1.5 | National = 1.2 | Regional = 1.0 | Institutional = 0.8</p>
-              </div>
-            </div>
-            
-            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
-              <p class="text-sm font-semibold text-yellow-900 mb-2">Example Calculation:</p>
-              <p class="text-xs text-gray-700">
-                • External Examiner (International): 8 × 1.5 = <strong>12.0</strong><br>
-                • Keynote Speaker (National): 7 × 1.2 = <strong>8.4</strong><br>
-                • Journal Reviewer (International): 4 × 1.5 = <strong>6.0</strong><br>
-                <strong class="text-green-700">Total: 26.4 points</strong>
-              </p>
-            </div>
-          </div>
-
-          <!-- Add Service Form -->
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 class="heading-font text-2xl font-bold mb-6">🤝 Service & Engagement</h2>
-            
-            <form id="service-form" onsubmit="saveService(event)" class="space-y-6">
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label for="service-type" class="block text-sm font-semibold text-gray-700 mb-2">Service Type *</label>
-                  <select id="service-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
-                    <option value="">Select Type</option>
-                    <option value="External Examiner">External Examiner</option>
-                    <option value="Keynote Speaker">Keynote Speaker</option>
-                    <option value="Invited Speaker">Invited Speaker</option>
-                    <option value="Journal Reviewer">Journal Reviewer</option>
-                    <option value="Conference Reviewer">Conference Reviewer</option>
-                    <option value="Community Outreach">Community Outreach</option>
-                    <option value="Media Engagement">Media Engagement</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label for="service-scope" class="block text-sm font-semibold text-gray-700 mb-2">Scope *</label>
-                  <select id="service-scope" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
-                    <option value="">Select Scope</option>
-                    <option value="International">International</option>
-                    <option value="National">National</option>
-                    <option value="Regional">Regional</option>
-                    <option value="Institutional">Institutional</option>
-                  </select>
-                </div>
-                
-                <div class="md:col-span-2">
-                  <label for="service-title" class="block text-sm font-semibold text-gray-700 mb-2">Service Title *</label>
-                  <input type="text" id="service-title" required 
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="e.g., External Examiner for PhD Viva">
-                </div>
-                
-                <div>
-                  <label for="service-organization" class="block text-sm font-semibold text-gray-700 mb-2">Organization *</label>
-                  <input type="text" id="service-organization" required
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="e.g., Universiti Malaya">
-                </div>
-                
-                <div>
-                  <label for="service-date" class="block text-sm font-semibold text-gray-700 mb-2">Date *</label>
-                  <input type="date" id="service-date" required
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
-                </div>
-                
-                <div>
-                  <label for="service-duration" class="block text-sm font-semibold text-gray-700 mb-2">Duration (hours)</label>
-                  <input type="number" id="service-duration" min="0" step="0.5" value="0"
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="0">
-                </div>
-                
-                <div class="md:col-span-2">
-                  <label for="service-description" class="block text-sm font-semibold text-gray-700 mb-2">Description</label>
-                  <textarea id="service-description" rows="3"
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="Brief description of the service activity"></textarea>
-                </div>
-              </div>
-              
-              <button type="submit" id="save-service-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
-                ➕ Add Service
-              </button>
-            </form>
-          </div>
-          
-          ${services.length > 0 ? `
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h3 class="font-bold text-lg mb-4">Service Activities (${services.length})</h3>
-              <div class="space-y-3">
-                ${services.map(service => {
-                  const score = calculateServiceScore(service);
-                  
-                  return `
-                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
-                      <div class="flex-1">
-                        <div class="font-semibold text-gray-900">${service.service_title}</div>
-                        <div class="text-sm text-gray-600 mt-1">
-                          ${service.service_type} • ${service.service_scope} • ${service.service_organization}
-                        </div>
-                        <div class="text-xs text-gray-500 mt-1">
-                          ${service.service_date}${service.service_duration > 0 ? ` • ${service.service_duration} hours` : ''}
-                          • <span class="font-semibold text-green-700">Score: ${score.toFixed(2)}</span>
-                        </div>
-                        ${service.service_description ? `<div class="text-xs text-gray-500 mt-1">${service.service_description}</div>` : ''}
-                      </div>
-                      <button type="button" onclick="deleteService('${service.__backendId}')" 
-                              class="ml-4 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium text-sm">
-                        Delete
-                      </button>
-                    </div>
-                  `;
-                }).join('')}
-              </div>
-            </div>
-          ` : ''}
-
-          <div class="flex justify-end">
-            <button onclick="navigateToSection('laboratory')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
-              Next: Laboratory →
-            </button>
-          </div>
-        </div>
-      `;
+      <div class="space-y-6"><div class="bg-gradient-to-r from-cyan-50 to-blue-50 rounded-xl shadow-sm border-2 border-cyan-200 p-6"><h3 class="font-bold text-lg text-cyan-900 mb-3">🧮 Service Workload Proxy</h3><div class="bg-white rounded-lg p-4 mb-4 text-xs space-y-2"><p><strong>service_points = base_points_by_service_type × duration_factor</strong></p><p><strong>Duration bands:</strong> &lt;2h =0.5, 2-6h =1.0, 6-15h =1.5, &gt;15h =2.0.</p></div><div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded text-xs">Example: Public Lecture (6) with 8 hours → 6 × 1.5 = 9.00 points.</div><div id="service_live_preview" class="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs"></div></div>
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"><h2 class="heading-font text-2xl font-bold mb-6">🤝 Service & Engagement</h2><form id="service-form" onsubmit="saveService(event)" class="space-y-6"><div class="grid grid-cols-1 md:grid-cols-2 gap-6"><div><label for="service-type" class="block text-sm font-semibold text-gray-700 mb-2">Service Type *</label><select id="service-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Community Outreach">Community Outreach</option><option value="Volunteer Teaching">Volunteer Teaching</option><option value="Public Lecture">Public Lecture</option><option value="Consulting">Consulting</option><option value="Mentorship">Mentorship</option><option value="Other">Other</option></select></div><div><label for="service-scope" class="block text-sm font-semibold text-gray-700 mb-2">Scope (descriptive only)</label><input id="service-scope" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div><div><label for="service-duration" class="block text-sm font-semibold text-gray-700 mb-2">Duration (hours) *</label><input type="number" min="0" step="0.1" id="service-duration" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div><div><label for="service-year" class="block text-sm font-semibold text-gray-700 mb-2">Year *</label><input id="service-year" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div><div class="md:col-span-2"><label for="service-title" class="block text-sm font-semibold text-gray-700 mb-2">Service Title *</label><input id="service-title" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div></div><div class="flex justify-end"><button type="submit" id="save-service-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add Service Item</button></div></form></div>
+      <div class="flex justify-between"><button onclick="navigateToSection('admin_duties')" class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300">Previous</button><button onclick="navigateToSection('laboratory')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Next</button></div></div>`;
     }
+    function setupServiceEventListeners(){renderServiceLivePreview();const f=document.getElementById('service-form');if(!f)return;f.querySelectorAll('input,select').forEach(el=>{el.addEventListener('input',renderServiceLivePreview);el.addEventListener('change',renderServiceLivePreview);});}
+    function renderServiceLivePreview(){const p=document.getElementById('service_live_preview');if(!p)return;const saved=getRecordsBySection('service');const savedTotal=Math.round(saved.reduce((a,b)=>a+calculateServiceScore(b),0)*100)/100;const bd=getServiceEntryBreakdown({service_type:document.getElementById('service-type')?.value||'',service_duration:document.getElementById('service-duration')?.value||0});p.innerHTML=`<p class="font-semibold mb-2">Live preview</p><p>Draft duration band factor: ${bd.duration_factor}</p><p>Draft item points: ${bd.base_points} × ${bd.duration_factor} = <strong>${bd.entry_points.toFixed(2)}</strong></p><p><strong>Saved total:</strong> ${savedTotal.toFixed(2)}</p><p><strong>Saved + draft total:</strong> ${(savedTotal+bd.entry_points).toFixed(2)}</p>`;}
 
     async function saveService(event) {
       event.preventDefault();
@@ -4103,11 +3635,12 @@ function getSubmitToken() {
       const result = await window.dataSdk.create(serviceData);
       
       btn.disabled = false;
-      btn.innerHTML = '➕ Add Service';
+      btn.innerHTML = 'Add Service Item';
       
       if (result.isOk) {
         showToast('Service activity added successfully!');
         document.getElementById('service-form').reset();
+        renderServiceLivePreview();
       } else {
         showToast('Failed to add service activity', 'error');
       }
@@ -4127,135 +3660,13 @@ function getSubmitToken() {
     }
 
     function renderLaboratory() {
-      const labs = getRecordsBySection('laboratory');
-      
       return `
-        <div class="space-y-6">
-          <!-- Formula Card -->
-          <div class="bg-gradient-to-r from-cyan-50 to-teal-50 rounded-xl shadow-sm border-2 border-cyan-200 p-6">
-            <h3 class="font-bold text-lg text-cyan-900 mb-3">🧮 Laboratory Score Calculation Formula</h3>
-            
-            <div class="bg-white rounded-lg p-4 mb-4">
-              <p class="text-sm text-gray-700 mb-3">
-                <strong>Score = Base Points × Frequency Factor</strong>
-              </p>
-              <div class="text-xs text-gray-600 space-y-2">
-                <p><strong>Base Points by Responsibility:</strong></p>
-                <p>• Lab Coordinator = 10 | Safety Officer = 8 | Equipment Manager = 7</p>
-                <p>• Inventory Manager = 6 | SOP Development = 5 | Lab Supervisor = 4 | Other = 3</p>
-                
-                <p class="mt-2"><strong>Frequency Factor:</strong></p>
-                <p>• Full-Time = 1.0 | Per Semester = 0.5 | Per Course = 0.3</p>
-              </div>
-            </div>
-            
-            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
-              <p class="text-sm font-semibold text-yellow-900 mb-2">Example Calculation:</p>
-              <p class="text-xs text-gray-700">
-                • Lab Coordinator (Full-Time): 10 × 1.0 = <strong>10.0</strong><br>
-                • Safety Officer (Per Semester): 8 × 0.5 = <strong>4.0</strong><br>
-                • Equipment Manager (Per Course): 7 × 0.3 = <strong>2.1</strong><br>
-                <strong class="text-green-700">Total: 16.1 points</strong>
-              </p>
-            </div>
-          </div>
-
-          <!-- Add Laboratory Form -->
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 class="heading-font text-2xl font-bold mb-6">🧪 Laboratory Responsibilities</h2>
-            
-            <form id="laboratory-form" onsubmit="saveLaboratory(event)" class="space-y-6">
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label for="lab-responsibility" class="block text-sm font-semibold text-gray-700 mb-2">Responsibility Type *</label>
-                  <select id="lab-responsibility" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
-                    <option value="">Select Responsibility</option>
-                    <option value="Lab Coordinator">Lab Coordinator</option>
-                    <option value="Safety Officer">Safety Officer</option>
-                    <option value="Equipment Manager">Equipment Manager</option>
-                    <option value="Inventory Manager">Inventory Manager</option>
-                    <option value="SOP Development">SOP Development</option>
-                    <option value="Lab Supervisor">Lab Supervisor</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label for="lab-name" class="block text-sm font-semibold text-gray-700 mb-2">Laboratory Name *</label>
-                  <input type="text" id="lab-name" required 
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="e.g., Microbiology Lab">
-                </div>
-                
-                <div>
-                  <label for="lab-frequency" class="block text-sm font-semibold text-gray-700 mb-2">Frequency *</label>
-                  <select id="lab-frequency" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
-                    <option value="">Select Frequency</option>
-                    <option value="Full-Time">Full-Time (Year-round)</option>
-                    <option value="Per Semester">Per Semester</option>
-                    <option value="Per Course">Per Course</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label for="lab-year" class="block text-sm font-semibold text-gray-700 mb-2">Academic Year *</label>
-                  <input type="text" id="lab-year" required
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="e.g., 2024/2025">
-                </div>
-                
-                <div class="md:col-span-2">
-                  <label for="lab-description" class="block text-sm font-semibold text-gray-700 mb-2">Description of Responsibilities</label>
-                  <textarea id="lab-description" rows="3"
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="Describe key tasks such as equipment maintenance, safety protocols, inventory management, etc."></textarea>
-                </div>
-              </div>
-              
-              <button type="submit" id="save-laboratory-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
-                ➕ Add Laboratory Responsibility
-              </button>
-            </form>
-          </div>
-          
-          ${labs.length > 0 ? `
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h3 class="font-bold text-lg mb-4">Laboratory Responsibilities (${labs.length})</h3>
-              <div class="space-y-3">
-                ${labs.map(lab => {
-                  const score = calculateLabScore(lab);
-                  
-                  return `
-                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
-                      <div class="flex-1">
-                        <div class="font-semibold text-gray-900">${lab.lab_name}</div>
-                        <div class="text-sm text-gray-600 mt-1">
-                          ${lab.lab_responsibility} • ${lab.lab_frequency} • ${lab.lab_year}
-                        </div>
-                        ${lab.lab_description ? `<div class="text-xs text-gray-500 mt-1">${lab.lab_description}</div>` : ''}
-                        <div class="text-xs text-gray-500 mt-1">
-                          <span class="font-semibold text-green-700">Score: ${score.toFixed(2)}</span>
-                        </div>
-                      </div>
-                      <button type="button" onclick="deleteLaboratory('${lab.__backendId}')" 
-                              class="ml-4 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium text-sm">
-                        Delete
-                      </button>
-                    </div>
-                  `;
-                }).join('')}
-              </div>
-            </div>
-          ` : ''}
-
-          <div class="flex justify-end">
-            <button onclick="navigateToSection('professional')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
-              Next: Professional →
-            </button>
-          </div>
-        </div>
-      `;
+      <div class="space-y-6"><div class="bg-gradient-to-r from-teal-50 to-cyan-50 rounded-xl shadow-sm border-2 border-teal-200 p-6"><h3 class="font-bold text-lg text-teal-900 mb-3">🧮 Laboratory Workload Proxy</h3><div class="bg-white rounded-lg p-4 mb-4 text-xs space-y-2"><p><strong>lab_points = base_points × frequency_factor × number_of_courses_supported</strong> (course count only used for Per course supported).</p><p><strong>Frequency factors:</strong> Ongoing within reporting period 1.0, Per semester occurrence 0.6, Per course supported 0.3.</p></div><div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded text-xs">Example: Equipment Manager (7), Per course supported (0.3), 3 courses: 7 × 0.3 × 3 = 6.30 points.</div><div id="laboratory_live_preview" class="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs"></div></div>
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"><h2 class="heading-font text-2xl font-bold mb-6">🧪 Laboratory Responsibilities</h2><form id="laboratory-form" onsubmit="saveLaboratory(event)" class="space-y-6"><div class="grid grid-cols-1 md:grid-cols-2 gap-6"><div><label for="lab-responsibility" class="block text-sm font-semibold text-gray-700 mb-2">Responsibility *</label><select id="lab-responsibility" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Lab Coordinator">Lab Coordinator</option><option value="Safety Officer">Safety Officer</option><option value="Equipment Manager">Equipment Manager</option><option value="Inventory Manager">Inventory Manager</option><option value="SOP Development">SOP Development</option><option value="Lab Supervisor">Lab Supervisor</option><option value="Other">Other</option></select></div><div><label for="lab-frequency" class="block text-sm font-semibold text-gray-700 mb-2">Frequency *</label><select id="lab-frequency" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Ongoing within reporting period">Ongoing within reporting period</option><option value="Per semester occurrence">Per semester occurrence</option><option value="Per course supported">Per course supported</option></select></div><div id="lab-course-count-wrap" style="display:none;"><label for="number-of-courses-supported" class="block text-sm font-semibold text-gray-700 mb-2">Number of courses supported *</label><input type="number" id="number-of-courses-supported" min="1" value="1" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div><div><label for="lab-name" class="block text-sm font-semibold text-gray-700 mb-2">Laboratory Name *</label><input id="lab-name" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div><div><label for="lab-year" class="block text-sm font-semibold text-gray-700 mb-2">Year *</label><input id="lab-year" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div><div class="md:col-span-2"><label for="lab-description" class="block text-sm font-semibold text-gray-700 mb-2">Description</label><textarea id="lab-description" rows="2" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></textarea></div></div><div class="flex justify-end"><button type="submit" id="save-laboratory-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add Laboratory Item</button></div></form></div>
+      <div class="flex justify-between"><button onclick="navigateToSection('service')" class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300">Previous</button><button onclick="navigateToSection('professional')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Next</button></div></div>`;
     }
+    function setupLaboratoryEventListeners(){renderLaboratoryLivePreview();const form=document.getElementById('laboratory-form');if(!form)return;const toggle=()=>{const perCourse=document.getElementById('lab-frequency')?.value==='Per course supported';document.getElementById('lab-course-count-wrap').style.display=perCourse?'block':'none';renderLaboratoryLivePreview();};form.querySelectorAll('input,select').forEach(el=>{el.addEventListener('input',toggle);el.addEventListener('change',toggle);});toggle();}
+    function renderLaboratoryLivePreview(){const p=document.getElementById('laboratory_live_preview');if(!p)return;const saved=getRecordsBySection('laboratory');const savedTotal=Math.round(saved.reduce((a,b)=>a+calculateLabScore(b),0)*100)/100;const bd=getLabEntryBreakdown({lab_responsibility:document.getElementById('lab-responsibility')?.value||'',lab_frequency:document.getElementById('lab-frequency')?.value||'',number_of_courses_supported:document.getElementById('number-of-courses-supported')?.value||1});p.innerHTML=`<p class="font-semibold mb-2">Live preview</p><p>Draft item points: ${bd.base_points} × ${bd.frequency_factor} × ${bd.course_count} = <strong>${bd.entry_points.toFixed(2)}</strong></p><p><strong>Saved total:</strong> ${savedTotal.toFixed(2)}</p><p><strong>Saved + draft total:</strong> ${(savedTotal+bd.entry_points).toFixed(2)}</p>`;}
 
     async function saveLaboratory(event) {
       event.preventDefault();
@@ -4275,6 +3686,7 @@ function getSubmitToken() {
         lab_name: document.getElementById('lab-name').value,
         lab_frequency: document.getElementById('lab-frequency').value,
         lab_year: document.getElementById('lab-year').value,
+        number_of_courses_supported: parseInt(document.getElementById('number-of-courses-supported')?.value || '1', 10),
         lab_description: document.getElementById('lab-description').value,
         created_at: new Date().toISOString()
       };
@@ -4282,11 +3694,12 @@ function getSubmitToken() {
       const result = await window.dataSdk.create(labData);
       
       btn.disabled = false;
-      btn.innerHTML = '➕ Add Laboratory Responsibility';
+      btn.innerHTML = 'Add Laboratory Item';
       
       if (result.isOk) {
         showToast('Laboratory responsibility added successfully!');
         document.getElementById('laboratory-form').reset();
+        renderLaboratoryLivePreview();
       } else {
         showToast('Failed to add laboratory responsibility', 'error');
       }
@@ -4306,145 +3719,11 @@ function getSubmitToken() {
     }
 
     function renderProfessional() {
-      const professional = getRecordsBySection('professional');
-      
-      return `
-        <div class="space-y-6">
-          <!-- Formula Card -->
-          <div class="bg-gradient-to-r from-violet-50 to-purple-50 rounded-xl shadow-sm border-2 border-violet-200 p-6">
-            <h3 class="font-bold text-lg text-violet-900 mb-3">🧮 Professional Activities Score Calculation Formula</h3>
-            
-            <div class="bg-white rounded-lg p-4 mb-4">
-              <p class="text-sm text-gray-700 mb-3">
-                <strong>Score = Base Points × Scope Factor</strong>
-              </p>
-              <div class="text-xs text-gray-600 space-y-2">
-                <p><strong>Base Points by Activity Type:</strong></p>
-                <p>• Professional Body Leadership = 10 | Professional Certification = 8 | Conference Organizer = 7</p>
-                <p>• Editorial Board = 6 | Professional Training = 5 | Consultancy = 5 | Membership = 3 | Other = 3</p>
-                
-                <p class="mt-2"><strong>Scope Factor:</strong></p>
-                <p>• International = 1.5 | National = 1.2 | Regional = 1.0 | Institutional = 0.8</p>
-              </div>
-            </div>
-            
-            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
-              <p class="text-sm font-semibold text-yellow-900 mb-2">Example Calculation:</p>
-              <p class="text-xs text-gray-700">
-                • Professional Body Leadership (National): 10 × 1.2 = <strong>12.0</strong><br>
-                • Conference Organizer (International): 7 × 1.5 = <strong>10.5</strong><br>
-                • Consultancy (Regional): 5 × 1.0 = <strong>5.0</strong><br>
-                <strong class="text-green-700">Total: 27.5 points</strong>
-              </p>
-            </div>
-          </div>
-
-          <!-- Add Professional Activity Form -->
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 class="heading-font text-2xl font-bold mb-6">💼 Professional Activities & Memberships</h2>
-            
-            <form id="professional-form" onsubmit="saveProfessional(event)" class="space-y-6">
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label for="prof-type" class="block text-sm font-semibold text-gray-700 mb-2">Activity Type *</label>
-                  <select id="prof-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
-                    <option value="">Select Type</option>
-                    <option value="Professional Body Leadership">Professional Body Leadership</option>
-                    <option value="Professional Certification">Professional Certification</option>
-                    <option value="Conference Organizer">Conference Organizer</option>
-                    <option value="Editorial Board">Editorial Board</option>
-                    <option value="Professional Training">Professional Training</option>
-                    <option value="Consultancy">Consultancy</option>
-                    <option value="Membership">Professional Membership</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label for="prof-scope" class="block text-sm font-semibold text-gray-700 mb-2">Scope *</label>
-                  <select id="prof-scope" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
-                    <option value="">Select Scope</option>
-                    <option value="International">International</option>
-                    <option value="National">National</option>
-                    <option value="Regional">Regional</option>
-                    <option value="Institutional">Institutional</option>
-                  </select>
-                </div>
-                
-                <div class="md:col-span-2">
-                  <label for="prof-title" class="block text-sm font-semibold text-gray-700 mb-2">Title/Position *</label>
-                  <input type="text" id="prof-title" required 
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="e.g., President, Staff Welfare and Recreation Club">
-                </div>
-                
-                <div>
-                  <label for="prof-organization" class="block text-sm font-semibold text-gray-700 mb-2">Organization *</label>
-                  <input type="text" id="prof-organization" required
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="e.g., Malaysian Mathematical Society">
-                </div>
-                
-                <div>
-                  <label for="prof-year" class="block text-sm font-semibold text-gray-700 mb-2">Year *</label>
-                  <input type="text" id="prof-year" required
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="e.g., 2024 or 2023-2025">
-                </div>
-                
-                <div class="md:col-span-2">
-                  <label for="prof-description" class="block text-sm font-semibold text-gray-700 mb-2">Description of Activities</label>
-                  <textarea id="prof-description" rows="3"
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="Describe key responsibilities, contributions, or achievements"></textarea>
-                </div>
-              </div>
-              
-              <button type="submit" id="save-professional-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
-                ➕ Add Professional Activity
-              </button>
-            </form>
-          </div>
-          
-          ${professional.length > 0 ? `
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h3 class="font-bold text-lg mb-4">Professional Activities (${professional.length})</h3>
-              <div class="space-y-3">
-                ${professional.map(prof => {
-                  const score = calculateProfessionalScore(prof);
-                  
-                  return `
-                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
-                      <div class="flex-1">
-                        <div class="font-semibold text-gray-900">${prof.prof_title}</div>
-                        <div class="text-sm text-gray-600 mt-1">
-                          ${prof.prof_type} • ${prof.prof_scope} • ${prof.prof_organization}
-                        </div>
-                        <div class="text-xs text-gray-500 mt-1">
-                          ${prof.prof_year}
-                          📊 <span class="font-semibold text-green-700">Score: ${score.toFixed(2)}</span>
-                        </div>
-                        ${prof.prof_description ? `<div class="text-xs text-gray-500 mt-1">${prof.prof_description}</div>` : ''}
-                      </div>
-                      <button type="button" onclick="deleteProfessional('${prof.__backendId}')" 
-                              class="ml-4 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium text-sm">
-                        Delete
-                      </button>
-                    </div>
-                  `;
-                }).join('')}
-              </div>
-            </div>
-          ` : ''}
-
-          <div class="flex justify-end">
-            <button onclick="navigateToSection('assistants')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
-              Next: Assistants →
-            </button>
-          </div>
-        </div>
-      `;
+      return `<div class="space-y-6"><div class="bg-gradient-to-r from-violet-50 to-purple-50 rounded-xl shadow-sm border-2 border-violet-200 p-6"><h3 class="font-bold text-lg text-violet-900 mb-3">🧮 Professional Workload Proxy</h3><div class="bg-white rounded-lg p-4 mb-4 text-xs space-y-2"><p><strong>professional_points = base_points_by_activity_type × effort_factor</strong></p><p><strong>Effort bands:</strong> Low 0.5, Standard 1.0, High 1.5.</p><p>Memberships default to low base points and increase only when a role/position is selected.</p></div><div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded text-xs">Example: Membership with office bearer role (base 4), standard effort (1.0): 4 × 1.0 = 4.00 points.</div><div id="professional_live_preview" class="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs"></div></div>
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"><h2 class="heading-font text-2xl font-bold mb-6">💼 Professional Activities & Memberships</h2><form id="professional-form" onsubmit="saveProfessional(event)" class="space-y-6"><div class="grid grid-cols-1 md:grid-cols-2 gap-6"><div><label for="prof-type" class="block text-sm font-semibold text-gray-700 mb-2">Activity Type *</label><select id="prof-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Professional Body Leadership">Professional Body Leadership</option><option value="Professional Certification">Professional Certification</option><option value="Conference Organizer">Conference Organizer</option><option value="Editorial Board">Editorial Board</option><option value="Professional Training">Professional Training</option><option value="Membership">Membership</option><option value="Other">Other</option></select></div><div><label for="prof-effort-band" class="block text-sm font-semibold text-gray-700 mb-2">Effort Band *</label><select id="prof-effort-band" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="low">Low effort (0.5)</option><option value="standard">Standard effort (1.0)</option><option value="high">High effort (1.5)</option></select></div><div><label for="prof-position" class="block text-sm font-semibold text-gray-700 mb-2">Role/Position (optional)</label><input id="prof-position" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none" placeholder="e.g., Office bearer"></div><div><label for="prof-scope" class="block text-sm font-semibold text-gray-700 mb-2">Scope (descriptive only)</label><input id="prof-scope" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div><div class="md:col-span-2"><label for="prof-title" class="block text-sm font-semibold text-gray-700 mb-2">Activity Title *</label><input id="prof-title" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div><div><label for="prof-organization" class="block text-sm font-semibold text-gray-700 mb-2">Organization *</label><input id="prof-organization" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div><div><label for="prof-year" class="block text-sm font-semibold text-gray-700 mb-2">Year *</label><input id="prof-year" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div><div class="md:col-span-2"><label for="prof-description" class="block text-sm font-semibold text-gray-700 mb-2">Description</label><textarea id="prof-description" rows="2" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></textarea></div></div><div class="flex justify-end"><button type="submit" id="save-professional-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add Professional Item</button></div></form></div><div class="flex justify-between"><button onclick="navigateToSection('laboratory')" class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300">Previous</button><button onclick="navigateToSection('assistants')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Next</button></div></div>`;
     }
+    function setupProfessionalEventListeners(){renderProfessionalLivePreview();const f=document.getElementById('professional-form');if(!f)return;f.querySelectorAll('input,select').forEach(el=>{el.addEventListener('input',renderProfessionalLivePreview);el.addEventListener('change',renderProfessionalLivePreview);});}
+    function renderProfessionalLivePreview(){const p=document.getElementById('professional_live_preview');if(!p)return;const saved=getRecordsBySection('professional');const savedTotal=Math.round(saved.reduce((a,b)=>a+calculateProfessionalScore(b),0)*100)/100;const bd=getProfessionalEntryBreakdown({prof_type:document.getElementById('prof-type')?.value||'',prof_effort_band:document.getElementById('prof-effort-band')?.value||'',prof_position:document.getElementById('prof-position')?.value||''});p.innerHTML=`<p class="font-semibold mb-2">Live preview</p><p>Draft item points: ${bd.base_points} × ${bd.effort_factor} = <strong>${bd.entry_points.toFixed(2)}</strong></p><p><strong>Saved total:</strong> ${savedTotal.toFixed(2)}</p><p><strong>Saved + draft total:</strong> ${(savedTotal+bd.entry_points).toFixed(2)}</p>`;}
 
     async function saveProfessional(event) {
       event.preventDefault();
@@ -4464,6 +3743,8 @@ function getSubmitToken() {
         prof_title: document.getElementById('prof-title').value,
         prof_scope: document.getElementById('prof-scope').value,
         prof_organization: document.getElementById('prof-organization').value,
+        prof_position: document.getElementById('prof-position').value,
+        prof_effort_band: document.getElementById('prof-effort-band').value,
         prof_year: document.getElementById('prof-year').value,
         prof_description: document.getElementById('prof-description').value,
         created_at: new Date().toISOString()
@@ -4472,11 +3753,12 @@ function getSubmitToken() {
       const result = await window.dataSdk.create(professionalData);
       
       btn.disabled = false;
-      btn.innerHTML = '➕ Add Professional Activity';
+      btn.innerHTML = 'Add Professional Item';
       
       if (result.isOk) {
         showToast('Professional activity added successfully!');
         document.getElementById('professional-form').reset();
+        renderProfessionalLivePreview();
       } else {
         showToast('Failed to add professional activity', 'error');
       }
