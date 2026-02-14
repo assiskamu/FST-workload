@@ -878,11 +878,11 @@ function getSubmitToken() {
       const requiredBySection = {
         teaching: ['course_code', 'course_name', 'course_credit_hours', 'course_class_size', 'course_lecture', 'course_semester', 'course_role'],
         supervision: ['student_name', 'student_matric', 'student_level', 'student_role', 'student_registration_mode', 'student_current_status', 'student_title', 'student_year'],
-        research: ['research_title', 'research_grant_code', 'research_role', 'research_amount', 'research_status', 'research_year', 'research_duration'],
-        publications: ['pub_title', 'pub_type', 'pub_index', 'pub_venue', 'pub_position', 'pub_year', 'pub_status'],
+        research: ['research_title', 'research_grant_code', 'research_role', 'research_activity', 'research_year'],
+        publications: ['pub_title', 'pub_type', 'pub_stage', 'pub_venue', 'pub_year'],
         administration: ['admin_position', 'admin_faculty', 'admin_start_date'],
         admin_duties: ['duty_type', 'duty_name', 'duty_frequency', 'duty_year'],
-        service: ['service_type', 'service_scope', 'service_title', 'service_organization', 'service_date'],
+        service: ['service_type', 'service_title', 'service_organization', 'service_date', 'service_duration'],
         laboratory: ['lab_responsibility', 'lab_name', 'lab_frequency', 'lab_year'],
         professional: ['prof_type', 'prof_scope', 'prof_title', 'prof_organization', 'prof_year']
       };
@@ -890,7 +890,7 @@ function getSubmitToken() {
       const numericBySection = {
         teaching: ['course_credit_hours', 'course_class_size', 'course_lecture', 'course_tutorial', 'course_lab', 'course_fieldwork'],
         supervision: ['student_year'],
-        research: ['research_amount', 'research_year', 'research_duration'],
+        research: ['research_amount', 'research_year'],
         publications: ['pub_year'],
         administration: ['admin_allowance'],
         admin_duties: [],
@@ -1537,8 +1537,8 @@ function getSubmitToken() {
 
     function getActiveFractionInReportingPeriod(startDate, endDate) {
       const profile = getProfile();
-      const reportStart = new Date(profile?.profile_start_date || `${new Date().getFullYear()}-01-01`);
-      const reportEnd = new Date(profile?.profile_end_date || `${new Date().getFullYear()}-12-31`);
+      const reportStart = new Date(profile?.reporting_start_date || `${new Date().getFullYear()}-01-01`);
+      const reportEnd = new Date(profile?.reporting_end_date || `${new Date().getFullYear()}-12-31`);
       const roleStart = startDate ? new Date(startDate) : reportStart;
       const roleEnd = endDate ? new Date(endDate) : reportEnd;
       const overlapStart = new Date(Math.max(reportStart.getTime(), roleStart.getTime()));
@@ -3191,24 +3191,81 @@ function getSubmitToken() {
       }
     }
 
-    function renderResearch() {
-      const projects = getRecordsBySection('research');
+    function createCalculationPanel({ sectionKey, title, formula, baseTableHtml, factorTableHtml, workedExampleHtml, notesHtml }) {
+      return `
+        <div class="bg-gradient-to-r from-slate-50 to-sky-50 rounded-xl shadow-sm border-2 border-slate-200 p-6">
+          <h3 class="font-bold text-lg text-slate-900 mb-3">${title}</h3>
+          <div class="bg-white rounded-lg p-4 text-xs text-gray-700 space-y-3">
+            <p><strong>${formula}</strong></p>
+            ${baseTableHtml || ''}
+            ${factorTableHtml || ''}
+          </div>
+          <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded text-xs text-gray-700 mt-4">${workedExampleHtml}</div>
+          <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 text-xs text-blue-900 mt-4">${notesHtml}</div>
+          <div id="${sectionKey}_live_preview" class="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs text-gray-700"></div>
+        </div>
+      `;
+    }
+
+    function createSavedList({ title, items, renderItem, emptyText = 'No entries yet' }) {
+      const listHtml = items.length === 0
+        ? `<p class="text-sm text-gray-500">${emptyText}</p>`
+        : `<div class="space-y-3">${items.map(renderItem).join('')}</div>`;
 
       return `
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h3 class="font-semibold text-lg text-gray-900 mb-4">${title}</h3>
+          ${listHtml}
+        </div>
+      `;
+    }
+
+    function createNavigationRow({ previous, next }) {
+      return `
+        <div class="flex justify-between">
+          <button onclick="navigateToSection('${previous.id}')" class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300">Previous: ${previous.label}</button>
+          <button onclick="navigateToSection('${next.id}')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Next: ${next.label}</button>
+        </div>
+      `;
+    }
+
+    function renderLivePreview({ sectionKey, breakdown, equationText, savedTotal }) {
+      const preview = document.getElementById(`${sectionKey}_live_preview`);
+      if (!preview) return;
+      const liveTotal = Math.round((savedTotal + breakdown.entry_points) * 100) / 100;
+      preview.innerHTML = `
+        <p class="font-semibold mb-2">Live preview</p>
+        <p>Draft item points: ${equationText} = <strong>${breakdown.entry_points.toFixed(2)}</strong></p>
+        <p><strong>Saved total points:</strong> ${savedTotal.toFixed(2)}</p>
+        <p><strong>Saved + draft total:</strong> ${liveTotal.toFixed(2)}</p>
+      `;
+    }
+
+    function getResearchDraftInputState() {
+      return {
+        research_title: document.getElementById('research-title')?.value || '',
+        research_grant_code: document.getElementById('research-grant-code')?.value || '',
+        research_role: document.getElementById('research-role')?.value || '',
+        research_status: document.getElementById('research-status')?.value || '',
+        research_activity: document.getElementById('research-activity')?.value || '',
+        research_amount: document.getElementById('research-amount')?.value || '',
+        research_year: document.getElementById('research-year')?.value || ''
+      };
+    }
+
+    function renderResearch() {
+      const projects = getRecordsBySection('research');
+      return `
         <div class="space-y-6">
-          <div class="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl shadow-sm border-2 border-green-200 p-6">
-            <h3 class="font-bold text-lg text-green-900 mb-3">🧮 Research Workload Proxy</h3>
-            <div class="bg-white rounded-lg p-4 mb-4 text-xs text-gray-700 space-y-3">
-              <p><strong>project_points = base_points × role_factor × reporting_period_activity_factor</strong></p>
-              <p><strong>Base points table:</strong> Research project item = 5 points</p>
-              <p><strong>Role factors:</strong> Lead 1.0, Co-Lead 0.7, Member 0.5</p>
-              <p><strong>Reporting period activity factors:</strong> Active work 1.0, Limited admin only 0.5, No activity 0.0</p>
-            </div>
-            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded text-xs text-gray-700">
-              <strong>Example:</strong> Co-Lead with active work → 5 × 0.7 × 1.0 = 3.50 points.
-            </div>
-            <div id="research_live_preview" class="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs text-gray-700"></div>
-          </div>
+          ${createCalculationPanel({
+            sectionKey: 'research',
+            title: '🧮 Research Workload Proxy',
+            formula: 'entry_points = base_points × role_factor × activity_factor',
+            baseTableHtml: '<p><strong>Base points:</strong> Research project item = 5</p>',
+            factorTableHtml: '<p><strong>Role factors:</strong> Lead 1.0, Co-Lead 0.7, Member 0.5</p><p><strong>Activity in period factors:</strong> Active work 1.0, Limited admin only 0.5, No activity 0.0</p>',
+            workedExampleHtml: '<strong>Example:</strong> Co-Lead with active work → 5 × 0.7 × 1.0 = 3.50 points.',
+            notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>Only work during the selected reporting period should be claimed.</li><li>Project prestige or funding size does not affect points.</li><li>Status such as ongoing or completed does not affect points.</li></ul>'
+          })}
 
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 class="heading-font text-2xl font-bold mb-6">🔬 Research Projects</h2>
@@ -3217,16 +3274,25 @@ function getSubmitToken() {
                 <div class="md:col-span-2"><label for="research-title" class="block text-sm font-semibold text-gray-700 mb-2">Project Title *</label><input type="text" id="research-title" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="research-grant-code" class="block text-sm font-semibold text-gray-700 mb-2">Grant Code *</label><input type="text" id="research-grant-code" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="research-role" class="block text-sm font-semibold text-gray-700 mb-2">Your Role *</label><select id="research-role" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select Role</option><option value="lead">Lead Researcher</option><option value="co-lead">Co-Lead Researcher</option><option value="member">Research Member</option></select></div>
-                <div><label for="research-amount" class="block text-sm font-semibold text-gray-700 mb-2">Grant Amount (RM) *</label><input type="number" id="research-amount" required min="0" step="0.01" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-                <div><label for="research-status" class="block text-sm font-semibold text-gray-700 mb-2">Status (descriptive only) *</label><select id="research-status" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="ongoing">Ongoing</option><option value="completed">Completed</option><option value="pending">Pending Approval</option></select></div>
-                <div><label for="research-activity" class="block text-sm font-semibold text-gray-700 mb-2">Reporting Period Activity *</label><select id="research-activity" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select Activity</option><option value="active">Active work in reporting period (1.0)</option><option value="limited_admin">Limited admin only in reporting period (0.5)</option><option value="none">No activity in reporting period (0.0)</option></select></div>
+                <div><label for="research-status" class="block text-sm font-semibold text-gray-700 mb-2">Status (descriptive only)</label><select id="research-status" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="ongoing">Ongoing</option><option value="completed">Completed</option><option value="pending">Pending Approval</option></select></div>
+                <div><label for="research-activity" class="block text-sm font-semibold text-gray-700 mb-2">Activity in Reporting Period *</label><select id="research-activity" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select Activity</option><option value="active">Active work in reporting period (1.0)</option><option value="limited_admin">Limited admin only (0.5)</option><option value="none">No activity (0.0)</option></select></div>
+                <div><label for="research-amount" class="block text-sm font-semibold text-gray-700 mb-2">Grant Amount (descriptive only)</label><input type="number" id="research-amount" min="0" step="0.01" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="research-year" class="block text-sm font-semibold text-gray-700 mb-2">Start Year *</label><input type="number" id="research-year" required min="2000" max="2035" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
               </div>
-              <div class="flex justify-end"><button type="submit" id="save-research-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add Research Item</button></div>
+              <div class="flex justify-end"><button type="submit" id="save-research-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add</button></div>
             </form>
           </div>
 
-          <div class="flex justify-between"><button onclick="navigateToSection('supervision')" class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300">Previous</button><button onclick="navigateToSection('publications')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Next</button></div>
+          ${createSavedList({
+            title: 'Your Research Items',
+            items: projects,
+            renderItem: (item) => {
+              const b = getResearchEntryBreakdown(item);
+              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p><strong>${escapeHtml(item.research_title || '-')}</strong></p><p>Role: ${escapeHtml(item.research_role || '-')}</p><p>Activity in period: ${escapeHtml(item.research_activity || '-')}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deleteResearch('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
+            }
+          })}
+
+          ${createNavigationRow({ previous: { id: 'supervision', label: 'Supervision' }, next: { id: 'publications', label: 'Publications' } })}
         </div>
       `;
     }
@@ -3242,102 +3308,109 @@ function getSubmitToken() {
     }
 
     function renderResearchLivePreview() {
-      const preview = document.getElementById('research_live_preview');
-      if (!preview) return;
       const saved = getRecordsBySection('research');
       const savedTotal = Math.round(saved.reduce((sum, item) => sum + calculateResearchScore(item), 0) * 100) / 100;
-      const draft = {
-        research_role: document.getElementById('research-role')?.value || '',
-        research_activity: document.getElementById('research-activity')?.value || ''
-      };
-      const draftBreakdown = getResearchEntryBreakdown(draft);
-      const withDraft = Math.round((savedTotal + draftBreakdown.entry_points) * 100) / 100;
-      preview.innerHTML = `<p class="font-semibold text-gray-900 mb-2">Live preview</p><p>Draft item points: ${draftBreakdown.base_points} × ${draftBreakdown.role_factor} × ${draftBreakdown.activity_factor} = <strong>${draftBreakdown.entry_points.toFixed(2)}</strong></p><p><strong>Saved total:</strong> ${savedTotal.toFixed(2)}</p><p><strong>Saved + draft total:</strong> ${withDraft.toFixed(2)}</p>`;
+      const draft = getResearchDraftInputState();
+      const breakdown = getResearchEntryBreakdown(draft);
+      renderLivePreview({ sectionKey: 'research', breakdown, equationText: `${breakdown.base_points} × ${breakdown.role_factor} × ${breakdown.activity_factor}`, savedTotal });
     }
 
     async function saveResearch(event) {
       event.preventDefault();
-      
       if (allRecords.length >= 999) {
         showToast('Maximum limit of 999 records reached', 'error');
         return;
       }
-      
+
       const btn = document.getElementById('save-research-btn');
+      const form = document.getElementById('research-form');
+      if (!form || !form.reportValidity()) return;
+
+      const draft = getResearchDraftInputState();
+      const breakdown = getResearchEntryBreakdown(draft);
+      const researchData = { section: 'research', ...draft, entry_points: breakdown.entry_points, created_at: new Date().toISOString() };
+
       btn.disabled = true;
       btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
-      
-      const researchData = {
-        section: 'research',
-        research_title: document.getElementById('research-title').value,
-        research_grant_code: document.getElementById('research-grant-code').value,
-        research_role: document.getElementById('research-role').value,
-        research_amount: parseFloat(document.getElementById('research-amount').value),
-        research_status: document.getElementById('research-status').value,
-        research_activity: document.getElementById('research-activity').value,
-        research_year: parseInt(document.getElementById('research-year').value),
-        created_at: new Date().toISOString()
-      };
-      
       const result = await window.dataSdk.create(researchData);
-      
       btn.disabled = false;
-      btn.innerHTML = 'Add Research Item';
-      
+      btn.innerHTML = 'Add';
+
       if (result.isOk) {
         showToast('Research project added successfully!');
-        document.getElementById('research-form').reset();
-        renderResearchLivePreview();
+        form.reset();
+        renderSection('research');
       } else {
         showToast('Failed to add research project', 'error');
       }
     }
 
-    async function deleteResearchProject(backendId) {
-      const project = allRecords.find(r => r.__backendId === backendId);
-      if (!project) return;
-      
-      const result = await window.dataSdk.delete(project);
-      
+    async function deleteResearch(backendId) {
+      const research = allRecords.find(r => r.__backendId === backendId);
+      if (!research) return;
+      const result = await window.dataSdk.delete(research);
       if (result.isOk) {
         showToast('Research project deleted successfully!');
+        renderResearchLivePreview();
       } else {
         showToast('Failed to delete research project', 'error');
       }
     }
 
+    function getPublicationsDraftInputState() {
+      return {
+        pub_title: document.getElementById('pub-title')?.value || '',
+        pub_type: document.getElementById('pub-type')?.value || '',
+        pub_stage: document.getElementById('pub-stage')?.value || '',
+        pub_index: document.getElementById('pub-index')?.value || '',
+        pub_position: document.getElementById('pub-position')?.value || '',
+        pub_venue: document.getElementById('pub-venue')?.value || '',
+        pub_year: document.getElementById('pub-year')?.value || '',
+        pub_status: document.getElementById('pub-status')?.value || ''
+      };
+    }
+
     function renderPublications() {
       const publications = getRecordsBySection('publications');
-
       return `
         <div class="space-y-6">
-          <div class="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl shadow-sm border-2 border-emerald-200 p-6">
-            <h3 class="font-bold text-lg text-emerald-900 mb-2">🧮 Scholarly Writing and Publications</h3>
-            <p class="text-xs text-gray-700 mb-3">Points reflect writing work completed in the reporting period (workload proxy, not publication quality/prestige).</p>
-            <div class="bg-white rounded-lg p-4 mb-4 text-xs text-gray-700 space-y-2">
-              <p><strong>item_points = base_points_by_item_type × stage_factor</strong></p>
-              <p><strong>Base points:</strong> Journal manuscript 10, Conference paper 6, Book chapter 8, Proceeding 5, Other 3.</p>
-              <p><strong>Writing stage factors:</strong> Drafting 1.0, Revising 0.8, Responding to reviewers 0.9, Proofing/final checks 0.5, No activity 0.0.</p>
-            </div>
-            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded text-xs text-gray-700"><strong>Example:</strong> Journal manuscript in revising stage: 10 × 0.8 = 8.00 points.</div>
-            <div id="publications_live_preview" class="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs text-gray-700"></div>
-          </div>
+          ${createCalculationPanel({
+            sectionKey: 'publications',
+            title: '🧮 Publication Workload Proxy',
+            formula: 'entry_points = base_points × stage_factor',
+            baseTableHtml: '<p><strong>Base points by item type:</strong> Journal manuscript 10, Conference paper 6, Book chapter 8, Proceeding 5, Other 3</p>',
+            factorTableHtml: '<p><strong>Writing stage factors:</strong> Drafting 1.0, Revising 0.8, Responding to reviewers 0.9, Proofing 0.5, No activity 0.0</p>',
+            workedExampleHtml: '<strong>Example:</strong> Journal manuscript under revision → 10 × 0.8 = 8.00 points.',
+            notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>Points represent writing work done in the reporting period.</li><li>Journal indexing, quartile, and acceptance do not change points.</li></ul>'
+          })}
+
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 class="heading-font text-2xl font-bold mb-6">📝 Scholarly Writing and Publications</h2>
+            <h2 class="heading-font text-2xl font-bold mb-6">📄 Publications</h2>
             <form id="publication-form" onsubmit="savePublication(event)" class="space-y-6">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="md:col-span-2"><label for="pub-title" class="block text-sm font-semibold text-gray-700 mb-2">Writing Item Title *</label><input type="text" id="pub-title" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div class="md:col-span-2"><label for="pub-title" class="block text-sm font-semibold text-gray-700 mb-2">Title *</label><input id="pub-title" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="pub-type" class="block text-sm font-semibold text-gray-700 mb-2">Item Type *</label><select id="pub-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select Type</option><option value="journal">Journal manuscript</option><option value="conference">Conference paper</option><option value="chapter">Book chapter</option><option value="proceeding">Proceeding</option><option value="other">Other</option></select></div>
-                <div><label for="pub-stage" class="block text-sm font-semibold text-gray-700 mb-2">Writing Stage *</label><select id="pub-stage" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select Stage</option><option value="drafting">Drafting (1.0)</option><option value="revising">Revising (0.8)</option><option value="responding_reviewers">Responding to reviewers (0.9)</option><option value="proofing">Proofing and final checks (0.5)</option><option value="no_activity">No activity in reporting period (0.0)</option></select></div>
-                <div><label for="pub-index" class="block text-sm font-semibold text-gray-700 mb-2">Indexing (descriptive only) *</label><select id="pub-index" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="Q1">Q1</option><option value="Q2">Q2</option><option value="Q3">Q3</option><option value="Q4">Q4</option><option value="Scopus">Scopus</option><option value="WoS">Web of Science</option><option value="Other">Other</option></select></div>
-                <div><label for="pub-position" class="block text-sm font-semibold text-gray-700 mb-2">Author Position (descriptive only) *</label><select id="pub-position" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="first">First Author</option><option value="corresponding">Corresponding Author</option><option value="co-author">Co-Author</option></select></div>
-                <div><label for="pub-venue" class="block text-sm font-semibold text-gray-700 mb-2">Journal/Conference Name *</label><input type="text" id="pub-venue" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-                <div><label for="pub-year" class="block text-sm font-semibold text-gray-700 mb-2">Year *</label><input type="number" id="pub-year" required min="2000" max="2035" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="pub-stage" class="block text-sm font-semibold text-gray-700 mb-2">Writing Stage *</label><select id="pub-stage" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select Stage</option><option value="drafting">Drafting (1.0)</option><option value="revising">Revising (0.8)</option><option value="responding_reviewers">Responding to reviewers (0.9)</option><option value="proofing">Proofing (0.5)</option><option value="no_activity">No activity (0.0)</option></select></div>
+                <div><label for="pub-index" class="block text-sm font-semibold text-gray-700 mb-2">Indexing (descriptive only)</label><input id="pub-index" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="pub-position" class="block text-sm font-semibold text-gray-700 mb-2">Author Position (descriptive only)</label><input id="pub-position" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="pub-venue" class="block text-sm font-semibold text-gray-700 mb-2">Venue *</label><input id="pub-venue" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="pub-year" class="block text-sm font-semibold text-gray-700 mb-2">Year *</label><input id="pub-year" required type="number" min="2000" max="2035" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="pub-status" class="block text-sm font-semibold text-gray-700 mb-2">Status (descriptive only)</label><input id="pub-status" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
               </div>
-              <div class="flex justify-end"><button type="submit" id="save-pub-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add Publication Item</button></div>
+              <div class="flex justify-end"><button type="submit" id="save-publication-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add</button></div>
             </form>
           </div>
-          <div class="flex justify-between"><button onclick="navigateToSection('research')" class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300">Previous</button><button onclick="navigateToSection('administration')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Next</button></div>
+
+          ${createSavedList({
+            title: 'Your Publications Items',
+            items: publications,
+            renderItem: (item) => {
+              const b = getPublicationEntryBreakdown(item);
+              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Item type: <strong>${escapeHtml(item.pub_type || '-')}</strong></p><p>Writing stage: ${escapeHtml(item.pub_stage || '-')}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deletePublication('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
+            }
+          })}
+
+          ${createNavigationRow({ previous: { id: 'research', label: 'Research' }, next: { id: 'administration', label: 'Admin Leadership' } })}
         </div>
       `;
     }
@@ -3353,50 +3426,33 @@ function getSubmitToken() {
     }
 
     function renderPublicationsLivePreview() {
-      const preview = document.getElementById('publications_live_preview');
-      if (!preview) return;
       const saved = getRecordsBySection('publications');
       const savedTotal = Math.round(saved.reduce((sum, item) => sum + calculatePublicationScore(item), 0) * 100) / 100;
-      const draft = { pub_type: document.getElementById('pub-type')?.value || '', pub_stage: document.getElementById('pub-stage')?.value || '' };
-      const draftBreakdown = getPublicationEntryBreakdown(draft);
-      const combined = Math.round((savedTotal + draftBreakdown.entry_points) * 100) / 100;
-      preview.innerHTML = `<p class="font-semibold text-gray-900 mb-2">Live preview</p><p>Draft item points: ${draftBreakdown.base_points} × ${draftBreakdown.stage_factor} = <strong>${draftBreakdown.entry_points.toFixed(2)}</strong></p><p><strong>Saved total:</strong> ${savedTotal.toFixed(2)}</p><p><strong>Saved + draft total:</strong> ${combined.toFixed(2)}</p>`;
+      const breakdown = getPublicationEntryBreakdown(getPublicationsDraftInputState());
+      renderLivePreview({ sectionKey: 'publications', breakdown, equationText: `${breakdown.base_points} × ${breakdown.stage_factor}`, savedTotal });
     }
 
     async function savePublication(event) {
       event.preventDefault();
-      
       if (allRecords.length >= 999) {
         showToast('Maximum limit of 999 records reached', 'error');
         return;
       }
-      
-      const btn = document.getElementById('save-pub-btn');
+      const btn = document.getElementById('save-publication-btn');
+      const form = document.getElementById('publication-form');
+      if (!form || !form.reportValidity()) return;
+      const draft = getPublicationsDraftInputState();
+      const breakdown = getPublicationEntryBreakdown(draft);
+      const publicationData = { section: 'publications', ...draft, entry_points: breakdown.entry_points, created_at: new Date().toISOString() };
       btn.disabled = true;
       btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
-      
-      const publicationData = {
-        section: 'publications',
-        pub_title: document.getElementById('pub-title').value,
-        pub_type: document.getElementById('pub-type').value,
-        pub_index: document.getElementById('pub-index').value,
-        pub_venue: document.getElementById('pub-venue').value,
-        pub_position: document.getElementById('pub-position').value,
-        pub_year: parseInt(document.getElementById('pub-year').value),
-        pub_stage: document.getElementById('pub-stage').value,
-        pub_status: 'descriptive',
-        created_at: new Date().toISOString()
-      };
-      
       const result = await window.dataSdk.create(publicationData);
-      
       btn.disabled = false;
-      btn.innerHTML = 'Add Publication Item';
-      
+      btn.innerHTML = 'Add';
       if (result.isOk) {
         showToast('Publication added successfully!');
-        document.getElementById('publication-form').reset();
-        renderPublicationsLivePreview();
+        form.reset();
+        renderSection('publications');
       } else {
         showToast('Failed to add publication', 'error');
       }
@@ -3405,46 +3461,65 @@ function getSubmitToken() {
     async function deletePublication(backendId) {
       const publication = allRecords.find(r => r.__backendId === backendId);
       if (!publication) return;
-      
       const result = await window.dataSdk.delete(publication);
-      
       if (result.isOk) {
         showToast('Publication deleted successfully!');
+        renderPublicationsLivePreview();
       } else {
         showToast('Failed to delete publication', 'error');
       }
     }
 
+    function getAdministrationDraftInputState() {
+      return {
+        admin_position: document.getElementById('admin-position')?.value || '',
+        admin_faculty: document.getElementById('admin-faculty')?.value || '',
+        admin_start_date: document.getElementById('admin-start-date')?.value || '',
+        admin_end_date: document.getElementById('admin-end-date')?.value || '',
+        admin_allowance: document.getElementById('admin-allowance')?.value || ''
+      };
+    }
+
     function renderAdministration() {
-      const positions = getRecordsBySection('administration');
+      const adminEntries = getRecordsBySection('administration');
       return `
-      <div class="space-y-6">
-        <div class="bg-gradient-to-r from-rose-50 to-red-50 rounded-xl shadow-sm border-2 border-rose-200 p-6">
-          <h3 class="font-bold text-lg text-rose-900 mb-3">🧮 Admin Leadership Workload Proxy</h3>
-          <div class="bg-white rounded-lg p-4 mb-4 text-xs text-gray-700 space-y-2">
-            <p><strong>position_points = base_position_points × active_fraction</strong></p>
-            <p><strong>Base points:</strong> Dean 20, Deputy Dean 15, Centre Director 12, Head of Programme 10, Postgraduate Coordinator 8, Programme Coordinator 6, Other 5.</p>
-            <p><strong>active_fraction = overlap_days / reporting_days</strong>, clamped 0 to 1 using role start/end and profile reporting period dates.</p>
+        <div class="space-y-6">
+          ${createCalculationPanel({
+            sectionKey: 'administration',
+            title: '🧮 Admin Leadership Workload',
+            formula: 'entry_points = base_points × active_fraction',
+            baseTableHtml: '<p><strong>Base points by position:</strong> Dean 20, Deputy Dean 15, Centre Director 12, Head of Programme 10, Postgraduate Coordinator 8, Programme Coordinator 6, Other 5</p>',
+            factorTableHtml: '<p><strong>Active fraction:</strong> overlap_days ÷ reporting_days (clamped 0 to 1).</p>',
+            workedExampleHtml: '<strong>Example:</strong> Head of Programme with 183 active days in a 366-day reporting period → 10 × (183/366) = 5.00 points.',
+            notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>Points are prorated by active days within reporting period.</li><li>Allowance does not affect points.</li></ul>'
+          })}
+
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="heading-font text-2xl font-bold mb-6">🏛️ Admin Leadership</h2>
+            <form id="administration-form" onsubmit="saveAdministration(event)" class="space-y-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div><label for="admin-position" class="block text-sm font-semibold text-gray-700 mb-2">Position *</label><select id="admin-position" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Dean">Dean</option><option value="Deputy Dean">Deputy Dean</option><option value="Centre Director">Centre Director</option><option value="Head of Programme">Head of Programme</option><option value="Postgraduate Coordinator">Postgraduate Coordinator</option><option value="Programme Coordinator">Programme Coordinator</option><option value="Other">Other</option></select></div>
+                <div><label for="admin-faculty" class="block text-sm font-semibold text-gray-700 mb-2">Unit/Faculty *</label><input id="admin-faculty" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="admin-start-date" class="block text-sm font-semibold text-gray-700 mb-2">Start Date *</label><input id="admin-start-date" type="date" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="admin-end-date" class="block text-sm font-semibold text-gray-700 mb-2">End Date</label><input id="admin-end-date" type="date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="admin-allowance" class="block text-sm font-semibold text-gray-700 mb-2">Allowance (descriptive only)</label><input id="admin-allowance" type="number" min="0" step="0.01" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+              </div>
+              <div class="flex justify-end"><button type="submit" id="save-administration-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add</button></div>
+            </form>
           </div>
-          <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded text-xs text-gray-700"><strong>Example:</strong> Head of Programme (10 pts), active for 183 of 366 reporting days: 10 × (183/366) = 5.00 points.</div>
-          <div id="administration_live_preview" class="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs text-gray-700"></div>
+
+          ${createSavedList({
+            title: 'Your Admin Leadership Items',
+            items: adminEntries,
+            renderItem: (item) => {
+              const b = getAdministrationEntryBreakdown(item);
+              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p><strong>${escapeHtml(item.admin_position || '-')}</strong></p><p>Start: ${escapeHtml(item.admin_start_date || '-')}</p><p>End: ${escapeHtml(item.admin_end_date || '-')}</p><p>Active fraction: ${b.active_fraction.toFixed(3)}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deleteAdministration('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
+            }
+          })}
+
+          ${createNavigationRow({ previous: { id: 'publications', label: 'Publications' }, next: { id: 'admin_duties', label: 'Admin Duties' } })}
         </div>
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 class="heading-font text-2xl font-bold mb-6">🏛️ Administrative Leadership Positions</h2>
-          <form id="administration-form" onsubmit="saveAdministration(event)" class="space-y-6">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div class="md:col-span-2"><label for="admin-position" class="block text-sm font-semibold text-gray-700 mb-2">Leadership Position *</label><select id="admin-position" required onchange="toggleOtherAdminPositionField()" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select Position</option><option value="Dean">Dean</option><option value="Deputy Dean">Deputy Dean</option><option value="Centre Director">Centre Director</option><option value="Head of Programme">Head of Programme</option><option value="Postgraduate Coordinator">Postgraduate Coordinator</option><option value="Programme Coordinator">Programme Coordinator</option><option value="Other">Other Position</option></select></div>
-              <div id="other-admin-position-field" class="md:col-span-2" style="display:none;"><label for="admin-other-position" class="block text-sm font-semibold text-gray-700 mb-2">Specify Position *</label><input type="text" id="admin-other-position" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-              <div><label for="admin-faculty" class="block text-sm font-semibold text-gray-700 mb-2">Faculty/Department/Unit *</label><input type="text" id="admin-faculty" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-              <div><label for="admin-allowance" class="block text-sm font-semibold text-gray-700 mb-2">Monthly Allowance (descriptive only)</label><input type="number" id="admin-allowance" min="0" step="0.01" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-              <div><label for="admin-start-date" class="block text-sm font-semibold text-gray-700 mb-2">Start Date *</label><input type="date" id="admin-start-date" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-              <div><label for="admin-end-date" class="block text-sm font-semibold text-gray-700 mb-2">End Date</label><input type="date" id="admin-end-date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-            </div>
-            <div class="flex justify-end"><button type="submit" id="save-administration-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add Leadership Item</button></div>
-          </form>
-        </div>
-        <div class="flex justify-between"><button onclick="navigateToSection('publications')" class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300">Previous</button><button onclick="navigateToSection('admin_duties')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Next</button></div>
-      </div>`;
+      `;
     }
 
     function setupAdministrationEventListeners() {
@@ -3458,307 +3533,482 @@ function getSubmitToken() {
     }
 
     function renderAdministrationLivePreview() {
-      const preview = document.getElementById('administration_live_preview');
-      if (!preview) return;
       const saved = getRecordsBySection('administration');
       const savedTotal = Math.round(saved.reduce((sum, item) => sum + calculateAdministrationScore(item), 0) * 100) / 100;
-      const draft = { admin_position: document.getElementById('admin-position')?.value || '', admin_start_date: document.getElementById('admin-start-date')?.value || '', admin_end_date: document.getElementById('admin-end-date')?.value || '' };
-      const bd = getAdministrationEntryBreakdown(draft);
-      preview.innerHTML = `<p class="font-semibold text-gray-900 mb-2">Live preview</p><p>Draft item points: ${bd.base_points} × ${bd.active_fraction.toFixed(3)} = <strong>${bd.entry_points.toFixed(2)}</strong></p><p><strong>Saved total:</strong> ${savedTotal.toFixed(2)}</p><p><strong>Saved + draft total:</strong> ${(savedTotal + bd.entry_points).toFixed(2)}</p>`;
+      const breakdown = getAdministrationEntryBreakdown(getAdministrationDraftInputState());
+      renderLivePreview({ sectionKey: 'administration', breakdown, equationText: `${breakdown.base_points} × ${breakdown.active_fraction.toFixed(3)}`, savedTotal });
     }
 
     async function saveAdministration(event) {
       event.preventDefault();
-      
       if (allRecords.length >= 999) {
         showToast('Maximum limit of 999 records reached', 'error');
         return;
       }
-      
       const btn = document.getElementById('save-administration-btn');
+      const form = document.getElementById('administration-form');
+      if (!form || !form.reportValidity()) return;
+      const draft = getAdministrationDraftInputState();
+      const breakdown = getAdministrationEntryBreakdown(draft);
+      const administrationData = { section: 'administration', ...draft, entry_points: breakdown.entry_points, created_at: new Date().toISOString() };
       btn.disabled = true;
       btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
-      
-      const position = document.getElementById('admin-position').value;
-      
-      const administrationData = {
-        section: 'administration',
-        admin_position: position,
-        admin_other_position: position === 'Other' ? document.getElementById('admin-other-position').value : '',
-        admin_faculty: document.getElementById('admin-faculty').value,
-        admin_allowance: parseFloat(document.getElementById('admin-allowance').value) || null,
-        admin_start_date: document.getElementById('admin-start-date').value,
-        admin_end_date: document.getElementById('admin-end-date').value,
-        created_at: new Date().toISOString()
-      };
-      
       const result = await window.dataSdk.create(administrationData);
-      
       btn.disabled = false;
-      btn.innerHTML = 'Add Leadership Item';
-      
+      btn.innerHTML = 'Add';
       if (result.isOk) {
-        showToast('Leadership position added successfully!');
-        document.getElementById('administration-form').reset();
-        renderAdministrationLivePreview();
-        document.getElementById('other-admin-position-field').style.display = 'none';
+        showToast('Administration role added successfully!');
+        form.reset();
+        renderSection('administration');
       } else {
-        showToast('Failed to add leadership position', 'error');
+        showToast('Failed to add administration role', 'error');
       }
     }
 
     async function deleteAdministration(backendId) {
       const admin = allRecords.find(r => r.__backendId === backendId);
       if (!admin) return;
-      
       const result = await window.dataSdk.delete(admin);
-      
       if (result.isOk) {
-        showToast('Leadership position deleted successfully!');
+        showToast('Administration role deleted successfully!');
+        renderAdministrationLivePreview();
       } else {
-        showToast('Failed to delete leadership position', 'error');
+        showToast('Failed to delete administration role', 'error');
       }
     }
 
-    function renderAdminDuties() {
-      return `
-      <div class="space-y-6">
-        <div class="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl shadow-sm border-2 border-amber-200 p-6">
-          <h3 class="font-bold text-lg text-amber-900 mb-3">🧮 Admin Duties Workload Proxy</h3>
-          <div class="bg-white rounded-lg p-4 mb-4 text-xs text-gray-700 space-y-2">
-            <p><strong>item_points = base_points_by_duty_type × frequency_factor</strong></p>
-            <p><strong>Frequency factors:</strong> Ongoing in reporting period 1.0, Per semester 0.6, One-time event 0.3.</p>
-          </div>
-          <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded text-xs text-gray-700"><strong>Example:</strong> Curriculum Development (6) per semester (0.6) = 3.60 points.</div>
-          <div id="admin_duties_live_preview" class="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs"></div>
-        </div>
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 class="heading-font text-2xl font-bold mb-6">📋 Administrative Duties</h2>
-          <form id="duty-form" onsubmit="saveAdminDuty(event)" class="space-y-6">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div><label for="duty-type" class="block text-sm font-semibold text-gray-700 mb-2">Duty Type *</label><select id="duty-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Accreditation Work">Accreditation Work</option><option value="Curriculum Development">Curriculum Development</option><option value="Committee Chair">Committee Chair</option><option value="Event Organizer">Event Organizer</option><option value="Exam Coordinator">Exam Coordinator</option><option value="Committee Member">Committee Member</option><option value="Other">Other</option></select></div>
-              <div><label for="duty-frequency" class="block text-sm font-semibold text-gray-700 mb-2">Frequency *</label><select id="duty-frequency" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Ongoing in Reporting Period">Ongoing in reporting period (1.0)</option><option value="Per Semester">Per semester (0.6)</option><option value="One-Time Event">One-time event (0.3)</option></select></div>
-              <div class="md:col-span-2"><label for="duty-title" class="block text-sm font-semibold text-gray-700 mb-2">Duty Title *</label><input id="duty-title" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-              <div><label for="duty-year" class="block text-sm font-semibold text-gray-700 mb-2">Year *</label><input id="duty-year" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-            </div>
-            <div class="flex justify-end"><button type="submit" id="save-duty-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add Duty Item</button></div>
-          </form>
-        </div>
-        <div class="flex justify-between"><button onclick="navigateToSection('administration')" class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300">Previous</button><button onclick="navigateToSection('service')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Next</button></div>
-      </div>`;
+    function getAdminDutiesDraftInputState() {
+      return {
+        duty_type: document.getElementById('duty-type')?.value || '',
+        duty_name: document.getElementById('duty-name')?.value || '',
+        duty_frequency: document.getElementById('duty-frequency')?.value || '',
+        duty_year: document.getElementById('duty-year')?.value || ''
+      };
     }
 
-    function setupAdminDutiesEventListeners() { renderAdminDutiesLivePreview(); const f=document.getElementById('duty-form'); if(!f) return; f.querySelectorAll('input,select').forEach(el=>{el.addEventListener('input',renderAdminDutiesLivePreview); el.addEventListener('change',renderAdminDutiesLivePreview);}); }
-    function renderAdminDutiesLivePreview() { const p=document.getElementById('admin_duties_live_preview'); if(!p) return; const saved=getRecordsBySection('admin_duties'); const savedTotal=Math.round(saved.reduce((a,b)=>a+calculateAdminDutyScore(b),0)*100)/100; const bd=getAdminDutyEntryBreakdown({duty_type:document.getElementById('duty-type')?.value||'',duty_frequency:document.getElementById('duty-frequency')?.value||''}); p.innerHTML=`<p class="font-semibold mb-2">Live preview</p><p>Draft item points: ${bd.base_points} × ${bd.frequency_factor} = <strong>${bd.entry_points.toFixed(2)}</strong></p><p><strong>Saved total:</strong> ${savedTotal.toFixed(2)}</p><p><strong>Saved + draft total:</strong> ${(savedTotal+bd.entry_points).toFixed(2)}</p>`; }
+    function renderAdminDuties() {
+      const duties = getRecordsBySection('admin_duties');
+      return `
+        <div class="space-y-6">
+          ${createCalculationPanel({
+            sectionKey: 'admin_duties',
+            title: '🧮 Admin Duties Workload',
+            formula: 'entry_points = base_points × frequency_factor',
+            baseTableHtml: '<p><strong>Base points by duty type:</strong> Accreditation Work 8, Curriculum Development 6, Committee Chair 5, Event Organizer 4, Exam Coordinator 3, Committee Member 2, Other 2</p>',
+            factorTableHtml: '<p><strong>Frequency factors:</strong> Ongoing in reporting period 1.0, Per Semester 0.6, One-Time Event 0.3</p>',
+            workedExampleHtml: '<strong>Example:</strong> Curriculum development done per semester → 6 × 0.6 = 3.60 points.',
+            notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>Claim duties performed in the reporting period.</li><li>Do not split one duty into multiple duplicates to inflate points.</li></ul>'
+          })}
+
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="heading-font text-2xl font-bold mb-6">📋 Admin Duties</h2>
+            <form id="duty-form" onsubmit="saveAdminDuty(event)" class="space-y-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div><label for="duty-type" class="block text-sm font-semibold text-gray-700 mb-2">Duty Type *</label><select id="duty-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Accreditation Work">Accreditation Work</option><option value="Curriculum Development">Curriculum Development</option><option value="Committee Chair">Committee Chair</option><option value="Event Organizer">Event Organizer</option><option value="Exam Coordinator">Exam Coordinator</option><option value="Committee Member">Committee Member</option><option value="Other">Other</option></select></div>
+                <div><label for="duty-frequency" class="block text-sm font-semibold text-gray-700 mb-2">Frequency *</label><select id="duty-frequency" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Ongoing in Reporting Period">Ongoing in reporting period</option><option value="Per Semester">Per semester</option><option value="One-Time Event">One-time event</option></select></div>
+                <div class="md:col-span-2"><label for="duty-name" class="block text-sm font-semibold text-gray-700 mb-2">Duty Name *</label><input id="duty-name" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="duty-year" class="block text-sm font-semibold text-gray-700 mb-2">Year *</label><input id="duty-year" required type="number" min="2000" max="2035" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+              </div>
+              <div class="flex justify-end"><button type="submit" id="save-duty-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add</button></div>
+            </form>
+          </div>
+
+          ${createSavedList({
+            title: 'Your Admin Duties Items',
+            items: duties,
+            renderItem: (item) => {
+              const b = getAdminDutyEntryBreakdown(item);
+              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Duty type: <strong>${escapeHtml(item.duty_type || '-')}</strong></p><p>Frequency: ${escapeHtml(item.duty_frequency || '-')}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deleteAdminDuty('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
+            }
+          })}
+
+          ${createNavigationRow({ previous: { id: 'administration', label: 'Admin Leadership' }, next: { id: 'service', label: 'Service' } })}
+        </div>
+      `;
+    }
+
+    function setupAdminDutiesEventListeners() {
+      renderAdminDutiesLivePreview();
+      const form = document.getElementById('duty-form');
+      if (!form) return;
+      form.querySelectorAll('input, select').forEach((field) => {
+        field.addEventListener('input', renderAdminDutiesLivePreview);
+        field.addEventListener('change', renderAdminDutiesLivePreview);
+      });
+    }
+
+    function renderAdminDutiesLivePreview() {
+      const saved = getRecordsBySection('admin_duties');
+      const savedTotal = Math.round(saved.reduce((sum, item) => sum + calculateAdminDutyScore(item), 0) * 100) / 100;
+      const breakdown = getAdminDutyEntryBreakdown(getAdminDutiesDraftInputState());
+      renderLivePreview({ sectionKey: 'admin_duties', breakdown, equationText: `${breakdown.base_points} × ${breakdown.frequency_factor}`, savedTotal });
+    }
 
     async function saveAdminDuty(event) {
       event.preventDefault();
-      
       if (allRecords.length >= 999) {
         showToast('Maximum limit of 999 records reached', 'error');
         return;
       }
-      
       const btn = document.getElementById('save-duty-btn');
+      const form = document.getElementById('duty-form');
+      if (!form || !form.reportValidity()) return;
+      const draft = getAdminDutiesDraftInputState();
+      const breakdown = getAdminDutyEntryBreakdown(draft);
+      const dutyData = { section: 'admin_duties', ...draft, entry_points: breakdown.entry_points, created_at: new Date().toISOString() };
       btn.disabled = true;
       btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
-      
-      const dutyData = {
-        section: 'admin_duties',
-        duty_type: document.getElementById('duty-type').value,
-        duty_name: document.getElementById('duty-name').value,
-        duty_frequency: document.getElementById('duty-frequency').value,
-        duty_year: document.getElementById('duty-year').value,
-        duty_notes: document.getElementById('duty-notes').value,
-        created_at: new Date().toISOString()
-      };
-      
       const result = await window.dataSdk.create(dutyData);
-      
       btn.disabled = false;
-      btn.innerHTML = 'Add Duty Item';
-      
+      btn.innerHTML = 'Add';
       if (result.isOk) {
-        showToast('Administrative duty added successfully!');
-        document.getElementById('admin-duty-form').reset();
+        showToast('Duty added successfully!');
+        form.reset();
+        renderSection('admin_duties');
       } else {
-        showToast('Failed to add administrative duty', 'error');
+        showToast('Failed to add duty', 'error');
       }
     }
 
     async function deleteAdminDuty(backendId) {
       const duty = allRecords.find(r => r.__backendId === backendId);
       if (!duty) return;
-      
       const result = await window.dataSdk.delete(duty);
-      
       if (result.isOk) {
-        showToast('Administrative duty deleted successfully!');
+        showToast('Duty deleted successfully!');
+        renderAdminDutiesLivePreview();
       } else {
-        showToast('Failed to delete administrative duty', 'error');
+        showToast('Failed to delete duty', 'error');
       }
     }
 
-    function renderService() {
-      return `
-      <div class="space-y-6"><div class="bg-gradient-to-r from-cyan-50 to-blue-50 rounded-xl shadow-sm border-2 border-cyan-200 p-6"><h3 class="font-bold text-lg text-cyan-900 mb-3">🧮 Service Workload Proxy</h3><div class="bg-white rounded-lg p-4 mb-4 text-xs space-y-2"><p><strong>service_points = base_points_by_service_type × duration_factor</strong></p><p><strong>Duration bands:</strong> &lt;2h =0.5, 2-6h =1.0, 6-15h =1.5, &gt;15h =2.0.</p></div><div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded text-xs">Example: Public Lecture (6) with 8 hours → 6 × 1.5 = 9.00 points.</div><div id="service_live_preview" class="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs"></div></div>
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"><h2 class="heading-font text-2xl font-bold mb-6">🤝 Service & Engagement</h2><form id="service-form" onsubmit="saveService(event)" class="space-y-6"><div class="grid grid-cols-1 md:grid-cols-2 gap-6"><div><label for="service-type" class="block text-sm font-semibold text-gray-700 mb-2">Service Type *</label><select id="service-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Community Outreach">Community Outreach</option><option value="Volunteer Teaching">Volunteer Teaching</option><option value="Public Lecture">Public Lecture</option><option value="Consulting">Consulting</option><option value="Mentorship">Mentorship</option><option value="Other">Other</option></select></div><div><label for="service-scope" class="block text-sm font-semibold text-gray-700 mb-2">Scope (descriptive only)</label><input id="service-scope" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div><div><label for="service-duration" class="block text-sm font-semibold text-gray-700 mb-2">Duration (hours) *</label><input type="number" min="0" step="0.1" id="service-duration" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div><div><label for="service-year" class="block text-sm font-semibold text-gray-700 mb-2">Year *</label><input id="service-year" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div><div class="md:col-span-2"><label for="service-title" class="block text-sm font-semibold text-gray-700 mb-2">Service Title *</label><input id="service-title" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div></div><div class="flex justify-end"><button type="submit" id="save-service-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add Service Item</button></div></form></div>
-      <div class="flex justify-between"><button onclick="navigateToSection('admin_duties')" class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300">Previous</button><button onclick="navigateToSection('laboratory')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Next</button></div></div>`;
+    function getServiceDraftInputState() {
+      return {
+        service_type: document.getElementById('service-type')?.value || '',
+        service_scope: document.getElementById('service-scope')?.value || '',
+        service_title: document.getElementById('service-title')?.value || '',
+        service_organization: document.getElementById('service-organization')?.value || '',
+        service_duration: document.getElementById('service-duration')?.value || '',
+        service_date: document.getElementById('service-date')?.value || ''
+      };
     }
-    function setupServiceEventListeners(){renderServiceLivePreview();const f=document.getElementById('service-form');if(!f)return;f.querySelectorAll('input,select').forEach(el=>{el.addEventListener('input',renderServiceLivePreview);el.addEventListener('change',renderServiceLivePreview);});}
-    function renderServiceLivePreview(){const p=document.getElementById('service_live_preview');if(!p)return;const saved=getRecordsBySection('service');const savedTotal=Math.round(saved.reduce((a,b)=>a+calculateServiceScore(b),0)*100)/100;const bd=getServiceEntryBreakdown({service_type:document.getElementById('service-type')?.value||'',service_duration:document.getElementById('service-duration')?.value||0});p.innerHTML=`<p class="font-semibold mb-2">Live preview</p><p>Draft duration band factor: ${bd.duration_factor}</p><p>Draft item points: ${bd.base_points} × ${bd.duration_factor} = <strong>${bd.entry_points.toFixed(2)}</strong></p><p><strong>Saved total:</strong> ${savedTotal.toFixed(2)}</p><p><strong>Saved + draft total:</strong> ${(savedTotal+bd.entry_points).toFixed(2)}</p>`;}
+
+    function getServiceDurationBand(durationHours) {
+      const hours = Number(durationHours || 0);
+      if (hours < 2) return 'Under 2 hours';
+      if (hours <= 6) return '2 to 6 hours';
+      if (hours <= 15) return '6 to 15 hours';
+      return 'Over 15 hours';
+    }
+
+    function renderService() {
+      const serviceItems = getRecordsBySection('service');
+      return `
+        <div class="space-y-6">
+          ${createCalculationPanel({
+            sectionKey: 'service',
+            title: '🧮 Service Workload',
+            formula: 'entry_points = base_points × duration_factor',
+            baseTableHtml: '<p><strong>Base points by service type:</strong> Committee service 4, Community engagement 5, Expert contribution 6, Event support 3, Other 3</p>',
+            factorTableHtml: '<p><strong>Duration band factors:</strong> Under 2 hours 0.5, 2 to 6 hours 1.0, 6 to 15 hours 1.5, Over 15 hours 2.0</p>',
+            workedExampleHtml: '<strong>Example:</strong> Community engagement for 8 hours → 5 × 1.5 = 7.50 points.',
+            notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>Scope such as international or national does not affect points.</li><li>Duration should reflect actual time spent in the reporting period.</li></ul>'
+          })}
+
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="heading-font text-2xl font-bold mb-6">🤝 Service</h2>
+            <form id="service-form" onsubmit="saveService(event)" class="space-y-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div><label for="service-type" class="block text-sm font-semibold text-gray-700 mb-2">Service Type *</label><select id="service-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Committee Service">Committee service</option><option value="Community Engagement">Community engagement</option><option value="Expert Contribution">Expert contribution</option><option value="Event Support">Event support</option><option value="Other">Other</option></select></div>
+                <div><label for="service-duration" class="block text-sm font-semibold text-gray-700 mb-2">Duration (hours) *</label><input id="service-duration" type="number" min="0" step="0.5" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="service-scope" class="block text-sm font-semibold text-gray-700 mb-2">Scope (descriptive only)</label><input id="service-scope" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="service-date" class="block text-sm font-semibold text-gray-700 mb-2">Date *</label><input id="service-date" type="date" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div class="md:col-span-2"><label for="service-title" class="block text-sm font-semibold text-gray-700 mb-2">Title *</label><input id="service-title" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div class="md:col-span-2"><label for="service-organization" class="block text-sm font-semibold text-gray-700 mb-2">Organization *</label><input id="service-organization" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+              </div>
+              <div class="flex justify-end"><button type="submit" id="save-service-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add</button></div>
+            </form>
+          </div>
+
+          ${createSavedList({
+            title: 'Your Service Items',
+            items: serviceItems,
+            renderItem: (item) => {
+              const b = getServiceEntryBreakdown(item);
+              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Service type: <strong>${escapeHtml(item.service_type || '-')}</strong></p><p>Duration hours: ${Number(item.service_duration || 0)}</p><p>Duration band: ${getServiceDurationBand(item.service_duration)}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deleteService('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
+            }
+          })}
+
+          ${createNavigationRow({ previous: { id: 'admin_duties', label: 'Admin Duties' }, next: { id: 'laboratory', label: 'Laboratory' } })}
+        </div>
+      `;
+    }
+
+    function setupServiceEventListeners() {
+      renderServiceLivePreview();
+      const form = document.getElementById('service-form');
+      if (!form) return;
+      form.querySelectorAll('input, select').forEach((field) => {
+        field.addEventListener('input', renderServiceLivePreview);
+        field.addEventListener('change', renderServiceLivePreview);
+      });
+    }
+
+    function renderServiceLivePreview() {
+      const saved = getRecordsBySection('service');
+      const savedTotal = Math.round(saved.reduce((sum, item) => sum + calculateServiceScore(item), 0) * 100) / 100;
+      const breakdown = getServiceEntryBreakdown(getServiceDraftInputState());
+      renderLivePreview({ sectionKey: 'service', breakdown, equationText: `${breakdown.base_points} × ${breakdown.duration_factor}`, savedTotal });
+    }
 
     async function saveService(event) {
       event.preventDefault();
-      
       if (allRecords.length >= 999) {
         showToast('Maximum limit of 999 records reached', 'error');
         return;
       }
-      
       const btn = document.getElementById('save-service-btn');
+      const form = document.getElementById('service-form');
+      if (!form || !form.reportValidity()) return;
+      const draft = getServiceDraftInputState();
+      const breakdown = getServiceEntryBreakdown(draft);
+      const serviceData = { section: 'service', ...draft, entry_points: breakdown.entry_points, created_at: new Date().toISOString() };
       btn.disabled = true;
       btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
-      
-      const serviceData = {
-        section: 'service',
-        service_type: document.getElementById('service-type').value,
-        service_title: document.getElementById('service-title').value,
-        service_scope: document.getElementById('service-scope').value,
-        service_organization: document.getElementById('service-organization').value,
-        service_date: document.getElementById('service-date').value,
-        service_duration: parseFloat(document.getElementById('service-duration').value) || 0,
-        service_description: document.getElementById('service-description').value,
-        created_at: new Date().toISOString()
-      };
-      
       const result = await window.dataSdk.create(serviceData);
-      
       btn.disabled = false;
-      btn.innerHTML = 'Add Service Item';
-      
+      btn.innerHTML = 'Add';
       if (result.isOk) {
-        showToast('Service activity added successfully!');
-        document.getElementById('service-form').reset();
-        renderServiceLivePreview();
+        showToast('Service entry added successfully!');
+        form.reset();
+        renderSection('service');
       } else {
-        showToast('Failed to add service activity', 'error');
+        showToast('Failed to add service entry', 'error');
       }
     }
 
     async function deleteService(backendId) {
       const service = allRecords.find(r => r.__backendId === backendId);
       if (!service) return;
-      
       const result = await window.dataSdk.delete(service);
-      
       if (result.isOk) {
-        showToast('Service activity deleted successfully!');
+        showToast('Service entry deleted successfully!');
+        renderServiceLivePreview();
       } else {
-        showToast('Failed to delete service activity', 'error');
+        showToast('Failed to delete service entry', 'error');
       }
     }
 
-    function renderLaboratory() {
-      return `
-      <div class="space-y-6"><div class="bg-gradient-to-r from-teal-50 to-cyan-50 rounded-xl shadow-sm border-2 border-teal-200 p-6"><h3 class="font-bold text-lg text-teal-900 mb-3">🧮 Laboratory Workload Proxy</h3><div class="bg-white rounded-lg p-4 mb-4 text-xs space-y-2"><p><strong>lab_points = base_points × frequency_factor × number_of_courses_supported</strong> (course count only used for Per course supported).</p><p><strong>Frequency factors:</strong> Ongoing within reporting period 1.0, Per semester occurrence 0.6, Per course supported 0.3.</p></div><div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded text-xs">Example: Equipment Manager (7), Per course supported (0.3), 3 courses: 7 × 0.3 × 3 = 6.30 points.</div><div id="laboratory_live_preview" class="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs"></div></div>
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"><h2 class="heading-font text-2xl font-bold mb-6">🧪 Laboratory Responsibilities</h2><form id="laboratory-form" onsubmit="saveLaboratory(event)" class="space-y-6"><div class="grid grid-cols-1 md:grid-cols-2 gap-6"><div><label for="lab-responsibility" class="block text-sm font-semibold text-gray-700 mb-2">Responsibility *</label><select id="lab-responsibility" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Lab Coordinator">Lab Coordinator</option><option value="Safety Officer">Safety Officer</option><option value="Equipment Manager">Equipment Manager</option><option value="Inventory Manager">Inventory Manager</option><option value="SOP Development">SOP Development</option><option value="Lab Supervisor">Lab Supervisor</option><option value="Other">Other</option></select></div><div><label for="lab-frequency" class="block text-sm font-semibold text-gray-700 mb-2">Frequency *</label><select id="lab-frequency" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Ongoing within reporting period">Ongoing within reporting period</option><option value="Per semester occurrence">Per semester occurrence</option><option value="Per course supported">Per course supported</option></select></div><div id="lab-course-count-wrap" style="display:none;"><label for="number-of-courses-supported" class="block text-sm font-semibold text-gray-700 mb-2">Number of courses supported *</label><input type="number" id="number-of-courses-supported" min="1" value="1" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div><div><label for="lab-name" class="block text-sm font-semibold text-gray-700 mb-2">Laboratory Name *</label><input id="lab-name" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div><div><label for="lab-year" class="block text-sm font-semibold text-gray-700 mb-2">Year *</label><input id="lab-year" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div><div class="md:col-span-2"><label for="lab-description" class="block text-sm font-semibold text-gray-700 mb-2">Description</label><textarea id="lab-description" rows="2" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></textarea></div></div><div class="flex justify-end"><button type="submit" id="save-laboratory-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add Laboratory Item</button></div></form></div>
-      <div class="flex justify-between"><button onclick="navigateToSection('service')" class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300">Previous</button><button onclick="navigateToSection('professional')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Next</button></div></div>`;
+    function getLaboratoryDraftInputState() {
+      return {
+        lab_responsibility: document.getElementById('lab-responsibility')?.value || '',
+        lab_name: document.getElementById('lab-name')?.value || '',
+        lab_frequency: document.getElementById('lab-frequency')?.value || '',
+        number_of_courses_supported: document.getElementById('number-of-courses-supported')?.value || 1,
+        lab_year: document.getElementById('lab-year')?.value || ''
+      };
     }
-    function setupLaboratoryEventListeners(){renderLaboratoryLivePreview();const form=document.getElementById('laboratory-form');if(!form)return;const toggle=()=>{const perCourse=document.getElementById('lab-frequency')?.value==='Per course supported';document.getElementById('lab-course-count-wrap').style.display=perCourse?'block':'none';renderLaboratoryLivePreview();};form.querySelectorAll('input,select').forEach(el=>{el.addEventListener('input',toggle);el.addEventListener('change',toggle);});toggle();}
-    function renderLaboratoryLivePreview(){const p=document.getElementById('laboratory_live_preview');if(!p)return;const saved=getRecordsBySection('laboratory');const savedTotal=Math.round(saved.reduce((a,b)=>a+calculateLabScore(b),0)*100)/100;const bd=getLabEntryBreakdown({lab_responsibility:document.getElementById('lab-responsibility')?.value||'',lab_frequency:document.getElementById('lab-frequency')?.value||'',number_of_courses_supported:document.getElementById('number-of-courses-supported')?.value||1});p.innerHTML=`<p class="font-semibold mb-2">Live preview</p><p>Draft item points: ${bd.base_points} × ${bd.frequency_factor} × ${bd.course_count} = <strong>${bd.entry_points.toFixed(2)}</strong></p><p><strong>Saved total:</strong> ${savedTotal.toFixed(2)}</p><p><strong>Saved + draft total:</strong> ${(savedTotal+bd.entry_points).toFixed(2)}</p>`;}
+
+    function renderLaboratory() {
+      const labItems = getRecordsBySection('laboratory');
+      return `
+        <div class="space-y-6">
+          ${createCalculationPanel({
+            sectionKey: 'laboratory',
+            title: '🧮 Laboratory Workload',
+            formula: 'entry_points = base_points × frequency_factor × course_multiplier',
+            baseTableHtml: '<p><strong>Base points by responsibility:</strong> Lab Coordinator 10, Safety Officer 8, Equipment Manager 7, Inventory Manager 6, SOP Development 5, Lab Supervisor 4, Other 3</p>',
+            factorTableHtml: '<p><strong>Frequency factors:</strong> Ongoing within reporting period 1.0, Per semester occurrence 0.6, Per course supported 0.3</p>',
+            workedExampleHtml: '<strong>Example:</strong> Equipment Manager per course for 3 courses → 7 × 0.3 × 3 = 6.30 points.',
+            notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>Do not double count teaching contact time here.</li><li>Laboratory section captures technical support workload such as preparation, safety, and setup.</li></ul>'
+          })}
+
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="heading-font text-2xl font-bold mb-6">🧪 Laboratory</h2>
+            <form id="laboratory-form" onsubmit="saveLaboratory(event)" class="space-y-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div><label for="lab-responsibility" class="block text-sm font-semibold text-gray-700 mb-2">Responsibility *</label><select id="lab-responsibility" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Lab Coordinator">Lab Coordinator</option><option value="Safety Officer">Safety Officer</option><option value="Equipment Manager">Equipment Manager</option><option value="Inventory Manager">Inventory Manager</option><option value="SOP Development">SOP Development</option><option value="Lab Supervisor">Lab Supervisor</option><option value="Other">Other</option></select></div>
+                <div><label for="lab-frequency" class="block text-sm font-semibold text-gray-700 mb-2">Frequency *</label><select id="lab-frequency" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Ongoing within reporting period">Ongoing within reporting period</option><option value="Per semester occurrence">Per semester occurrence</option><option value="Per course supported">Per course supported</option></select></div>
+                <div id="lab-course-count-wrap" style="display:none;"><label for="number-of-courses-supported" class="block text-sm font-semibold text-gray-700 mb-2">Number of courses supported *</label><input id="number-of-courses-supported" type="number" min="1" step="1" value="1" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="lab-year" class="block text-sm font-semibold text-gray-700 mb-2">Year *</label><input id="lab-year" required type="number" min="2000" max="2035" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div class="md:col-span-2"><label for="lab-name" class="block text-sm font-semibold text-gray-700 mb-2">Laboratory / Context *</label><input id="lab-name" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+              </div>
+              <div class="flex justify-end"><button type="submit" id="save-lab-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add</button></div>
+            </form>
+          </div>
+
+          ${createSavedList({
+            title: 'Your Laboratory Items',
+            items: labItems,
+            renderItem: (item) => {
+              const b = getLabEntryBreakdown(item);
+              const courseText = item.lab_frequency === 'Per course supported' ? ` | Courses supported: ${b.course_count}` : '';
+              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Responsibility: <strong>${escapeHtml(item.lab_responsibility || '-')}</strong></p><p>Frequency: ${escapeHtml(item.lab_frequency || '-')} ${courseText}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deleteLaboratory('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
+            }
+          })}
+
+          ${createNavigationRow({ previous: { id: 'service', label: 'Service' }, next: { id: 'professional', label: 'Professional' } })}
+        </div>
+      `;
+    }
+
+    function setupLaboratoryEventListeners() {
+      const form = document.getElementById('laboratory-form');
+      if (!form) return;
+      const toggle = () => {
+        const perCourse = document.getElementById('lab-frequency')?.value === 'Per course supported';
+        const wrap = document.getElementById('lab-course-count-wrap');
+        if (wrap) wrap.style.display = perCourse ? 'block' : 'none';
+        renderLaboratoryLivePreview();
+      };
+      form.querySelectorAll('input, select').forEach((field) => {
+        field.addEventListener('input', toggle);
+        field.addEventListener('change', toggle);
+      });
+      toggle();
+    }
+
+    function renderLaboratoryLivePreview() {
+      const saved = getRecordsBySection('laboratory');
+      const savedTotal = Math.round(saved.reduce((sum, item) => sum + calculateLabScore(item), 0) * 100) / 100;
+      const breakdown = getLabEntryBreakdown(getLaboratoryDraftInputState());
+      renderLivePreview({ sectionKey: 'laboratory', breakdown, equationText: `${breakdown.base_points} × ${breakdown.frequency_factor} × ${breakdown.course_count}`, savedTotal });
+    }
 
     async function saveLaboratory(event) {
       event.preventDefault();
-      
       if (allRecords.length >= 999) {
         showToast('Maximum limit of 999 records reached', 'error');
         return;
       }
-      
-      const btn = document.getElementById('save-laboratory-btn');
+      const btn = document.getElementById('save-lab-btn');
+      const form = document.getElementById('laboratory-form');
+      if (!form || !form.reportValidity()) return;
+      const draft = getLaboratoryDraftInputState();
+      const breakdown = getLabEntryBreakdown(draft);
+      const labData = { section: 'laboratory', ...draft, entry_points: breakdown.entry_points, created_at: new Date().toISOString() };
       btn.disabled = true;
       btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
-      
-      const labData = {
-        section: 'laboratory',
-        lab_responsibility: document.getElementById('lab-responsibility').value,
-        lab_name: document.getElementById('lab-name').value,
-        lab_frequency: document.getElementById('lab-frequency').value,
-        lab_year: document.getElementById('lab-year').value,
-        number_of_courses_supported: parseInt(document.getElementById('number-of-courses-supported')?.value || '1', 10),
-        lab_description: document.getElementById('lab-description').value,
-        created_at: new Date().toISOString()
-      };
-      
       const result = await window.dataSdk.create(labData);
-      
       btn.disabled = false;
-      btn.innerHTML = 'Add Laboratory Item';
-      
+      btn.innerHTML = 'Add';
       if (result.isOk) {
-        showToast('Laboratory responsibility added successfully!');
-        document.getElementById('laboratory-form').reset();
-        renderLaboratoryLivePreview();
+        showToast('Laboratory item added successfully!');
+        form.reset();
+        renderSection('laboratory');
       } else {
-        showToast('Failed to add laboratory responsibility', 'error');
+        showToast('Failed to add laboratory item', 'error');
       }
     }
 
     async function deleteLaboratory(backendId) {
       const lab = allRecords.find(r => r.__backendId === backendId);
       if (!lab) return;
-      
       const result = await window.dataSdk.delete(lab);
-      
       if (result.isOk) {
-        showToast('Laboratory responsibility deleted successfully!');
+        showToast('Laboratory item deleted successfully!');
+        renderLaboratoryLivePreview();
       } else {
-        showToast('Failed to delete laboratory responsibility', 'error');
+        showToast('Failed to delete laboratory item', 'error');
       }
     }
 
-    function renderProfessional() {
-      return `<div class="space-y-6"><div class="bg-gradient-to-r from-violet-50 to-purple-50 rounded-xl shadow-sm border-2 border-violet-200 p-6"><h3 class="font-bold text-lg text-violet-900 mb-3">🧮 Professional Workload Proxy</h3><div class="bg-white rounded-lg p-4 mb-4 text-xs space-y-2"><p><strong>professional_points = base_points_by_activity_type × effort_factor</strong></p><p><strong>Effort bands:</strong> Low 0.5, Standard 1.0, High 1.5.</p><p>Memberships default to low base points and increase only when a role/position is selected.</p></div><div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded text-xs">Example: Membership with office bearer role (base 4), standard effort (1.0): 4 × 1.0 = 4.00 points.</div><div id="professional_live_preview" class="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs"></div></div>
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"><h2 class="heading-font text-2xl font-bold mb-6">💼 Professional Activities & Memberships</h2><form id="professional-form" onsubmit="saveProfessional(event)" class="space-y-6"><div class="grid grid-cols-1 md:grid-cols-2 gap-6"><div><label for="prof-type" class="block text-sm font-semibold text-gray-700 mb-2">Activity Type *</label><select id="prof-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Professional Body Leadership">Professional Body Leadership</option><option value="Professional Certification">Professional Certification</option><option value="Conference Organizer">Conference Organizer</option><option value="Editorial Board">Editorial Board</option><option value="Professional Training">Professional Training</option><option value="Membership">Membership</option><option value="Other">Other</option></select></div><div><label for="prof-effort-band" class="block text-sm font-semibold text-gray-700 mb-2">Effort Band *</label><select id="prof-effort-band" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="low">Low effort (0.5)</option><option value="standard">Standard effort (1.0)</option><option value="high">High effort (1.5)</option></select></div><div><label for="prof-position" class="block text-sm font-semibold text-gray-700 mb-2">Role/Position (optional)</label><input id="prof-position" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none" placeholder="e.g., Office bearer"></div><div><label for="prof-scope" class="block text-sm font-semibold text-gray-700 mb-2">Scope (descriptive only)</label><input id="prof-scope" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div><div class="md:col-span-2"><label for="prof-title" class="block text-sm font-semibold text-gray-700 mb-2">Activity Title *</label><input id="prof-title" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div><div><label for="prof-organization" class="block text-sm font-semibold text-gray-700 mb-2">Organization *</label><input id="prof-organization" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div><div><label for="prof-year" class="block text-sm font-semibold text-gray-700 mb-2">Year *</label><input id="prof-year" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div><div class="md:col-span-2"><label for="prof-description" class="block text-sm font-semibold text-gray-700 mb-2">Description</label><textarea id="prof-description" rows="2" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></textarea></div></div><div class="flex justify-end"><button type="submit" id="save-professional-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add Professional Item</button></div></form></div><div class="flex justify-between"><button onclick="navigateToSection('laboratory')" class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300">Previous</button><button onclick="navigateToSection('assistants')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Next</button></div></div>`;
+    function getProfessionalDraftInputState() {
+      return {
+        prof_type: document.getElementById('prof-type')?.value || '',
+        prof_effort_band: document.getElementById('prof-effort-band')?.value || '',
+        prof_position: document.getElementById('prof-position')?.value || '',
+        prof_scope: document.getElementById('prof-scope')?.value || '',
+        prof_title: document.getElementById('prof-title')?.value || '',
+        prof_organization: document.getElementById('prof-organization')?.value || '',
+        prof_year: document.getElementById('prof-year')?.value || '',
+        prof_description: document.getElementById('prof-description')?.value || ''
+      };
     }
-    function setupProfessionalEventListeners(){renderProfessionalLivePreview();const f=document.getElementById('professional-form');if(!f)return;f.querySelectorAll('input,select').forEach(el=>{el.addEventListener('input',renderProfessionalLivePreview);el.addEventListener('change',renderProfessionalLivePreview);});}
-    function renderProfessionalLivePreview(){const p=document.getElementById('professional_live_preview');if(!p)return;const saved=getRecordsBySection('professional');const savedTotal=Math.round(saved.reduce((a,b)=>a+calculateProfessionalScore(b),0)*100)/100;const bd=getProfessionalEntryBreakdown({prof_type:document.getElementById('prof-type')?.value||'',prof_effort_band:document.getElementById('prof-effort-band')?.value||'',prof_position:document.getElementById('prof-position')?.value||''});p.innerHTML=`<p class="font-semibold mb-2">Live preview</p><p>Draft item points: ${bd.base_points} × ${bd.effort_factor} = <strong>${bd.entry_points.toFixed(2)}</strong></p><p><strong>Saved total:</strong> ${savedTotal.toFixed(2)}</p><p><strong>Saved + draft total:</strong> ${(savedTotal+bd.entry_points).toFixed(2)}</p>`;}
+
+    function renderProfessional() {
+      const professionalItems = getRecordsBySection('professional');
+      return `
+        <div class="space-y-6">
+          ${createCalculationPanel({
+            sectionKey: 'professional',
+            title: '🧮 Professional Workload',
+            formula: 'entry_points = base_points × effort_factor',
+            baseTableHtml: '<p><strong>Base points by activity type:</strong> Professional Body Leadership 10, Professional Certification 8, Conference Organizer 7, Editorial Board 6, Professional Training 5, Membership 2 (or 4 with assigned role), Other 3</p>',
+            factorTableHtml: '<p><strong>Effort band factors:</strong> Low effort 0.5, Standard effort 1.0, High effort 1.5</p>',
+            workedExampleHtml: '<strong>Example:</strong> Conference organizer with high effort → 7 × 1.5 = 10.50 points.',
+            notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>Points represent workload effort in the reporting period.</li><li>Membership alone is low workload unless there is an assigned role.</li></ul>'
+          })}
+
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="heading-font text-2xl font-bold mb-6">💼 Professional</h2>
+            <form id="professional-form" onsubmit="saveProfessional(event)" class="space-y-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div><label for="prof-type" class="block text-sm font-semibold text-gray-700 mb-2">Activity Type *</label><select id="prof-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Professional Body Leadership">Professional Body Leadership</option><option value="Professional Certification">Professional Certification</option><option value="Conference Organizer">Conference Organizer</option><option value="Editorial Board">Editorial Board</option><option value="Professional Training">Professional Training</option><option value="Membership">Membership</option><option value="Other">Other</option></select></div>
+                <div><label for="prof-effort-band" class="block text-sm font-semibold text-gray-700 mb-2">Effort Band *</label><select id="prof-effort-band" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="low">Low effort (0.5)</option><option value="standard">Standard effort (1.0)</option><option value="high">High effort (1.5)</option></select></div>
+                <div><label for="prof-position" class="block text-sm font-semibold text-gray-700 mb-2">Role/Position (optional)</label><input id="prof-position" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="prof-scope" class="block text-sm font-semibold text-gray-700 mb-2">Scope (descriptive only)</label><input id="prof-scope" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div class="md:col-span-2"><label for="prof-title" class="block text-sm font-semibold text-gray-700 mb-2">Activity Title *</label><input id="prof-title" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="prof-organization" class="block text-sm font-semibold text-gray-700 mb-2">Organization *</label><input id="prof-organization" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="prof-year" class="block text-sm font-semibold text-gray-700 mb-2">Year *</label><input id="prof-year" required type="number" min="2000" max="2035" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div class="md:col-span-2"><label for="prof-description" class="block text-sm font-semibold text-gray-700 mb-2">Description</label><textarea id="prof-description" rows="2" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></textarea></div>
+              </div>
+              <div class="flex justify-end"><button type="submit" id="save-professional-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add</button></div>
+            </form>
+          </div>
+
+          ${createSavedList({
+            title: 'Your Professional Items',
+            items: professionalItems,
+            renderItem: (item) => {
+              const b = getProfessionalEntryBreakdown(item);
+              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Activity type: <strong>${escapeHtml(item.prof_type || '-')}</strong></p><p>Effort band: ${escapeHtml(item.prof_effort_band || '-')}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deleteProfessional('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
+            }
+          })}
+
+          ${createNavigationRow({ previous: { id: 'laboratory', label: 'Laboratory' }, next: { id: 'assistants', label: 'Assistants' } })}
+        </div>
+      `;
+    }
+
+    function setupProfessionalEventListeners() {
+      renderProfessionalLivePreview();
+      const form = document.getElementById('professional-form');
+      if (!form) return;
+      form.querySelectorAll('input, select, textarea').forEach((field) => {
+        field.addEventListener('input', renderProfessionalLivePreview);
+        field.addEventListener('change', renderProfessionalLivePreview);
+      });
+    }
+
+    function renderProfessionalLivePreview() {
+      const saved = getRecordsBySection('professional');
+      const savedTotal = Math.round(saved.reduce((sum, item) => sum + calculateProfessionalScore(item), 0) * 100) / 100;
+      const breakdown = getProfessionalEntryBreakdown(getProfessionalDraftInputState());
+      renderLivePreview({ sectionKey: 'professional', breakdown, equationText: `${breakdown.base_points} × ${breakdown.effort_factor}`, savedTotal });
+    }
 
     async function saveProfessional(event) {
       event.preventDefault();
-      
       if (allRecords.length >= 999) {
         showToast('Maximum limit of 999 records reached', 'error');
         return;
       }
-      
       const btn = document.getElementById('save-professional-btn');
+      const form = document.getElementById('professional-form');
+      if (!form || !form.reportValidity()) return;
+      const draft = getProfessionalDraftInputState();
+      const breakdown = getProfessionalEntryBreakdown(draft);
+      const professionalData = { section: 'professional', ...draft, entry_points: breakdown.entry_points, created_at: new Date().toISOString() };
       btn.disabled = true;
       btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
-      
-      const professionalData = {
-        section: 'professional',
-        prof_type: document.getElementById('prof-type').value,
-        prof_title: document.getElementById('prof-title').value,
-        prof_scope: document.getElementById('prof-scope').value,
-        prof_organization: document.getElementById('prof-organization').value,
-        prof_position: document.getElementById('prof-position').value,
-        prof_effort_band: document.getElementById('prof-effort-band').value,
-        prof_year: document.getElementById('prof-year').value,
-        prof_description: document.getElementById('prof-description').value,
-        created_at: new Date().toISOString()
-      };
-      
       const result = await window.dataSdk.create(professionalData);
-      
       btn.disabled = false;
-      btn.innerHTML = 'Add Professional Item';
-      
+      btn.innerHTML = 'Add';
       if (result.isOk) {
         showToast('Professional activity added successfully!');
-        document.getElementById('professional-form').reset();
-        renderProfessionalLivePreview();
+        form.reset();
+        renderSection('professional');
       } else {
         showToast('Failed to add professional activity', 'error');
       }
@@ -3767,11 +4017,10 @@ function getSubmitToken() {
     async function deleteProfessional(backendId) {
       const prof = allRecords.find(r => r.__backendId === backendId);
       if (!prof) return;
-      
       const result = await window.dataSdk.delete(prof);
-      
       if (result.isOk) {
         showToast('Professional activity deleted successfully!');
+        renderProfessionalLivePreview();
       } else {
         showToast('Failed to delete professional activity', 'error');
       }
