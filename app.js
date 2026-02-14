@@ -1324,18 +1324,39 @@ function getSubmitToken() {
       return scores;
     }
 
+    function getTeachingClassSizeBand(classSize) {
+      if (classSize > 100) {
+        return { label: 'More than 100 students', factor: 1.5 };
+      }
+      if (classSize > 50) {
+        return { label: '51 to 100 students', factor: 1.3 };
+      }
+      return { label: '1 to 50 students', factor: 1.0 };
+    }
+
+    function getTeachingCourseBreakdown(course) {
+      const totalSemesterHours = (course.course_lecture || 0) + (course.course_tutorial || 0) + 
+                                 (course.course_lab || 0) + (course.course_fieldwork || 0);
+      const weeklyHoursDivisor = 14;
+      const weeklyHours = totalSemesterHours / weeklyHoursDivisor;
+      const classSize = course.course_class_size || 0;
+      const classSizeBand = getTeachingClassSizeBand(classSize);
+      const coursePoints = Math.round(weeklyHours * classSizeBand.factor * 10) / 10;
+
+      return {
+        total_semester_hours: totalSemesterHours,
+        weekly_hours_divisor: weeklyHoursDivisor,
+        weekly_hours: weeklyHours,
+        class_size: classSize,
+        class_size_band_label: classSizeBand.label,
+        class_size_factor: classSizeBand.factor,
+        course_points: coursePoints
+      };
+    }
+
     // TEACHING: Weekly hours × class size factor
     function calculateCourseScore(course) {
-      const totalHours = (course.course_lecture || 0) + (course.course_tutorial || 0) + 
-                        (course.course_lab || 0) + (course.course_fieldwork || 0);
-      const weeklyHours = totalHours / 14;
-      
-      let classSizeFactor = 1.0;
-      const classSize = course.course_class_size || 0;
-      if (classSize > 100) classSizeFactor = 1.5;
-      else if (classSize > 50) classSizeFactor = 1.3;
-      
-      return Math.round(weeklyHours * classSizeFactor * 10) / 10;
+      return getTeachingCourseBreakdown(course).course_points;
     }
 
     function getSupervisionBasePoints(studentLevel, supervisorRole) {
@@ -2417,6 +2438,11 @@ function getSubmitToken() {
 
     function renderTeaching() {
       const courses = getRecordsBySection('teaching');
+      const classSizeFactorRows = [
+        { band: '1 to 50', factor: '1.0' },
+        { band: '51 to 100', factor: '1.3' },
+        { band: 'More than 100', factor: '1.5' }
+      ];
       
       return `
         <div class="space-y-6">
@@ -2426,13 +2452,31 @@ function getSubmitToken() {
             
             <div class="bg-white rounded-lg p-4 mb-4">
               <p class="text-sm text-gray-700 mb-3">
-                <strong>Formula:</strong> Weekly Hours × Class Size Factor
+                <strong>Course points equals weekly_hours × class_size_factor</strong>
               </p>
-              <div class="text-xs text-gray-600 space-y-2">
-                <p><strong>Step 1:</strong> Total semester hours = Lecture + Tutorial + Lab + Fieldwork</p>
-                <p><strong>Step 2:</strong> Weekly hours = Total semester hours ÷ 14 weeks</p>
-                <p><strong>Step 3:</strong> Class Size Factor: >100 → 1.5, >50 → 1.3, else → 1.0</p>
-                <p><strong>Step 4:</strong> Course Score = Weekly hours × Class size factor (rounded to 1 decimal)</p>
+              <div class="text-xs text-gray-600 space-y-2 mb-4">
+                <p><strong>Step 1:</strong> total_semester_hours = lecture_hours_semester + tutorial_hours_semester + lab_hours_semester + fieldwork_hours_semester</p>
+                <p><strong>Step 2:</strong> weekly_hours = total_semester_hours ÷ 14</p>
+                <p><strong>Step 3:</strong> class_size_factor is selected by class size band</p>
+                <p><strong>Step 4:</strong> course_points = round(weekly_hours × class_size_factor, 1 decimal)</p>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-xs text-gray-700 border border-gray-200 rounded-lg">
+                  <thead class="bg-blue-100 text-blue-900">
+                    <tr>
+                      <th class="text-left px-3 py-2 border-b border-gray-200">Class size band</th>
+                      <th class="text-left px-3 py-2 border-b border-gray-200">Factor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${classSizeFactorRows.map(row => `
+                      <tr class="bg-white">
+                        <td class="px-3 py-2 border-b border-gray-100">${row.band}</td>
+                        <td class="px-3 py-2 border-b border-gray-100">${row.factor}</td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
               </div>
             </div>
             
@@ -2445,6 +2489,8 @@ function getSubmitToken() {
                 <strong class="text-green-700">Score = 2.0 × 1.0 = 2.0 points</strong>
               </p>
             </div>
+
+            <div id="teaching_live_preview" class="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs text-gray-700"></div>
           </div>
 
           <!-- Add Course Form -->
@@ -2555,10 +2601,7 @@ function getSubmitToken() {
               <h3 class="font-bold text-lg mb-4">Your Courses (${courses.length})</h3>
               <div class="space-y-3">
                 ${courses.map(course => {
-                  const score = calculateCourseScore(course);
-                  const totalHours = (course.course_lecture || 0) + (course.course_tutorial || 0) + 
-                                    (course.course_lab || 0) + (course.course_fieldwork || 0);
-                  const weeklyHours = (totalHours / 14).toFixed(1);
+                  const breakdown = getTeachingCourseBreakdown(course);
                   const semester = course.course_semester === 'Other' ? course.course_semester_other : course.course_semester;
                   
                   return `
@@ -2569,12 +2612,12 @@ function getSubmitToken() {
                           ${course.course_credit_hours} credits • ${course.course_class_size} students • ${course.course_role}
                         </div>
                         <div class="text-sm text-gray-600 mt-1">
-                          Total: ${totalHours}h (L:${course.course_lecture || 0}, T:${course.course_tutorial || 0}, Lab:${course.course_lab || 0}, F:${course.course_fieldwork || 0}) • 
-                          Weekly: ${weeklyHours}h
+                          Total: ${breakdown.total_semester_hours}h (L:${course.course_lecture || 0}, T:${course.course_tutorial || 0}, Lab:${course.course_lab || 0}, F:${course.course_fieldwork || 0}) • 
+                          Weekly: ${breakdown.weekly_hours.toFixed(1)}h
                         </div>
                         ${semester ? `<div class="text-xs text-gray-500 mt-1">${semester}</div>` : ''}
                         <div class="text-xs text-gray-500 mt-1">
-                          <span class="font-semibold text-green-700">Score: ${score}</span>
+                          <span class="font-semibold text-green-700">Score: ${breakdown.course_points}</span>
                         </div>
                       </div>
                       <button type="button" onclick="deleteCourse('${course.__backendId}')" 
@@ -2598,7 +2641,56 @@ function getSubmitToken() {
     }
 
     function setupTeachingEventListeners() {
-      // Event listeners set up via onchange attributes
+      renderTeachingLivePreview();
+      const teachingForm = document.getElementById('teaching-form');
+      if (!teachingForm) return;
+
+      teachingForm.querySelectorAll('input, select').forEach((field) => {
+        field.addEventListener('input', renderTeachingLivePreview);
+        field.addEventListener('change', renderTeachingLivePreview);
+      });
+    }
+
+    function renderTeachingLivePreview() {
+      const preview = document.getElementById('teaching_live_preview');
+      if (!preview) return;
+
+      const courses = getRecordsBySection('teaching');
+      const savedTotal = Math.round(courses.reduce((sum, course) => sum + calculateCourseScore(course), 0) * 10) / 10;
+
+      const lectureRaw = document.getElementById('course-lecture')?.value ?? '';
+      const tutorialRaw = document.getElementById('course-tutorial')?.value ?? '';
+      const labRaw = document.getElementById('course-lab')?.value ?? '';
+      const fieldworkRaw = document.getElementById('course-fieldwork')?.value ?? '';
+      const classSizeRaw = document.getElementById('course-class-size')?.value ?? '';
+
+      const draftCourse = {
+        course_lecture: parseFloat(lectureRaw) || 0,
+        course_tutorial: parseFloat(tutorialRaw) || 0,
+        course_lab: parseFloat(labRaw) || 0,
+        course_fieldwork: parseFloat(fieldworkRaw) || 0,
+        course_class_size: parseInt(classSizeRaw, 10) || 0
+      };
+
+      const hasRequiredInputs = lectureRaw !== '' && classSizeRaw !== '';
+      const draftBreakdown = getTeachingCourseBreakdown(draftCourse);
+      const liveTotal = Math.round((savedTotal + (hasRequiredInputs ? draftBreakdown.course_points : 0)) * 10) / 10;
+
+      preview.innerHTML = `
+        <p class="font-semibold text-gray-900 mb-2">Live preview</p>
+        ${hasRequiredInputs ? `
+          <div class="space-y-1 mb-3">
+            <p><strong>Current draft input:</strong> lecture_hours_semester=${draftCourse.course_lecture}, tutorial_hours_semester=${draftCourse.course_tutorial}, lab_hours_semester=${draftCourse.course_lab}, fieldwork_hours_semester=${draftCourse.course_fieldwork}, class_size=${draftCourse.course_class_size}</p>
+            <p><strong>Step-by-step:</strong> total_semester_hours = ${draftCourse.course_lecture} + ${draftCourse.course_tutorial} + ${draftCourse.course_lab} + ${draftCourse.course_fieldwork} = ${draftBreakdown.total_semester_hours}</p>
+            <p>weekly_hours = ${draftBreakdown.total_semester_hours} ÷ ${draftBreakdown.weekly_hours_divisor} = ${draftBreakdown.weekly_hours.toFixed(4)}</p>
+            <p>class_size_band = ${draftBreakdown.class_size_band_label}, class_size_factor = ${draftBreakdown.class_size_factor}</p>
+            <p><strong>course_points = round(${draftBreakdown.weekly_hours.toFixed(4)} × ${draftBreakdown.class_size_factor}, 1) = ${draftBreakdown.course_points.toFixed(1)}</strong></p>
+          </div>
+        ` : '<p class="mb-3">No teaching inputs selected yet.</p>'}
+        <p><strong>Saved teaching total:</strong> ${savedTotal.toFixed(1)}</p>
+        <p><strong>Live teaching total (saved + draft):</strong> ${liveTotal.toFixed(1)}</p>
+        <p><strong>Number of courses saved:</strong> ${courses.length}</p>
+      `;
     }
 
     function toggleOtherSemester() {
@@ -2670,6 +2762,7 @@ function getSubmitToken() {
         showToast('Course added successfully!');
         document.getElementById('teaching-form').reset();
         document.getElementById('other-semester-field').style.display = 'none';
+        renderTeachingLivePreview();
       } else {
         showToast('Failed to add course', 'error');
       }
