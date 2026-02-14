@@ -662,6 +662,7 @@ let submissionState = { isSubmitting: false, lastError: null, lastPayload: null 
           break;
         case 'supervision':
           contentArea.innerHTML = renderSupervision();
+          setupSupervisionEventListeners();
           break;
         case 'research':
           contentArea.innerHTML = renderResearch();
@@ -869,7 +870,7 @@ function getSubmitToken() {
 
       const requiredBySection = {
         teaching: ['course_code', 'course_name', 'course_credit_hours', 'course_class_size', 'course_lecture', 'course_semester', 'course_role'],
-        supervision: ['student_name', 'student_matric', 'student_level', 'student_role', 'student_title', 'student_year'],
+        supervision: ['student_name', 'student_matric', 'student_level', 'student_role', 'student_registration_mode', 'student_current_status', 'student_title', 'student_year'],
         research: ['research_title', 'research_grant_code', 'research_role', 'research_amount', 'research_status', 'research_year', 'research_duration'],
         publications: ['pub_title', 'pub_type', 'pub_index', 'pub_venue', 'pub_position', 'pub_year', 'pub_status'],
         administration: ['admin_position', 'admin_faculty', 'admin_start_date'],
@@ -1337,19 +1338,71 @@ function getSubmitToken() {
       return Math.round(weeklyHours * classSizeFactor * 10) / 10;
     }
 
+    function getSupervisionBasePoints(studentLevel, supervisorRole) {
+      if (studentLevel === 'phd') {
+        return supervisorRole === 'main' ? 8 : 4;
+      }
+      if (studentLevel === 'masters') {
+        return supervisorRole === 'main' ? 5 : 2.5;
+      }
+      return 1;
+    }
+
+    function getStudentRegistrationModeFactor(studentRegistrationMode) {
+      if (studentRegistrationMode === 'part_time') {
+        return 0.5;
+      }
+      return 1.0;
+    }
+
+    function getStudentCurrentStatusFactor(studentCurrentStatus) {
+      const statusFactorMap = {
+        active: 1.0,
+        on_leave: 0.2,
+        deferred: 0.2,
+        completed: 0.3,
+        terminated: 0.0,
+        not_active: 0.0
+      };
+
+      return statusFactorMap[studentCurrentStatus] ?? 0.0;
+    }
+
+    function getSupervisionEntryBreakdown(student) {
+      const hasRequiredFields = Boolean(
+        student?.student_level &&
+        student?.student_role &&
+        student?.student_registration_mode &&
+        student?.student_current_status
+      );
+
+      if (!hasRequiredFields) {
+        return {
+          base_points: 0,
+          mode_factor: 0,
+          status_factor: 0,
+          entry_points: 0,
+          is_counted: false
+        };
+      }
+
+      const basePoints = getSupervisionBasePoints(student.student_level, student.student_role);
+      const modeFactor = getStudentRegistrationModeFactor(student.student_registration_mode);
+      const statusFactor = getStudentCurrentStatusFactor(student.student_current_status);
+      const entryPoints = Math.round(basePoints * modeFactor * statusFactor * 100) / 100;
+
+      return {
+        base_points: basePoints,
+        mode_factor: modeFactor,
+        status_factor: statusFactor,
+        entry_points: entryPoints,
+        is_counted: true
+      };
+    }
+
     // SUPERVISION: Fixed points by level and role
     function calculateSupervisionScore(student) {
-      const level = student.student_level;
-      const role = student.student_role;
-      
-      if (level === 'phd') {
-        return role === 'main' ? 8 : 4;
-      } else if (level === 'masters') {
-        return role === 'main' ? 5 : 2.5;
-      } else {
-        // undergraduate - always 1, role ignored
-        return 1;
-      }
+      return getSupervisionEntryBreakdown(student).entry_points;
     }
 
     // ADMIN DUTIES: Base points 🧮 frequency factor
@@ -2637,6 +2690,11 @@ function getSubmitToken() {
 
     function renderSupervision() {
       const students = getRecordsBySection('supervision');
+      const basePointsRows = [
+        { level: 'PhD', main: '8', co: '4' },
+        { level: 'Masters', main: '5', co: '2.5' },
+        { level: 'Undergraduate (FYP)', main: '1', co: '1 (role ignored for score)' }
+      ];
       
       return `
         <div class="space-y-6">
@@ -2646,24 +2704,39 @@ function getSubmitToken() {
             
             <div class="bg-white rounded-lg p-4 mb-4">
               <p class="text-sm text-gray-700 mb-3">
-                <strong>Score per Student = Points based on Level × Role</strong>
+                <strong>Entry points = base_points × registration_mode_factor × status_factor</strong>
               </p>
-              <div class="text-xs text-gray-600 space-y-2">
-                <p><strong>PhD:</strong> Main Supervisor = 8 points, Co-Supervisor = 4 points</p>
-                <p><strong>Masters:</strong> Main Supervisor = 5 points, Co-Supervisor = 2.5 points</p>
-                <p><strong>Undergraduate (FYP):</strong> 1 point (role doesn't affect score)</p>
+              <div class="overflow-x-auto">
+                <table class="w-full text-xs text-gray-700 border border-gray-200 rounded-lg">
+                  <thead class="bg-purple-100 text-purple-900">
+                    <tr>
+                      <th class="text-left px-3 py-2 border-b border-gray-200">Student level</th>
+                      <th class="text-left px-3 py-2 border-b border-gray-200">Main supervisor</th>
+                      <th class="text-left px-3 py-2 border-b border-gray-200">Co-supervisor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${basePointsRows.map(row => `
+                      <tr class="bg-white">
+                        <td class="px-3 py-2 border-b border-gray-100">${row.level}</td>
+                        <td class="px-3 py-2 border-b border-gray-100">${row.main}</td>
+                        <td class="px-3 py-2 border-b border-gray-100">${row.co}</td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
               </div>
             </div>
             
             <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
               <p class="text-sm font-semibold text-yellow-900 mb-2">Example:</p>
               <p class="text-xs text-gray-700">
-                • 1 PhD (Main) = 8.0<br>
-                • 2 Masters (1 Main + 1 Co) = 5.0 + 2.5 = 7.5<br>
-                • 3 Undergraduate = 3 × 1.0 = 3.0<br>
-                <strong class="text-green-700">Total: 18.5 points</strong>
+                • PhD (Main), Full time, Active: 8 × 1.0 × 1.0 = 8.0<br>
+                • PhD (Main), Part time, Active: 8 × 0.5 × 1.0 = 4.0
               </p>
             </div>
+
+            <div id="supervision_live_preview" class="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs text-gray-700"></div>
           </div>
 
           <!-- Add Student Form -->
@@ -2704,6 +2777,34 @@ function getSubmitToken() {
                     <option value="co">Co-Supervisor</option>
                   </select>
                 </div>
+
+                <div>
+                  <label for="student_registration_mode" class="block text-sm font-semibold text-gray-700 mb-2">Student Registration Mode *</label>
+                  <select id="student_registration_mode" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
+                    <option value="">Select Mode</option>
+                    <option value="full_time">Full time (factor 1.0)</option>
+                    <option value="part_time">Part time (factor 0.5)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label for="student_current_status" class="block text-sm font-semibold text-gray-700 mb-2">Student Current Status *</label>
+                  <select id="student_current_status" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
+                    <option value="">Select Status</option>
+                    <option value="active">Active (factor 1.0)</option>
+                    <option value="on_leave">On leave (factor 0.2)</option>
+                    <option value="deferred">Deferred (factor 0.2)</option>
+                    <option value="completed">Completed (factor 0.3)</option>
+                    <option value="terminated">Terminated (factor 0.0)</option>
+                    <option value="not_active">Not active (factor 0.0)</option>
+                  </select>
+                  <div class="mt-2 text-xs text-gray-600 bg-slate-50 border border-slate-200 rounded p-3 space-y-1">
+                    <p><strong>Active:</strong> student is registered and engaged during the reporting period.</p>
+                    <p><strong>On leave / Deferred:</strong> student is registered but not progressing, limited supervision contact.</p>
+                    <p><strong>Completed:</strong> submission or viva completed, corrections may remain.</p>
+                    <p><strong>Terminated / Not active:</strong> no supervision workload claimed.</p>
+                  </div>
+                </div>
                 
                 <div class="md:col-span-2">
                   <label for="student-title" class="block text-sm font-semibold text-gray-700 mb-2">Research Title *</label>
@@ -2736,8 +2837,19 @@ function getSubmitToken() {
               <h3 class="font-bold text-lg mb-4">Supervised Students (${students.length})</h3>
               <div class="space-y-3">
                 ${students.map(student => {
-                  const score = calculateSupervisionScore(student);
+                  const breakdown = getSupervisionEntryBreakdown(student);
+                  const score = breakdown.entry_points;
                   const roleLabel = student.student_role === 'main' ? 'Main Supervisor' : 'Co-Supervisor';
+                  const modeLabel = student.student_registration_mode === 'part_time' ? 'Part time' : 'Full time';
+                  const statusLabelMap = {
+                    active: 'Active',
+                    on_leave: 'On leave',
+                    deferred: 'Deferred',
+                    completed: 'Completed',
+                    terminated: 'Terminated',
+                    not_active: 'Not active'
+                  };
+                  const statusLabel = statusLabelMap[student.student_current_status] || 'Not selected';
                   
                   return `
                     <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
@@ -2746,9 +2858,12 @@ function getSubmitToken() {
                         <div class="text-sm text-gray-600 mt-1">
                           ${student.student_level.toUpperCase()} • ${roleLabel} • Started ${student.student_year}
                         </div>
+                        <div class="text-xs text-gray-500 mt-1">
+                          ${modeLabel} • ${statusLabel}
+                        </div>
                         <div class="text-xs text-gray-500 mt-1">${student.student_title}</div>
                         <div class="text-xs text-gray-500 mt-1">
-                          <span class="font-semibold text-green-700">Score: ${score}</span>
+                          <span class="font-semibold text-green-700">Score: ${breakdown.base_points} × ${breakdown.mode_factor} × ${breakdown.status_factor} = ${score}</span>
                         </div>
                       </div>
                       <button type="button" onclick="deleteStudent('${student.__backendId}')" 
@@ -2771,6 +2886,67 @@ function getSubmitToken() {
       `;
     }
 
+
+    function setupSupervisionEventListeners() {
+      renderSupervisionLivePreview();
+      const supervisionForm = document.getElementById('supervision-form');
+      if (!supervisionForm) return;
+
+      supervisionForm.querySelectorAll('input, select').forEach((field) => {
+        field.addEventListener('input', renderSupervisionLivePreview);
+        field.addEventListener('change', renderSupervisionLivePreview);
+      });
+    }
+
+    function renderSupervisionLivePreview() {
+      const preview = document.getElementById('supervision_live_preview');
+      if (!preview) return;
+
+      const students = getRecordsBySection('supervision');
+      const savedRows = students.map((student, index) => {
+        const breakdown = getSupervisionEntryBreakdown(student);
+        return {
+          label: `Saved entry #${index + 1}`,
+          ...breakdown
+        };
+      });
+
+      const draftStudent = {
+        student_level: document.getElementById('student-level')?.value || '',
+        student_role: document.getElementById('student-role')?.value || '',
+        student_registration_mode: document.getElementById('student_registration_mode')?.value || '',
+        student_current_status: document.getElementById('student_current_status')?.value || ''
+      };
+      const draftBreakdown = getSupervisionEntryBreakdown(draftStudent);
+      const hasDraftSelection = Boolean(
+        draftStudent.student_level ||
+        draftStudent.student_role ||
+        draftStudent.student_registration_mode ||
+        draftStudent.student_current_status
+      );
+
+      const rows = [
+        ...savedRows,
+        ...(hasDraftSelection ? [{ label: 'Current form draft', ...draftBreakdown }] : [])
+      ];
+
+      const savedTotal = Math.round(savedRows.reduce((sum, row) => sum + row.entry_points, 0) * 100) / 100;
+      const liveTotal = Math.round(rows.reduce((sum, row) => sum + row.entry_points, 0) * 100) / 100;
+
+      preview.innerHTML = `
+        <p class="font-semibold text-gray-900 mb-2">Live preview</p>
+        <div class="space-y-1 mb-3">
+          ${rows.length === 0 ? '<p>No supervision entry selected yet.</p>' : rows.map((row) => `
+            <p>
+              ${row.label}: base_points=${row.base_points}, mode_factor=${row.mode_factor}, status_factor=${row.status_factor}, entry_points=${row.entry_points.toFixed(2)}
+            </p>
+          `).join('')}
+        </div>
+        <p><strong>Saved supervision total:</strong> ${savedTotal.toFixed(2)}</p>
+        <p><strong>Live supervision total (saved + draft):</strong> ${liveTotal.toFixed(2)}</p>
+      `;
+    }
+
     async function saveStudent(event) {
       event.preventDefault();
       
@@ -2789,6 +2965,8 @@ function getSubmitToken() {
         student_matric: document.getElementById('student-matric').value,
         student_level: document.getElementById('student-level').value,
         student_role: document.getElementById('student-role').value,
+        student_registration_mode: document.getElementById('student_registration_mode').value,
+        student_current_status: document.getElementById('student_current_status').value,
         student_title: document.getElementById('student-title').value,
         student_year: parseInt(document.getElementById('student-year').value),
         created_at: new Date().toISOString()
@@ -2802,6 +2980,7 @@ function getSubmitToken() {
       if (result.isOk) {
         showToast('Student added successfully!');
         document.getElementById('supervision-form').reset();
+        renderSupervisionLivePreview();
       } else {
         showToast('Failed to add student', 'error');
       }
