@@ -4037,11 +4037,13 @@ function getSubmitToken() {
       const hasAdminPosition = profile && profile.profile_admin_position && profile.profile_admin_position !== 'None';
       
       // Set thresholds
-      const NON_ADMIN_THRESHOLD = 30;
-      const ADMIN_THRESHOLD = NON_ADMIN_THRESHOLD / 2; // Half of non-admin
-      
-      const applicableThreshold = hasAdminPosition ? ADMIN_THRESHOLD : NON_ADMIN_THRESHOLD;
-      const isQualified = combinedScore >= applicableThreshold;
+      const TA_THRESHOLD_NON_ADMIN = 12;
+      const TA_THRESHOLD_ADMIN = 6;
+
+      // Sanity check example:
+      // Teaching 2 + Supervision 5 = 7 -> Non-Admin: not eligible (7 < 12), Admin: eligible (7 >= 6).
+      const required = hasAdminPosition ? TA_THRESHOLD_ADMIN : TA_THRESHOLD_NON_ADMIN;
+      const isQualified = combinedScore >= required;
       const staffType = hasAdminPosition ? 'Admin Academic Staff' : 'Non-Admin Academic Staff';
       
       return `
@@ -4056,8 +4058,8 @@ function getSubmitToken() {
               </p>
               <div class="text-xs text-gray-600 space-y-2">
                 <p><strong>Qualification Thresholds:</strong></p>
-                <p>• <strong>Non-Admin Academic Staff:</strong> 📌 ${NON_ADMIN_THRESHOLD} points</p>
-                <p>• <strong>Admin Academic Staff (with allowance):</strong> ≥ ${ADMIN_THRESHOLD} points</p>
+                <p>• <strong>Non-Admin Academic Staff:</strong> ≥ ${TA_THRESHOLD_NON_ADMIN} points</p>
+                <p>• <strong>Admin Academic Staff (with allowance):</strong> ≥ ${TA_THRESHOLD_ADMIN} points</p>
                 <p class="mt-3 text-gray-500 italic">
                   Note: Admin academic staff are those who hold administrative positions with allowance as recorded in the Staff Profile section.
                 </p>
@@ -4141,15 +4143,15 @@ function getSubmitToken() {
                 <div class="bg-white bg-opacity-20 rounded-lg p-4 inline-block">
                   <div class="text-sm mb-1">Your Score vs Required Threshold</div>
                   <div class="text-3xl font-bold">
-                    ${combinedScore.toFixed(2)} / ${applicableThreshold.toFixed(2)}
+                    ${combinedScore.toFixed(2)} / ${required.toFixed(2)}
                   </div>
                   ${!isQualified ? `
                     <div class="text-sm mt-2">
-                      Need ${(applicableThreshold - combinedScore).toFixed(2)} more points
+                      Need ${(required - combinedScore).toFixed(2)} more points
                     </div>
                   ` : `
                     <div class="text-sm mt-2">
-                      Exceeded by ${(combinedScore - applicableThreshold).toFixed(2)} points
+                      Exceeded by ${(combinedScore - required).toFixed(2)} points
                     </div>
                   `}
                 </div>
