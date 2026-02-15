@@ -868,6 +868,9 @@ function getSubmitToken() {
           if (!profile.profile_rank) {
             errors.push({ section: 'profile', message: 'Academic rank is required for academic staff.' });
           }
+          if (!profile.admin_status) {
+            errors.push({ section: 'profile', message: 'Admin status is required for academic staff.' });
+          }
         }
 
         if (normalizeProfileCategoryKey(profile.profile_category) === 'admin' && !profile.profile_admin_position) {
@@ -892,7 +895,7 @@ function getSubmitToken() {
         supervision: ['student_year'],
         research: ['research_amount', 'research_year'],
         publications: ['pub_year'],
-        administration: ['admin_allowance'],
+        administration: [],
         admin_duties: [],
         service: ['service_duration'],
         laboratory: [],
@@ -2245,6 +2248,7 @@ function getSubmitToken() {
         staff_name: '',
         staff_id: '',
         staff_category: '',
+        admin_status: '',
         staff_grade: '',
         staff_designation: '',
         reporting_period_type: 'Semester',
@@ -2281,6 +2285,7 @@ function getSubmitToken() {
       })();
 
       const localState = readLocalJson(PROFILE_STATE_STORAGE_KEY, {});
+      const resolvedAdminStatus = String(parsedState.admin_status || profile?.admin_status || localState.admin_status || '').trim().toLowerCase();
       const state = {
         ...defaults,
         ...localState,
@@ -2289,6 +2294,7 @@ function getSubmitToken() {
         staff_name: parsedState.staff_name || profile?.profile_name || legacyExtras.staff_display_name || localState.staff_name || '',
         staff_id: parsedState.staff_id || profile?.profile_staff_id || localState.staff_id || '',
         staff_category: normalizeProfileCategory(parsedState.staff_category || legacyCategory || localState.staff_category),
+        admin_status: resolvedAdminStatus === 'admin' || resolvedAdminStatus === 'non_admin' ? resolvedAdminStatus : '',
         programme: parsedState.programme || profile?.profile_programme || localState.programme || '',
         academic_rank: parsedState.academic_rank || profile?.profile_rank || localState.academic_rank || '',
         administrative_position: parsedState.administrative_position
@@ -2316,6 +2322,8 @@ function getSubmitToken() {
     function renderProfile() {
       const profile = getProfile();
       const profileState = parseProfileState(profile);
+      const isAcademicStaff = normalizeProfileCategoryKey(profileState.staff_category) === 'academic';
+      const adminStatus = profileState.admin_status === 'admin' || profileState.admin_status === 'non_admin' ? profileState.admin_status : '';
 
       return `
         <div class="max-w-3xl mx-auto space-y-4">
@@ -2363,6 +2371,16 @@ function getSubmitToken() {
                          value="${escapeHtml(profileState.staff_grade)}"
                          placeholder="e.g., DS51">
                   <p class="text-xs text-gray-500 mt-1">Optional classification code for reporting.</p>
+                </div>
+
+                <div>
+                  <label for="admin_status" class="block text-sm font-semibold text-gray-700 mb-2">Admin Status ${isAcademicStaff ? '*' : ''}</label>
+                  <select id="admin_status" onchange="updateProfileSummaryCard()" ${isAcademicStaff ? 'required' : 'disabled'} class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500">
+                    <option value="" ${adminStatus === '' ? 'selected' : ''}>${isAcademicStaff ? 'Select admin status' : 'Not applicable'}</option>
+                    <option value="non_admin" ${adminStatus === 'non_admin' ? 'selected' : ''}>Non-Admin</option>
+                    <option value="admin" ${adminStatus === 'admin' ? 'selected' : ''}>Admin</option>
+                  </select>
+                  <p id="admin_status_note" class="text-xs text-amber-700 mt-1 ${isAcademicStaff ? 'hidden' : ''}">Admin Status applies to Academic Staff only.</p>
                 </div>
 
                 <div>
@@ -2473,7 +2491,7 @@ function getSubmitToken() {
       [
         'staff_name', 'staff_id', 'staff_category', 'staff_grade', 'staff_designation',
         'reporting_period_type', 'reporting_start_date', 'reporting_end_date',
-        'programme', 'academic_rank', 'administrative_position', 'laboratory_position', 'reporting_tags'
+        'programme', 'academic_rank', 'administrative_position', 'laboratory_position', 'reporting_tags', 'admin_status'
       ].forEach((id) => {
         const element = document.getElementById(id);
         if (!element) return;
@@ -2495,11 +2513,29 @@ function getSubmitToken() {
       const rankField = document.getElementById('academic_rank_field');
       const adminField = document.getElementById('administrative_position_field');
       const labField = document.getElementById('laboratory_position_field');
+      const adminStatusField = document.getElementById('admin_status');
+      const adminStatusNote = document.getElementById('admin_status_note');
 
       if (programmeField) programmeField.style.display = categoryKey === 'academic' ? 'block' : 'none';
       if (rankField) rankField.style.display = categoryKey === 'academic' ? 'block' : 'none';
       if (adminField) adminField.style.display = categoryKey === 'admin' ? 'block' : 'none';
       if (labField) labField.style.display = categoryKey === 'lab' ? 'block' : 'none';
+
+      if (adminStatusField) {
+        const placeholderOption = adminStatusField.querySelector('option[value=""]');
+        if (categoryKey === 'academic') {
+          adminStatusField.disabled = false;
+          adminStatusField.required = true;
+          if (placeholderOption) placeholderOption.textContent = 'Select admin status';
+          if (adminStatusNote) adminStatusNote.classList.add('hidden');
+        } else {
+          adminStatusField.value = '';
+          adminStatusField.disabled = true;
+          adminStatusField.required = false;
+          if (placeholderOption) placeholderOption.textContent = 'Not applicable';
+          if (adminStatusNote) adminStatusNote.classList.remove('hidden');
+        }
+      }
 
       if (categoryKey !== 'academic') {
         const programme = document.getElementById('programme');
@@ -2545,6 +2581,7 @@ function getSubmitToken() {
       const rows = [
         ['Staff Name', document.getElementById('staff_name')?.value || ''],
         ['Staff Category', getProfileCategoryLabel(document.getElementById('staff_category')?.value || '')],
+        ['Admin Status', document.getElementById('admin_status')?.value === 'admin' ? 'Admin' : (document.getElementById('admin_status')?.value === 'non_admin' ? 'Non-Admin' : '')],
         ['Grade', document.getElementById('staff_grade')?.value || ''],
         ['Designation', document.getElementById('staff_designation')?.value || ''],
         ['Reporting Period Type', document.getElementById('reporting_period_type')?.value || ''],
@@ -2587,6 +2624,7 @@ function getSubmitToken() {
         staff_name: (document.getElementById('staff_name')?.value || '').trim(),
         staff_id: staffId,
         staff_category: normalizeProfileCategory(document.getElementById('staff_category')?.value || ''),
+        admin_status: '',
         staff_grade: (document.getElementById('staff_grade')?.value || '').trim(),
         staff_designation: (document.getElementById('staff_designation')?.value || '').trim(),
         reporting_period_type: (document.getElementById('reporting_period_type')?.value || 'Semester').trim(),
@@ -2598,6 +2636,15 @@ function getSubmitToken() {
         laboratory_position: (document.getElementById('laboratory_position')?.value || '').trim(),
         reporting_tags: (document.getElementById('reporting_tags')?.value || '').trim()
       };
+      const categoryKey = normalizeProfileCategoryKey(profileState.staff_category);
+      profileState.admin_status = categoryKey === 'academic' ? (document.getElementById('admin_status')?.value || '').trim() : '';
+
+      if (categoryKey === 'academic' && !profileState.admin_status) {
+        showToast('Admin Status is required for Academic Staff.', 'error');
+        btn.disabled = false;
+        btn.innerHTML = '💾 Save Profile';
+        return;
+      }
 
       const reportingDays = calculateReportingDays(profileState.reporting_start_date, profileState.reporting_end_date);
       if (!reportingDays) {
@@ -2614,9 +2661,10 @@ function getSubmitToken() {
         profile_name: profileState.staff_name,
         profile_staff_id: profileState.staff_id,
         profile_category: profileState.staff_category,
-        profile_programme: normalizeProfileCategoryKey(profileState.staff_category) === 'academic' ? profileState.programme : '',
-        profile_rank: normalizeProfileCategoryKey(profileState.staff_category) === 'academic' ? profileState.academic_rank : '',
-        profile_admin_position: normalizeProfileCategoryKey(profileState.staff_category) === 'admin' ? profileState.administrative_position : '',
+        admin_status: categoryKey === 'academic' ? profileState.admin_status : null,
+        profile_programme: categoryKey === 'academic' ? profileState.programme : '',
+        profile_rank: categoryKey === 'academic' ? profileState.academic_rank : '',
+        profile_admin_position: categoryKey === 'admin' ? profileState.administrative_position : '',
         profile_other_admin_position: '',
         profile_state: JSON.stringify(profileState),
         profile_json: '',
@@ -3600,7 +3648,6 @@ function getSubmitToken() {
         admin_faculty: document.getElementById('admin-faculty')?.value || '',
         admin_start_date: document.getElementById('admin-start-date')?.value || '',
         admin_end_date: document.getElementById('admin-end-date')?.value || '',
-        admin_allowance: document.getElementById('admin-allowance')?.value || ''
       };
     }
 
@@ -3626,7 +3673,6 @@ function getSubmitToken() {
                 <div><label for="admin-faculty" class="block text-sm font-semibold text-gray-700 mb-2">Unit/Faculty *</label><input id="admin-faculty" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="admin-start-date" class="block text-sm font-semibold text-gray-700 mb-2">Start Date *</label><input id="admin-start-date" type="date" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="admin-end-date" class="block text-sm font-semibold text-gray-700 mb-2">End Date</label><input id="admin-end-date" type="date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-                <div><label for="admin-allowance" class="block text-sm font-semibold text-gray-700 mb-2">Allowance (descriptive only)</label><input id="admin-allowance" type="number" min="0" step="0.01" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
               </div>
               <div class="flex justify-end"><button type="submit" id="save-administration-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add</button></div>
             </form>
@@ -4153,161 +4199,118 @@ function getSubmitToken() {
     function renderAssistants() {
       const profile = getProfile();
       const scores = calculateScores();
-      
-      // Calculate combined Teaching + Supervision score
       const combinedScore = scores.teaching + scores.supervision;
-      
-      // Determine if staff has admin position with allowance
-      const hasAdminPosition = profile && profile.profile_admin_position && profile.profile_admin_position !== 'None';
-      
-      // Set thresholds
+
+      if (!profile) {
+        return `
+        <div class="space-y-6">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div class="text-center py-12">
+              <div class="text-6xl mb-4">👤</div>
+              <h3 class="text-xl font-bold text-gray-900 mb-2">Profile Required</h3>
+              <p class="text-gray-600 mb-6">Please create your staff profile first to check teaching assistant eligibility.</p>
+              <button onclick="navigateToSection('profile')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
+                Go to Profile →
+              </button>
+            </div>
+          </div>
+          <div class="flex justify-between">
+            <button onclick="navigateToSection('professional')" class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300">
+              ← Previous
+            </button>
+            <button onclick="navigateToSection('results')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
+              View Results →
+            </button>
+          </div>
+        </div>
+      `;
+      }
+
+      const categoryKey = normalizeProfileCategoryKey(profile.profile_category);
+      const adminStatus = (profile.admin_status || '').toLowerCase();
+      const isAcademicStaff = categoryKey === 'academic';
+
+      if (!isAcademicStaff) {
+        return `
+        <div class="space-y-6">
+          <div class="bg-blue-50 border border-blue-200 text-blue-900 rounded-xl p-4">
+            <p class="font-semibold">Assistants eligibility is for Academic Staff only.</p>
+            <p class="text-sm mt-1">Update Staff Category in Profile to Academic Staff to evaluate eligibility.</p>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="heading-font text-2xl font-bold mb-3">👨‍🏫 Assistants</h2>
+            <p class="text-gray-700">Eligibility thresholds and scoring are not evaluated for non-academic staff.</p>
+          </div>
+          <div class="flex justify-between">
+            <button onclick="navigateToSection('professional')" class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300">
+              ← Previous
+            </button>
+            <button onclick="navigateToSection('results')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
+              View Results →
+            </button>
+          </div>
+        </div>
+      `;
+      }
+
+      if (adminStatus !== 'admin' && adminStatus !== 'non_admin') {
+        return `
+        <div class="space-y-6">
+          <div class="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-4">
+            <p class="font-semibold">Set Admin Status in Profile to evaluate Assistants eligibility.</p>
+            <button onclick="navigateToSection('profile')" class="mt-3 px-4 py-2 bg-amber-600 text-white rounded-lg font-semibold hover:bg-amber-700">Go to Profile</button>
+          </div>
+          <div class="flex justify-between">
+            <button onclick="navigateToSection('professional')" class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300">
+              ← Previous
+            </button>
+            <button onclick="navigateToSection('results')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
+              View Results →
+            </button>
+          </div>
+        </div>
+      `;
+      }
+
       const TA_THRESHOLD_NON_ADMIN = 12;
       const TA_THRESHOLD_ADMIN = 6;
-
-      // Sanity check example:
-      // Teaching 2 + Supervision 5 = 7 -> Non-Admin: not eligible (7 < 12), Admin: eligible (7 >= 6).
-      const required = hasAdminPosition ? TA_THRESHOLD_ADMIN : TA_THRESHOLD_NON_ADMIN;
+      const required = adminStatus === 'admin' ? TA_THRESHOLD_ADMIN : TA_THRESHOLD_NON_ADMIN;
       const isQualified = combinedScore >= required;
-      const staffType = hasAdminPosition ? 'Admin Academic Staff' : 'Non-Admin Academic Staff';
-      
+      const staffType = adminStatus === 'admin' ? 'Admin Academic Staff' : 'Non-Admin Academic Staff';
+
       return `
         <div class="space-y-6">
-          <!-- Eligibility Formula Card -->
           <div class="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl shadow-sm border-2 border-indigo-200 p-6">
             <h3 class="font-bold text-lg text-indigo-900 mb-3">🧮 Teaching Assistant Eligibility Criteria</h3>
-            
             <div class="bg-white rounded-lg p-4 mb-4">
-              <p class="text-sm text-gray-700 mb-3">
-                <strong>Eligibility Score = Teaching Score + Supervision Score</strong>
-              </p>
+              <p class="text-sm text-gray-700 mb-3"><strong>Eligibility Score = Teaching Score + Supervision Score</strong></p>
               <div class="text-xs text-gray-600 space-y-2">
                 <p><strong>Qualification Thresholds:</strong></p>
                 <p>• <strong>Non-Admin Academic Staff:</strong> ≥ ${TA_THRESHOLD_NON_ADMIN} points</p>
-                <p>• <strong>Admin Academic Staff (with allowance):</strong> ≥ ${TA_THRESHOLD_ADMIN} points</p>
-                <p class="mt-3 text-gray-500 italic">
-                  Note: Admin academic staff are those who hold administrative positions with allowance as recorded in the Staff Profile section.
-                </p>
+                <p>• <strong>Admin Academic Staff:</strong> ≥ ${TA_THRESHOLD_ADMIN} points</p>
               </div>
-            </div>
-            
-            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
-              <p class="text-sm font-semibold text-yellow-900 mb-2">📋 Requirements:</p>
-              <p class="text-xs text-gray-700">
-                To qualify for teaching assistant (Tutor/Demonstrator) allocation, academic staff must achieve the minimum combined score from their teaching load and student supervision activities.
-              </p>
             </div>
           </div>
 
-          ${profile ? `
-            <!-- Eligibility Status Card -->
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h2 class="heading-font text-2xl font-bold mb-6">👨‍🏫 Your Teaching Assistant Eligibility</h2>
-              
-              <!-- Staff Information -->
-              <div class="bg-gray-50 rounded-lg p-5 mb-6">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <div class="text-sm font-semibold text-gray-600 mb-1">Staff Name</div>
-                    <div class="text-lg font-bold text-gray-900">${profile.profile_name}</div>
-                  </div>
-                  <div>
-                    <div class="text-sm font-semibold text-gray-600 mb-1">Staff Category</div>
-                    <div class="text-lg font-bold text-gray-900">${staffType}</div>
-                  </div>
-                  ${hasAdminPosition ? `
-                    <div class="md:col-span-2">
-                      <div class="text-sm font-semibold text-gray-600 mb-1">Administrative Position</div>
-                      <div class="text-base text-gray-900">
-                        ${profile.profile_admin_position === 'Other' ? profile.profile_other_admin_position : profile.profile_admin_position}
-                      </div>
-                    </div>
-                  ` : ''}
-                </div>
-              </div>
-
-              <!-- Score Calculation -->
-              <div class="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg p-6 mb-6">
-                <h4 class="font-bold text-lg text-gray-900 mb-4">Score Calculation</h4>
-                
-                <div class="space-y-3">
-                  <div class="flex items-center justify-between p-3 bg-white rounded-lg">
-                    <div>
-                      <div class="font-semibold text-gray-900">📚 Teaching Score</div>
-                      <div class="text-xs text-gray-500">${getRecordsBySection('teaching').length} courses</div>
-                    </div>
-                    <div class="text-2xl font-bold text-blue-600">${scores.teaching.toFixed(2)}</div>
-                  </div>
-                  
-                  <div class="flex items-center justify-between p-3 bg-white rounded-lg">
-                    <div>
-                      <div class="font-semibold text-gray-900">🎓 Supervision Score</div>
-                      <div class="text-xs text-gray-500">${getRecordsBySection('supervision').length} students</div>
-                    </div>
-                    <div class="text-2xl font-bold text-purple-600">${scores.supervision.toFixed(2)}</div>
-                  </div>
-                  
-                  <div class="border-t-2 border-gray-300 pt-3">
-                    <div class="flex items-center justify-between p-4 bg-white rounded-lg border-2 border-indigo-300">
-                      <div>
-                        <div class="font-bold text-lg text-gray-900">Combined Eligibility Score</div>
-                        <div class="text-xs text-gray-500">Teaching + Supervision</div>
-                      </div>
-                      <div class="text-4xl font-bold text-indigo-600">${combinedScore.toFixed(2)}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Eligibility Result -->
-              <div class="bg-gradient-to-r ${isQualified ? 'from-green-500 to-emerald-500' : 'from-red-500 to-rose-500'} rounded-xl shadow-lg p-8 text-white text-center">
-                <div class="text-6xl mb-4">${isQualified ? '✅' : '❌'}</div>
-                <h3 class="text-3xl font-bold mb-2">${isQualified ? 'QUALIFIED' : 'NOT QUALIFIED'}</h3>
-                <p class="text-lg mb-4">for Teaching Assistant Allocation</p>
-                
-                <div class="bg-white bg-opacity-20 rounded-lg p-4 inline-block">
-                  <div class="text-sm mb-1">Your Score vs Required Threshold</div>
-                  <div class="text-3xl font-bold">
-                    ${combinedScore.toFixed(2)} / ${required.toFixed(2)}
-                  </div>
-                  ${!isQualified ? `
-                    <div class="text-sm mt-2">
-                      Need ${(required - combinedScore).toFixed(2)} more points
-                    </div>
-                  ` : `
-                    <div class="text-sm mt-2">
-                      Exceeded by ${(combinedScore - required).toFixed(2)} points
-                    </div>
-                  `}
-                </div>
-              </div>
-
-              ${!isQualified ? `
-                <div class="mt-6 bg-blue-50 border-l-4 border-blue-400 p-4 rounded">
-                  <p class="text-sm text-blue-900">
-                    <strong>💡 Tip:</strong> To qualify for teaching assistant allocation, you can increase your combined score by:
-                  </p>
-                  <ul class="text-xs text-blue-800 mt-2 ml-4 list-disc space-y-1">
-                    <li>Adding more teaching courses (each course contributes to your teaching score)</li>
-                    <li>Supervising more students (PhD main = 8, Masters main = 5, Undergrad = 1)</li>
-                  </ul>
-                </div>
-              ` : ''}
-            </div>
-          ` : `
-            <!-- No Profile Message -->
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <div class="text-center py-12">
-                <div class="text-6xl mb-4">👤</div>
-                <h3 class="text-xl font-bold text-gray-900 mb-2">Profile Required</h3>
-                <p class="text-gray-600 mb-6">Please create your staff profile first to check teaching assistant eligibility.</p>
-                <button onclick="navigateToSection('profile')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
-                  Go to Profile →
-                </button>
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="heading-font text-2xl font-bold mb-6">👨‍🏫 Your Teaching Assistant Eligibility</h2>
+            <div class="bg-gray-50 rounded-lg p-5 mb-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div><div class="text-sm font-semibold text-gray-600 mb-1">Staff Name</div><div class="text-lg font-bold text-gray-900">${profile.profile_name}</div></div>
+                <div><div class="text-sm font-semibold text-gray-600 mb-1">Staff Category</div><div class="text-lg font-bold text-gray-900">${staffType}</div></div>
               </div>
             </div>
-          `}
+            <div class="bg-gradient-to-r ${isQualified ? 'from-green-500 to-emerald-500' : 'from-red-500 to-rose-500'} rounded-xl shadow-lg p-8 text-white text-center">
+              <div class="text-6xl mb-4">${isQualified ? '✅' : '❌'}</div>
+              <h3 class="text-3xl font-bold mb-2">${isQualified ? 'QUALIFIED' : 'NOT QUALIFIED'}</h3>
+              <p class="text-lg mb-4">for Teaching Assistant Allocation</p>
+              <div class="bg-white bg-opacity-20 rounded-lg p-4 inline-block">
+                <div class="text-sm mb-1">Your Score vs Required Threshold</div>
+                <div class="text-3xl font-bold">${combinedScore.toFixed(2)} / ${required.toFixed(2)}</div>
+              </div>
+            </div>
+          </div>
 
-          <!-- Navigation -->
           <div class="flex justify-between">
             <button onclick="navigateToSection('professional')" class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300">
               ← Previous
@@ -4896,7 +4899,6 @@ function getSubmitToken() {
               columns: [
                 { key: 'admin_position', label: 'Position', type: 'text' },
                 { key: 'admin_faculty', label: 'Faculty/Unit', type: 'text' },
-                { key: 'admin_allowance', label: 'Allowance (RM)', type: 'currency' },
                 { key: 'admin_start_date', label: 'Start Date', type: 'date' },
                 { key: 'admin_end_date', label: 'End Date', type: 'date' },
                 { key: 'rowScore', label: 'Score', type: 'score' }
@@ -4904,7 +4906,6 @@ function getSubmitToken() {
               mapRow: (admin) => ({
                 admin_position: admin.admin_position === 'Other' ? admin.admin_other_position : admin.admin_position,
                 admin_faculty: admin.admin_faculty,
-                admin_allowance: admin.admin_allowance,
                 admin_start_date: admin.admin_start_date,
                 admin_end_date: admin.admin_end_date || 'Current'
               })
