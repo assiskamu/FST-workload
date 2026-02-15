@@ -1773,1053 +1773,252 @@ function getSubmitToken() {
 
     const HOME_SECTION_GUIDE = [
       {
-        title: '👤 Staff Profile',
-        measures: 'Sets reporting period and profile defaults used by all sections.',
-        counts: ['Reporting period start and end dates', 'Staff category selection'],
-        notCounts: ['Performance indicators or targets'],
-        notes: 'The reporting period applies to every section. Only record activities within this period.'
+        id: 'profile',
+        icon: '👤',
+        name: 'Staff Profile',
+        measures: 'Reporting period and staff profile defaults used by all sections.',
+        counts: ['Reporting period start and end dates', 'Staff category and role details'],
+        notCounts: ['Performance targets or KPIs'],
+        notes: 'Set this first to ensure section calculations use the correct reporting window.'
       },
       {
-        title: '📚 Teaching',
-        measures: 'Teaching load points per course based on contact hours and class size factor.',
-        counts: ['Lecture, tutorial, lab, and fieldwork hours for the course in the period', 'Class size', 'Role'],
-        notCounts: ['Teaching quality', 'Student evaluation scores', 'Awards'],
-        notes: 'Add one entry per course offering. Avoid splitting one course into multiple entries.'
+        id: 'teaching',
+        icon: '📚',
+        name: 'Teaching',
+        measures: 'Teaching load points by contact hours, class size, and role.',
+        counts: ['Lecture, tutorial, laboratory, and fieldwork hours', 'Class size factor', 'Course role'],
+        notCounts: ['Teaching quality ratings', 'Student feedback scores'],
+        notes: 'Add one entry per course offering to avoid duplicates.'
       },
       {
-        title: '🎓 Supervision',
-        measures: 'Supervision workload points per supervisee based on level, role, registration mode, and current status.',
-        counts: ['Supervisees with active engagement during the reporting period'],
-        notCounts: ['Student outcomes such as graduation as a performance indicator'],
-        notes: 'Choose current status accurately. Not active and terminated should not be claimed.'
+        id: 'supervision',
+        icon: '🎓',
+        name: 'Supervision',
+        measures: 'Supervision workload by student level, role, and active status.',
+        counts: ['Actively supervised students in the reporting period'],
+        notCounts: ['Student outcomes used as performance indicators'],
+        notes: 'Only active supervision should be claimed.'
       },
       {
-        title: '🔬 Research',
-        measures: 'Research project workload points based on your role and work during the reporting period.',
-        counts: ['Projects where you had active work during the reporting period'],
-        notCounts: ['Grant size as prestige', 'Completion status as an outcome'],
-        notes: 'Do not claim projects with no activity in the reporting period.'
+        id: 'research',
+        icon: '🔬',
+        name: 'Research',
+        measures: 'Project workload points based on role and in-period activity.',
+        counts: ['Projects with active work during the reporting period'],
+        notCounts: ['Grant prestige or outcomes as performance'],
+        notes: 'Do not enter projects with no activity in the period.'
       },
       {
-        title: '📄 Publications',
-        measures: 'Scholarly writing workload points based on writing work done during the reporting period.',
-        counts: ['Drafting', 'Revising', 'Responding to reviewers', 'Proofing'],
-        notCounts: ['Journal ranking', 'Indexing', 'Author order', 'Acceptance as success'],
-        notes: 'This section is writing workload, not publication performance.'
+        id: 'publications',
+        icon: '📄',
+        name: 'Publications',
+        measures: 'Scholarly writing workload from work completed in the period.',
+        counts: ['Drafting', 'Revisions', 'Reviewer responses', 'Proofing'],
+        notCounts: ['Journal ranking', 'Author order', 'Acceptance status as success'],
+        notes: 'This section tracks writing workload, not publication impact.'
       },
       {
-        title: '🏛️ Admin Leadership',
-        measures: 'Workload points for formal leadership appointments during the reporting period.',
-        counts: ['Positions held during the reporting period with correct start and end dates'],
-        notCounts: ['Allowance amount', 'Title prestige beyond the appointment category'],
-        notes: 'Points may be prorated by overlap with the reporting period.'
+        id: 'administration',
+        icon: '🏛️',
+        name: 'Admin Leadership',
+        measures: 'Formal leadership appointment workload within the reporting period.',
+        counts: ['Appointments with valid start and end dates in the period'],
+        notCounts: ['Allowance amount', 'Title prestige beyond category'],
+        notes: 'Points may be prorated by period overlap.'
       },
       {
-        title: '📋 Admin Duties',
-        measures: 'Administrative duty workload based on duty type and frequency within the reporting period.',
-        counts: ['Committee work', 'Coordination', 'Accreditation tasks performed in the period'],
-        notCounts: ['Formal leadership appointments, record those under Admin Leadership'],
-        notes: 'Do not duplicate the same duty multiple times.'
+        id: 'admin_duties',
+        icon: '📋',
+        name: 'Admin Duties',
+        measures: 'Administrative duty workload by duty type and frequency.',
+        counts: ['Committee, coordination, and accreditation duties done in period'],
+        notCounts: ['Formal leadership appointments'],
+        notes: 'Record each duty once to avoid double counting.'
       },
       {
-        title: '🤝 Service',
-        measures: 'Service and engagement workload based on service type and time spent in the reporting period.',
-        counts: ['Examiner roles', 'Reviews', 'Outreach talks', 'Committee service performed in the period'],
-        notCounts: ['Scope prestige such as international versus local unless scoring explicitly uses it'],
-        notes: 'Enter realistic duration or effort category as defined in the section.'
+        id: 'service',
+        icon: '🤝',
+        name: 'Service',
+        measures: 'Service and engagement workload by role and effort in period.',
+        counts: ['Examiner work', 'Reviews', 'Outreach talks', 'Committee service'],
+        notCounts: ['Prestige labels unless explicitly scored'],
+        notes: ''
       },
       {
-        title: '🧪 Laboratory',
-        measures: 'Laboratory responsibility workload based on responsibility frequency and support scope.',
-        counts: ['Lab coordination', 'Safety', 'Inventory', 'Equipment maintenance', 'Teaching lab support tasks'],
-        notCounts: ['Teaching contact hours, record those in Teaching'],
-        notes: 'Avoid double counting between Teaching and Laboratory.'
+        id: 'laboratory',
+        icon: '🧪',
+        name: 'Laboratory',
+        measures: 'Laboratory responsibility workload by scope and frequency.',
+        counts: ['Coordination', 'Safety', 'Inventory', 'Equipment maintenance'],
+        notCounts: ['Teaching contact hours'],
+        notes: 'Avoid overlapping entries with Teaching.'
       },
       {
-        title: '💼 Professional',
-        measures: 'Professional activity workload based on activity type and effort in the reporting period.',
-        counts: ['Training', 'Certification maintenance', 'Professional roles and office bearer responsibilities'],
-        notCounts: ['Membership alone without responsibilities'],
-        notes: 'Select effort band consistent with actual work during the period.'
+        id: 'professional',
+        icon: '💼',
+        name: 'Professional',
+        measures: 'Professional activity workload by activity type and effort band.',
+        counts: ['Training', 'Certifications', 'Professional leadership roles'],
+        notCounts: ['Membership only without responsibilities'],
+        notes: ''
       },
       {
-        title: '👨‍🏫 Assistants',
-        measures: 'Teaching assistant eligibility based on combined Teaching plus Supervision score.',
-        counts: ['Saved Teaching score plus saved Supervision score'],
+        id: 'assistants',
+        icon: '👨‍🏫',
+        name: 'Assistants',
+        measures: 'Eligibility based on combined Teaching and Supervision score.',
+        counts: ['Saved Teaching score', 'Saved Supervision score'],
         notCounts: ['Other sections unless policy changes'],
-        notes: 'Eligibility is a threshold check, not a performance award.'
+        notes: 'This is a threshold check, not an extra performance score.'
       },
       {
-        title: '📊 Results',
-        measures: 'Total workload points and section breakdown for the reporting period.',
-        counts: ['Sum of saved entries that fall within the reporting rules'],
+        id: 'results',
+        icon: '📊',
+        name: 'Results',
+        measures: 'Consolidated workload points and section breakdown.',
+        counts: ['Sum of saved entries counted by section rules'],
         notCounts: ['Qualitative performance judgments'],
-        notes: 'Review for duplicates and missing sections before exporting or sharing.'
+        notes: 'Review missing or duplicate entries before final submission.'
       }
     ];
 
-    function renderHomeSectionGuideCards() {
-      return HOME_SECTION_GUIDE.map((section) => `
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-          <h4 class="font-bold text-lg text-gray-900 mb-3">${section.title}</h4>
-          <div class="space-y-3 text-sm text-gray-700">
-            <div><span class="font-semibold text-gray-900">What it measures:</span> ${section.measures}</div>
-            <div>
-              <div class="font-semibold text-gray-900 mb-1">What counts:</div>
-              <ul class="list-disc ml-5 space-y-1">${section.counts.map((item) => `<li>${item}</li>`).join('')}</ul>
-            </div>
-            <div>
-              <div class="font-semibold text-gray-900 mb-1">What does not count:</div>
-              <ul class="list-disc ml-5 space-y-1">${section.notCounts.map((item) => `<li>${item}</li>`).join('')}</ul>
-            </div>
-            <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-900">
-              <p class="font-semibold mb-1">Notes</p>
-              <p>${section.notes}</p>
-            </div>
+    let homeGuideExpandedSections = new Set();
+
+    function hasReportingPeriod(profile) {
+      const state = parseProfileState(profile);
+      const startDate = profile?.reporting_start_date || state.reporting_start_date;
+      const endDate = profile?.reporting_end_date || state.reporting_end_date;
+      return Boolean(startDate && endDate);
+    }
+
+    function toggleHomeGuideSection(sectionId) {
+      if (homeGuideExpandedSections.has(sectionId)) {
+        homeGuideExpandedSections.delete(sectionId);
+      } else {
+        homeGuideExpandedSections.add(sectionId);
+      }
+      if (currentSection === 'home') {
+        renderSection('home');
+      }
+    }
+
+    function expandAllHomeGuide() {
+      homeGuideExpandedSections = new Set(HOME_SECTION_GUIDE.map((section) => section.id));
+      if (currentSection === 'home') {
+        renderSection('home');
+      }
+    }
+
+    function collapseAllHomeGuide() {
+      homeGuideExpandedSections.clear();
+      if (currentSection === 'home') {
+        renderSection('home');
+      }
+    }
+
+    function renderHomeSectionAccordion() {
+      return HOME_SECTION_GUIDE.map((section) => {
+        const isExpanded = homeGuideExpandedSections.has(section.id);
+        return `
+          <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <button onclick="toggleHomeGuideSection('${section.id}')" class="w-full px-4 py-4 text-left flex items-start justify-between gap-4 hover:bg-gray-50 transition">
+              <div>
+                <div class="font-semibold text-gray-900">${section.icon} ${section.name}</div>
+                <div class="text-sm text-gray-600 mt-1">Measures: ${section.measures}</div>
+              </div>
+              <span class="text-gray-500 text-sm mt-1">${isExpanded ? '▲' : '▼'}</span>
+            </button>
+            ${isExpanded ? `
+              <div class="px-4 pb-4 border-t border-gray-100">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3 text-sm text-gray-700">
+                  <div class="rounded-lg border border-gray-200 p-3">
+                    <div class="font-semibold text-gray-900 mb-1">What it measures</div>
+                    <p>${section.measures}</p>
+                  </div>
+                  <div class="rounded-lg border border-gray-200 p-3">
+                    <div class="font-semibold text-gray-900 mb-1">What counts</div>
+                    <ul class="list-disc ml-5 space-y-1">${section.counts.map((item) => `<li>${item}</li>`).join('')}</ul>
+                  </div>
+                  <div class="rounded-lg border border-gray-200 p-3">
+                    <div class="font-semibold text-gray-900 mb-1">What does not count</div>
+                    <ul class="list-disc ml-5 space-y-1">${section.notCounts.map((item) => `<li>${item}</li>`).join('')}</ul>
+                  </div>
+                </div>
+                ${section.notes ? `<p class="mt-3 text-xs text-gray-500"><span class="font-semibold">Note:</span> ${section.notes}</p>` : ''}
+              </div>
+            ` : ''}
           </div>
-        </div>
-      `).join('');
+        `;
+      }).join('');
     }
 
     function renderHome() {
       const profile = getProfile();
       const scores = calculateScores();
-      const status = getWorkloadStatus(scores.total);
-      
-      const courseCount = getRecordsBySection('teaching').length;
-      const projectCount = getRecordsBySection('research').length;
-      const publicationCount = getRecordsBySection('publications').length;
-      const supervisionCount = getRecordsBySection('supervision').length;
-      
-      return `
-        <div class="space-y-6">
-          <!-- Hero Section -->
-          <div class="bg-gradient-to-r from-sky-500 to-cyan-500 rounded-2xl shadow-xl p-8 text-white text-center">
-            <h2 class="heading-font text-4xl font-bold mb-2">FST UMS Workload Calculator</h2>
-            <p class="text-sky-100 text-lg">Faculty of Science and Technology</p>
-            <p class="text-sky-100 text-base">Universiti Malaysia Sabah</p>
-            
-            ${profile ? `
-              <div class="mt-6 bg-white bg-opacity-20 rounded-lg p-4 inline-block">
-                <div class="text-sm text-sky-100 mb-1">Current User</div>
-                <div class="text-xl font-bold">${profile.profile_name}</div>
-                <div class="text-sm text-sky-100 mt-1">${profile.profile_rank || 'Staff'}</div>
-              </div>
-            ` : ''}
-          </div>
-
-          ${profile ? `
-            <!-- Workload Index System -->
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-              <h3 class="heading-font text-2xl font-bold mb-4 text-gray-900">📊 Workload Index</h3>
-              
-              <!-- Index Score with Visual Meter -->
-              <div class="mb-6">
-                <div class="flex items-end justify-between mb-2">
-                  <div>
-                    <div class="text-sm text-gray-600 mb-1">Your Workload Index</div>
-                    <div class="text-5xl font-bold text-gray-900">${Math.min(Math.round(scores.total), 100)}<span class="text-2xl text-gray-500">/100</span></div>
-                  </div>
-                  <div class="text-right">
-                    <div class="flex items-center gap-2 mb-1">
-                      <span class="text-3xl">${status.icon}</span>
-                      <span class="px-3 py-1 bg-${status.color}-100 text-${status.color}-700 rounded-full text-sm font-semibold">
-                        ${status.label}
-                      </span>
-                    </div>
-                    <div class="text-xs text-gray-500">Workload Status</div>
-                  </div>
-                </div>
-                
-                <!-- Visual Progress Bar -->
-                <div class="relative w-full h-8 bg-gray-200 rounded-full overflow-hidden">
-                  <div class="absolute inset-y-0 left-0 transition-all duration-500 ${
-                    scores.total >= 100 ? 'bg-gradient-to-r from-red-500 to-red-600' :
-                    scores.total >= 70 ? 'bg-gradient-to-r from-green-500 to-emerald-600' :
-                    scores.total >= 40 ? 'bg-gradient-to-r from-yellow-500 to-amber-600' :
-                    'bg-gradient-to-r from-blue-500 to-sky-600'
-                  }" style="width: ${Math.min(scores.total, 100)}%"></div>
-                  <div class="absolute inset-0 flex items-center justify-center">
-                    <span class="text-xs font-bold ${scores.total > 50 ? 'text-white' : 'text-gray-700'}">${scores.total.toFixed(1)} points</span>
-                  </div>
-                </div>
-                
-                <!-- Zone Markers -->
-                <div class="flex justify-between text-xs text-gray-500 mt-1 px-1">
-                  <span>0</span>
-                  <span class="text-blue-600 font-semibold">40</span>
-                  <span class="text-yellow-600 font-semibold">70</span>
-                  <span class="text-red-600 font-semibold">100</span>
-                </div>
-              </div>
-              
-              <!-- Interpretation Guide -->
-              <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <div class="p-3 rounded-lg border-2 ${scores.total < 40 ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-gray-50'}">
-                  <div class="flex items-center gap-2 mb-1">
-                    <span class="text-xl">💡</span>
-                    <span class="font-bold text-sm text-gray-900">Light (0-39)</span>
-                  </div>
-                  <div class="text-xs text-gray-600">Below recommended workload</div>
-                </div>
-                
-                <div class="p-3 rounded-lg border-2 ${scores.total >= 40 && scores.total < 70 ? 'border-yellow-400 bg-yellow-50' : 'border-gray-200 bg-gray-50'}">
-                  <div class="flex items-center gap-2 mb-1">
-                    <span class="text-xl">⚡</span>
-                    <span class="font-bold text-sm text-gray-900">Moderate (40-69)</span>
-                  </div>
-                  <div class="text-xs text-gray-600">Healthy activity level</div>
-                </div>
-                
-                <div class="p-3 rounded-lg border-2 ${scores.total >= 70 && scores.total < 100 ? 'border-green-400 bg-green-50' : 'border-gray-200 bg-gray-50'}">
-                  <div class="flex items-center gap-2 mb-1">
-                    <span class="text-xl">✅</span>
-                    <span class="font-bold text-sm text-gray-900">Balanced (70-99)</span>
-                  </div>
-                  <div class="text-xs text-gray-600">Optimal productivity zone</div>
-                </div>
-                
-                <div class="p-3 rounded-lg border-2 ${scores.total >= 100 ? 'border-red-400 bg-red-50' : 'border-gray-200 bg-gray-50'}">
-                  <div class="flex items-center gap-2 mb-1">
-                    <span class="text-xl">⚠️</span>
-                    <span class="font-bold text-sm text-gray-900">Overloaded (100+)</span>
-                  </div>
-                  <div class="text-xs text-gray-600">Consider rebalancing</div>
-                </div>
-              </div>
-              
-              <!-- Contextual Advice -->
-              <div class="mt-4 p-4 rounded-lg ${
-                scores.total >= 100 ? 'bg-red-50 border-l-4 border-red-500' :
-                scores.total >= 70 ? 'bg-green-50 border-l-4 border-green-500' :
-                scores.total >= 40 ? 'bg-yellow-50 border-l-4 border-yellow-500' :
-                'bg-blue-50 border-l-4 border-blue-500'
-              }">
-                <p class="text-sm font-semibold ${
-                  scores.total >= 100 ? 'text-red-900' :
-                  scores.total >= 70 ? 'text-green-900' :
-                  scores.total >= 40 ? 'text-yellow-900' :
-                  'text-blue-900'
-                } mb-1">
-                  ${
-                    scores.total >= 100 ? '⚠️ Workload Alert' :
-                    scores.total >= 70 ? '✅ Well-Balanced Profile' :
-                    scores.total >= 40 ? '⚡ Moderate Activity Level' :
-                    '💡 Growing Your Profile'
-                  }
-                </p>
-                <p class="text-xs ${
-                  scores.total >= 100 ? 'text-red-800' :
-                  scores.total >= 70 ? 'text-green-800' :
-                  scores.total >= 40 ? 'text-yellow-800' :
-                  'text-blue-800'
-                }">
-                  ${
-                    scores.total >= 100 ? 'Your workload exceeds recommended levels. Consider discussing task delegation or timeline adjustments with your supervisor.' :
-                    scores.total >= 70 ? 'Your workload is well-balanced across teaching, research, and service. You\'re in the optimal productivity zone!' :
-                    scores.total >= 40 ? 'You have a healthy activity level. Consider adding more activities to strengthen your academic profile.' :
-                    'Your current workload is light. This is a great opportunity to take on additional teaching, research, or service activities.'
-                  }
-                </p>
-              </div>
-            </div>
-
-            <!-- Stats Grid -->
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <!-- Total Score -->
-              <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                <div class="text-sm text-gray-600 mb-2">Total Score</div>
-                <div class="text-4xl font-bold text-gray-900 mb-2">${scores.total.toFixed(1)}</div>
-                <div class="flex items-center gap-2">
-                  <span class="text-xl">${status.icon}</span>
-                  <span class="px-2 py-1 bg-${status.color}-100 text-${status.color}-700 rounded-full text-xs font-semibold">
-                    ${status.label}
-                  </span>
-                </div>
-              </div>
-
-              <!-- Courses -->
-              <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                <div class="text-sm text-gray-600 mb-2">Courses</div>
-                <div class="text-4xl font-bold text-sky-600">${courseCount}</div>
-                <div class="text-xs text-gray-500 mt-2">Teaching load</div>
-              </div>
-
-              <!-- Projects -->
-              <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                <div class="text-sm text-gray-600 mb-2">Projects</div>
-                <div class="text-4xl font-bold text-green-600">${projectCount}</div>
-                <div class="text-xs text-gray-500 mt-2">Research</div>
-              </div>
-
-              <!-- Publications -->
-              <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                <div class="text-sm text-gray-600 mb-2">Publications</div>
-                <div class="text-4xl font-bold text-indigo-600">${publicationCount}</div>
-                <div class="text-xs text-gray-500 mt-2">Scholarly work</div>
-              </div>
-            </div>
-          ` : ''}
-
-          <!-- Home Onboarding Guide -->
-          <div class="space-y-6">
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h3 class="heading-font text-2xl font-bold mb-4 text-gray-900">How to use this calculator</h3>
-              <div class="space-y-3 text-sm text-gray-700">
-                <p><span class="font-semibold text-gray-900">Step 1:</span> Complete Staff Profile and set reporting period.</p>
-                <p><span class="font-semibold text-gray-900">Step 2:</span> Fill relevant sections and click Add to save each entry.</p>
-                <p><span class="font-semibold text-gray-900">Step 3:</span> Open Results to review totals and correct mistakes.</p>
-              </div>
-            </div>
-
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h3 class="heading-font text-2xl font-bold mb-4 text-gray-900">Key definitions</h3>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-700">
-                <div class="bg-gray-50 rounded-lg border border-gray-200 p-4"><span class="font-semibold text-gray-900">Workload points:</span> Proxy for workload responsibilities and effort, not quality or success.</div>
-                <div class="bg-gray-50 rounded-lg border border-gray-200 p-4"><span class="font-semibold text-gray-900">Reporting period:</span> Only activities within the dates count.</div>
-                <div class="bg-gray-50 rounded-lg border border-gray-200 p-4"><span class="font-semibold text-gray-900">Entry:</span> One saved record in a section.</div>
-                <div class="bg-gray-50 rounded-lg border border-gray-200 p-4"><span class="font-semibold text-gray-900">Double counting:</span> Recording the same workload in multiple sections.</div>
-              </div>
-              <div class="mt-4 bg-amber-50 border-l-4 border-amber-500 p-4 rounded">
-                <h4 class="font-bold text-amber-900 mb-1">Workload versus performance</h4>
-                <p class="text-sm text-amber-800">Workload points represent quantity and effort of responsibilities. They do not measure teaching quality, publication prestige, or outcome success.</p>
-              </div>
-            </div>
-
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h3 class="heading-font text-2xl font-bold mb-4 text-gray-900">Section guide</h3>
-              <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                ${renderHomeSectionGuideCards()}
-              </div>
-            </div>
-
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h3 class="heading-font text-2xl font-bold mb-4 text-gray-900">Common mistakes to avoid</h3>
-              <ul class="list-disc ml-5 space-y-2 text-sm text-gray-700">
-                <li>Recording activities outside the reporting period.</li>
-                <li>Splitting one activity into multiple entries to increase points.</li>
-                <li>Double counting the same workload in more than one section.</li>
-                <li>Using prestige fields to infer higher workload when the calculator does not score prestige.</li>
-              </ul>
-            </div>
-
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h3 class="heading-font text-2xl font-bold mb-4 text-gray-900">Buttons and saving</h3>
-              <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-900">
-                <p><span class="font-semibold">Add:</span> Saves an entry and it should appear in the saved list in that section.</p>
-                <p class="mt-2"><span class="font-semibold">Next:</span> Moves to the next section and does not save your current form.</p>
-                <p class="mt-2">If you do not see the saved entry after Add, return to that section and confirm it was saved.</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Quick Start Cards -->
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <!-- Profile Card -->
-            <div class="bg-gradient-to-br from-blue-50 to-sky-50 rounded-xl shadow-sm border border-blue-200 p-6">
-              <div class="text-3xl mb-3">👤</div>
-              <h4 class="font-bold text-lg text-gray-900 mb-2">
-                ${profile ? 'Update Profile' : 'Create Profile'}
-              </h4>
-              <p class="text-sm text-gray-600 mb-4">
-                ${profile ? 'Update your information' : 'Start by entering your profile'}
-              </p>
-              <button onclick="navigateToSection('profile')" 
-                      class="w-full px-4 py-2 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700 transition text-sm">
-                ${profile ? 'Edit Profile →' : 'Get Started →'}
-              </button>
-            </div>
-
-            <!-- Add Activities Card -->
-            <div class="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl shadow-sm border border-purple-200 p-6">
-              <div class="text-3xl mb-3">📝</div>
-              <h4 class="font-bold text-lg text-gray-900 mb-2">Add Activities</h4>
-              <p class="text-sm text-gray-600 mb-4">Document teaching and research work</p>
-              <button onclick="navigateToSection('teaching')" 
-                      class="w-full px-4 py-2 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition text-sm">
-                Add Now →
-              </button>
-            </div>
-
-            <!-- View Results Card -->
-            <div class="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl shadow-sm border border-green-200 p-6">
-              <div class="text-3xl mb-3">📊</div>
-              <h4 class="font-bold text-lg text-gray-900 mb-2">View Results</h4>
-              <p class="text-sm text-gray-600 mb-4">Comprehensive workload analysis</p>
-              <button onclick="navigateToSection('results')" 
-                      class="w-full px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition text-sm">
-                View Analysis →
-              </button>
-            </div>
-          </div>
-
-          <!-- Smart Recommendations -->
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h3 class="heading-font text-2xl font-bold mb-4">💡 Recommendations & Insights</h3>
-            
-            ${scores.total >= 100 ? `
-              <div class="bg-red-50 border-l-4 border-red-500 p-5 rounded-lg">
-                <h4 class="font-bold text-red-900 text-lg mb-3">⚠️ Workload Overload Detected</h4>
-                <p class="text-sm text-red-800 mb-3">Your workload score exceeds the recommended threshold. Consider these strategies:</p>
-                <ul class="text-sm text-red-800 space-y-2 ml-4 list-disc">
-                  <li><strong>Delegate tasks:</strong> Discuss with your supervisor about redistributing some responsibilities</li>
-                  <li><strong>Timeline adjustments:</strong> Request deadline extensions for non-critical projects</li>
-                  <li><strong>Work-life balance:</strong> Prioritize essential activities and reduce optional commitments</li>
-                  <li><strong>Seek support:</strong> Consider requesting teaching assistants or research support staff</li>
-                  <li><strong>Administrative relief:</strong> Explore temporary reduction in committee duties if possible</li>
-                </ul>
-              </div>
-            ` : scores.total >= 70 ? `
-              <div class="bg-green-50 border-l-4 border-green-500 p-5 rounded-lg">
-                <h4 class="font-bold text-green-900 text-lg mb-3">✅ Well-Balanced Workload</h4>
-                <p class="text-sm text-green-800 mb-3">Your workload is in the optimal productivity zone. To maintain this balance:</p>
-                <ul class="text-sm text-green-800 space-y-2 ml-4 list-disc">
-                  <li><strong>Maintain momentum:</strong> Continue your current pace without taking on major new commitments</li>
-                  <li><strong>Quality focus:</strong> Invest time in deepening the impact of existing projects</li>
-                  <li><strong>Mentorship opportunities:</strong> Share your balanced approach with junior colleagues</li>
-                  <li><strong>Strategic planning:</strong> Use this stable period to plan long-term research directions</li>
-                  <li><strong>Professional development:</strong> Attend workshops or conferences to enhance skills</li>
-                </ul>
-              </div>
-            ` : scores.total >= 40 ? `
-              <div class="bg-yellow-50 border-l-4 border-yellow-500 p-5 rounded-lg">
-                <h4 class="font-bold text-yellow-900 text-lg mb-3">⚡ Moderate Workload - Growth Opportunities</h4>
-                <p class="text-sm text-yellow-800 mb-3">You have capacity to expand your academic profile. Consider:</p>
-                <ul class="text-sm text-yellow-800 space-y-2 ml-4 list-disc">
-                  <li><strong>Increase teaching:</strong> Offer to teach an additional elective or take on coordinator roles</li>
-                  <li><strong>Expand research:</strong> Apply for new grants or join collaborative research projects</li>
-                  <li><strong>Supervision:</strong> Take on additional postgraduate or undergraduate supervisees</li>
-                  <li><strong>Publication pipeline:</strong> Convert existing research into journal publications</li>
-                  <li><strong>Committee participation:</strong> Join faculty or university-level committees</li>
-                </ul>
-              </div>
-            ` : `
-              <div class="bg-blue-50 border-l-4 border-blue-500 p-5 rounded-lg">
-                <h4 class="font-bold text-blue-900 text-lg mb-3">💡 Light Workload - Profile Building Phase</h4>
-                <p class="text-sm text-blue-800 mb-3">Great opportunity to build your academic profile. Focus on:</p>
-                <ul class="text-sm text-blue-800 space-y-2 ml-4 list-disc">
-                  <li><strong>Teaching expansion:</strong> Volunteer to teach core courses or develop new course materials</li>
-                  <li><strong>Research initiation:</strong> Start or join research projects, apply for seed grants</li>
-                  <li><strong>Student supervision:</strong> Actively recruit postgraduate and FYP students</li>
-                  <li><strong>Publication drive:</strong> Target 2-3 publications per year in indexed journals</li>
-                  <li><strong>Administrative roles:</strong> Express interest in programme coordinator or committee positions</li>
-                  <li><strong>Professional networking:</strong> Join professional bodies and attend conferences</li>
-                </ul>
-              </div>
-            `}
-          </div>
-
-          <!-- Reset Data Section -->
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h3 class="heading-font text-2xl font-bold mb-4 text-gray-900">🔄 Reset Data</h3>
-            
-            <div class="space-y-4">
-              <!-- Clear Activities Only -->
-              <div class="border-2 border-orange-200 bg-orange-50 rounded-lg p-5">
-                <h4 class="font-bold text-orange-900 mb-2">Clear Activities (Keep Profile)</h4>
-                <p class="text-sm text-orange-800 mb-4">
-                  Delete all teaching, research, supervision, and other activity records while keeping your staff profile intact.
-                </p>
-                <div id="clear-activities-confirm" class="hidden mb-3">
-                  <div class="bg-white border-2 border-orange-400 rounded-lg p-4">
-                    <p class="text-sm font-bold text-orange-900 mb-3">⚠️ Are you sure? This will delete:</p>
-                    <ul class="text-xs text-orange-800 ml-4 list-disc space-y-1 mb-3">
-                      <li>All teaching courses</li>
-                      <li>All student supervision records</li>
-                      <li>All research projects</li>
-                      <li>All publications</li>
-                      <li>All administrative records</li>
-                      <li>All service, laboratory, and professional activities</li>
-                    </ul>
-                    <p class="text-xs text-orange-700 font-semibold">Your profile will be preserved.</p>
-                  </div>
-                </div>
-                <div class="flex gap-3">
-                  <button id="clear-activities-btn" onclick="showClearActivitiesConfirm()" 
-                          class="px-5 py-2 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 transition text-sm">
-                    Clear Activities
-                  </button>
-                  <button id="confirm-clear-activities-btn" onclick="confirmClearActivities()" 
-                          class="hidden px-5 py-2 bg-orange-700 text-white rounded-lg font-bold hover:bg-orange-800 transition text-sm">
-                    ✓ Yes, Delete All Activities
-                  </button>
-                  <button id="cancel-clear-activities-btn" onclick="cancelClearActivities()" 
-                          class="hidden px-5 py-2 bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 transition text-sm">
-                    Cancel
-                  </button>
-                </div>
-              </div>
-
-              <!-- Reset All Data -->
-              <div class="border-2 border-red-200 bg-red-50 rounded-lg p-5">
-                <h4 class="font-bold text-red-900 mb-2">Reset All Data</h4>
-                <p class="text-sm text-red-800 mb-4">
-                  Permanently delete ALL data including your profile and all activities. This action cannot be undone.
-                </p>
-                <div id="reset-all-confirm" class="hidden mb-3">
-                  <div class="bg-white border-2 border-red-400 rounded-lg p-4">
-                    <p class="text-sm font-bold text-red-900 mb-3">⚠️ FINAL WARNING: This will delete EVERYTHING:</p>
-                    <ul class="text-xs text-red-800 ml-4 list-disc space-y-1 mb-3">
-                      <li><strong>Your staff profile</strong></li>
-                      <li>All teaching, supervision, research records</li>
-                      <li>All publications and administrative data</li>
-                      <li>All service, laboratory, and professional activities</li>
-                    </ul>
-                    <p class="text-xs text-red-700 font-bold">⚠️ Consider exporting your data first using the buttons above!</p>
-                  </div>
-                </div>
-                <div class="flex gap-3">
-                  <button id="reset-all-btn" onclick="showResetAllConfirm()" 
-                          class="px-5 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition text-sm">
-                    Reset All Data
-                  </button>
-                  <button id="confirm-reset-all-btn" onclick="confirmResetAll()" 
-                          class="hidden px-5 py-2 bg-red-700 text-white rounded-lg font-bold hover:bg-red-800 transition text-sm">
-                    ✓ Yes, Delete Everything
-                  </button>
-                  <button id="cancel-reset-all-btn" onclick="cancelResetAll()" 
-                          class="hidden px-5 py-2 bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 transition text-sm">
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-
-    const PROFILE_CATEGORY_LABELS = {
-      academic: 'Academic Staff',
-      admin: 'Administration Staff',
-      lab: 'Lab Staff'
-    };
-
-    function normalizeProfileCategoryKey(value) {
-      const category = String(value || '').trim().toLowerCase();
-      if (category === 'academic staff' || category === 'academic') return 'academic';
-      if (category === 'administration staff' || category === 'admin') return 'admin';
-      if (category === 'lab staff' || category === 'laboratory staff' || category === 'lab') return 'lab';
-      return '';
-    }
-
-    function normalizeProfileCategory(value) {
-      const key = normalizeProfileCategoryKey(value);
-      return key ? PROFILE_CATEGORY_LABELS[key] : '';
-    }
-
-    function getProfileCategoryLabel(value) {
-      return normalizeProfileCategory(value);
-    }
-
-    function getReportingPeriodPreset(periodType) {
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = now.getMonth();
-
-      if (periodType === 'Monthly') {
-        return {
-          start: new Date(year, month, 1),
-          end: new Date(year, month + 1, 0)
-        };
-      }
-
-      const isFirstHalf = month < 6;
-      return {
-        start: new Date(year, isFirstHalf ? 0 : 6, 1),
-        end: new Date(year, isFirstHalf ? 5 : 11, isFirstHalf ? 30 : 31)
-      };
-    }
-
-    function formatDateInputValue(value) {
-      if (!value) return '';
-      const date = new Date(value);
-      if (Number.isNaN(date.getTime())) return '';
-      return date.toISOString().split('T')[0];
-    }
-
-    function calculateReportingDays(startDate, endDate) {
-      const start = new Date(startDate);
-      const end = new Date(endDate);
-      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 0;
-      const millisecondsPerDay = 24 * 60 * 60 * 1000;
-      return Math.floor((end - start) / millisecondsPerDay) + 1;
-    }
-
-    function parseProfileState(profile, options = {}) {
-      const { includeLocalState = true } = options;
-      const defaults = {
-        staff_name: '',
-        staff_id: '',
-        staff_category: '',
-        admin_status: '',
-        staff_grade: '',
-        reporting_period_type: 'Semester',
-        reporting_start_date: '',
-        reporting_end_date: '',
-        programme: '',
-        academic_rank: '',
-        administrative_position: '',
-        laboratory_position: '',
-        reporting_tags: ''
-      };
-
-      const legacyExtras = (() => {
-        if (!profile?.profile_json) return {};
-        try {
-          return JSON.parse(profile.profile_json) || {};
-        } catch (error) {
-          return {};
-        }
-      })();
-
-      const legacyCategory = normalizeProfileCategory(profile?.profile_category || legacyExtras.staff_category);
-      const parsedState = (() => {
-        if (!profile?.profile_state) return {};
-        if (typeof profile.profile_state === 'string') {
-          try {
-            return JSON.parse(profile.profile_state) || {};
-          } catch (error) {
-            return {};
-          }
-        }
-        if (typeof profile.profile_state === 'object') return profile.profile_state;
-        return {};
-      })();
-
-      const localState = includeLocalState ? readLocalJson(PROFILE_STATE_STORAGE_KEY, {}) : {};
-      const resolvedAdminStatus = String(parsedState.admin_status || profile?.admin_status || localState.admin_status || '').trim().toLowerCase();
-      const state = {
-        ...defaults,
-        ...localState,
-        ...legacyExtras,
-        ...parsedState,
-        staff_name: parsedState.staff_name || profile?.profile_name || legacyExtras.staff_display_name || localState.staff_name || '',
-        staff_id: parsedState.staff_id || profile?.profile_staff_id || localState.staff_id || '',
-        staff_category: normalizeProfileCategory(parsedState.staff_category || legacyCategory || localState.staff_category),
-        admin_status: resolvedAdminStatus === 'admin' || resolvedAdminStatus === 'non_admin' ? resolvedAdminStatus : '',
-        programme: parsedState.programme || profile?.profile_programme || localState.programme || '',
-        academic_rank: parsedState.academic_rank || profile?.profile_rank || localState.academic_rank || '',
-        administrative_position: parsedState.administrative_position
-          || (profile?.profile_admin_position === 'Other' ? profile?.profile_other_admin_position : profile?.profile_admin_position)
-          || localState.administrative_position
-          || '',
-        reporting_period_type: parsedState.reporting_period_type || localState.reporting_period_type || 'Semester',
-        reporting_start_date: formatDateInputValue(parsedState.reporting_start_date || localState.reporting_start_date || ''),
-        reporting_end_date: formatDateInputValue(parsedState.reporting_end_date || localState.reporting_end_date || '')
-      };
-
-      if (!['Semester', 'Monthly', 'Custom'].includes(state.reporting_period_type)) {
-        state.reporting_period_type = 'Semester';
-      }
-
-      if (!state.reporting_start_date || !state.reporting_end_date) {
-        const preset = getReportingPeriodPreset(state.reporting_period_type);
-        state.reporting_start_date = state.reporting_start_date || formatDateInputValue(preset.start);
-        state.reporting_end_date = state.reporting_end_date || formatDateInputValue(preset.end);
-      }
-
-      return state;
-    }
-
-    function formatAdminStatusValue(value, staffCategory) {
-      if (normalizeProfileCategoryKey(staffCategory) !== 'academic') return 'Not applicable';
-      if (value === 'admin') return 'Admin';
-      if (value === 'non_admin') return 'Non admin';
-      return '';
-    }
-
-    function renderSavedProfileSummary(profile) {
-      if (!profile) return '';
-      const savedState = parseProfileState(profile, { includeLocalState: false });
-      const startDate = savedState.reporting_start_date;
-      const endDate = savedState.reporting_end_date;
-
-      const rows = [
-        ['Staff Name', savedState.staff_name],
-        ['Staff ID', savedState.staff_id],
-        ['Staff Category', getProfileCategoryLabel(savedState.staff_category)],
-        ['Admin Status', formatAdminStatusValue(savedState.admin_status, savedState.staff_category)],
-        ['Grade', savedState.staff_grade],
-        ['Reporting Period Type', savedState.reporting_period_type],
-        ['Start Date', startDate],
-        ['End Date', endDate],
-        ['Programme', savedState.programme],
-        ['Academic Rank', savedState.academic_rank],
-        ['Administrative Position', savedState.administrative_position],
-        ['Laboratory Position', savedState.laboratory_position],
-        ['Reporting Tags', savedState.reporting_tags]
-      ].filter(([, value]) => String(value || '').trim() !== '');
+      const reportingPeriodSet = hasReportingPeriod(profile);
 
       return `
-        <div id="profile_summary_card" class="bg-white border border-sky-200 rounded-xl p-4 shadow-sm">
-          <h3 class="text-sm font-semibold text-sky-700 mb-2">Saved profile summary</h3>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-            ${rows.map(([label, value]) => `<div><span class="text-gray-500">${escapeHtml(label)}:</span> <span class="font-medium text-gray-900">${escapeHtml(String(value))}</span></div>`).join('')}
+        <div class="space-y-5">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div class="space-y-2">
+                <h2 class="heading-font text-3xl font-bold text-gray-900">FST UMS Workload Calculator</h2>
+                <p class="text-gray-600">Record workload activities for the reporting period and view a consolidated workload summary.</p>
+                ${reportingPeriodSet ? `
+                  <div class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200">
+                    Reporting period set
+                  </div>
+                ` : `
+                  <div class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-300">
+                    Reporting period not set
+                  </div>
+                `}
+              </div>
+              <button onclick="navigateToSection('profile')" class="px-4 py-2 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700 transition whitespace-nowrap">
+                Start with Staff Profile
+              </button>
+            </div>
           </div>
-        </div>
-      `;
-    }
 
-    function renderProfile() {
-      const profile = getProfile();
-      const profileState = parseProfileState(profile);
-      const isAcademicStaff = normalizeProfileCategoryKey(profileState.staff_category) === 'academic';
-      const adminStatus = profileState.admin_status === 'admin' || profileState.admin_status === 'non_admin' ? profileState.admin_status : '';
-
-      return `
-        <div class="max-w-3xl mx-auto space-y-4">
-          ${renderSavedProfileSummary(profile)}
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <button onclick="navigateToSection('profile')" class="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold text-gray-700 hover:border-sky-400 hover:text-sky-700 transition">👤 Staff Profile</button>
+            <button onclick="navigateToSection('teaching')" class="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold text-gray-700 hover:border-sky-400 hover:text-sky-700 transition">📚 Teaching</button>
+            <button onclick="navigateToSection('supervision')" class="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold text-gray-700 hover:border-sky-400 hover:text-sky-700 transition">🎓 Supervision</button>
+            <button onclick="navigateToSection('results')" class="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold text-gray-700 hover:border-sky-400 hover:text-sky-700 transition">📊 Results</button>
+          </div>
 
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 class="heading-font text-2xl font-bold mb-2">👤 Staff Profile</h2>
-            <p class="text-sm text-gray-600 mb-6">Enter your profile details for reporting and section defaults.</p>
-
-            <form id="profile_form" onsubmit="saveProfile(event)" class="space-y-6">
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="md:col-span-2">
-                  <label for="staff_name" class="block text-sm font-semibold text-gray-700 mb-2">Staff Name *</label>
-                  <input type="text" id="staff_name" required
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         value="${escapeHtml(profileState.staff_name)}"
-                         placeholder="Enter staff name">
-                </div>
-
-                <div>
-                  <label for="staff_id" class="block text-sm font-semibold text-gray-700 mb-2">Staff ID</label>
-                  <input type="text" id="staff_id" pattern="[A-Za-z0-9-]{4,20}" title="Use 4-20 letters, numbers, or hyphens"
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         value="${escapeHtml(profileState.staff_id)}"
-                         placeholder="e.g., 250505-05050">
-                  <p class="text-xs text-gray-500 mt-1">Optional. Use letters, numbers, and hyphens only.</p>
-                </div>
-
-                <div>
-                  <label for="staff_category" class="block text-sm font-semibold text-gray-700 mb-2">Staff Category *</label>
-                  <select id="staff_category" required onchange="toggleCategoryFields()" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
-                    <option value="">Select category</option>
-                    <option value="Academic Staff" ${profileState.staff_category === 'Academic Staff' ? 'selected' : ''}>Academic Staff</option>
-                    <option value="Administration Staff" ${profileState.staff_category === 'Administration Staff' ? 'selected' : ''}>Administration Staff</option>
-                    <option value="Lab Staff" ${profileState.staff_category === 'Lab Staff' ? 'selected' : ''}>Lab Staff</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label for="staff_grade" class="block text-sm font-semibold text-gray-700 mb-2">Grade</label>
-                  <input type="text" id="staff_grade"
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         value="${escapeHtml(profileState.staff_grade)}"
-                         placeholder="e.g., DS51">
-                  <p class="text-xs text-gray-500 mt-1">Optional classification code for reporting.</p>
-                </div>
-
-                <div>
-                  <label for="admin_status" class="block text-sm font-semibold text-gray-700 mb-2">Admin Status ${isAcademicStaff ? '*' : ''}</label>
-                  <select id="admin_status" ${isAcademicStaff ? 'required' : 'disabled'} class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500">
-                    <option value="" ${adminStatus === '' ? 'selected' : ''}>${isAcademicStaff ? 'Select admin status' : 'Not applicable'}</option>
-                    <option value="non_admin" ${adminStatus === 'non_admin' ? 'selected' : ''}>Non admin</option>
-                    <option value="admin" ${adminStatus === 'admin' ? 'selected' : ''}>Admin</option>
-                  </select>
-                  <p id="admin_status_note" class="text-xs text-amber-700 mt-1 ${isAcademicStaff ? 'hidden' : ''}">Applies to Academic Staff only.</p>
-                </div>
-
-                <div>
-                  <label for="reporting_period_type" class="block text-sm font-semibold text-gray-700 mb-2">Reporting Period Type *</label>
-                  <select id="reporting_period_type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
-                    <option value="Semester" ${profileState.reporting_period_type === 'Semester' ? 'selected' : ''}>Semester</option>
-                    <option value="Monthly" ${profileState.reporting_period_type === 'Monthly' ? 'selected' : ''}>Monthly</option>
-                    <option value="Custom" ${profileState.reporting_period_type === 'Custom' ? 'selected' : ''}>Custom</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label for="reporting_start_date" class="block text-sm font-semibold text-gray-700 mb-2">Start Date *</label>
-                  <input type="date" id="reporting_start_date" required
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         value="${escapeHtml(profileState.reporting_start_date)}">
-                </div>
-
-                <div>
-                  <label for="reporting_end_date" class="block text-sm font-semibold text-gray-700 mb-2">End Date *</label>
-                  <input type="date" id="reporting_end_date" required
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         value="${escapeHtml(profileState.reporting_end_date)}">
-                </div>
-
-                <div>
-                  <label class="block text-sm font-semibold text-gray-700 mb-2">Reporting Days / Weeks</label>
-                  <p id="reporting_duration_display" class="w-full px-4 py-3 border border-gray-200 rounded-lg bg-gray-50 text-gray-700 text-sm">0 days (0.0 weeks)</p>
-                </div>
-
-                <div id="programme_field" style="display:none;">
-                  <label for="programme" class="block text-sm font-semibold text-gray-700 mb-2">Programme</label>
-                  <select id="programme" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
-                    <option value="">Select Programme</option>
-                    <option value="UH6422001 Environmental Science" ${profileState.programme === 'UH6422001 Environmental Science' ? 'selected' : ''}>UH6422001 Environmental Science</option>
-                    <option value="UH6441001 Industrial Physics" ${profileState.programme === 'UH6441001 Industrial Physics' ? 'selected' : ''}>UH6441001 Industrial Physics</option>
-                    <option value="UH6443002 Geology" ${profileState.programme === 'UH6443002 Geology' ? 'selected' : ''}>UH6443002 Geology</option>
-                    <option value="UH6443003 Marine Science" ${profileState.programme === 'UH6443003 Marine Science' ? 'selected' : ''}>UH6443003 Marine Science</option>
-                    <option value="UH6461001 Mathematics with Economics" ${profileState.programme === 'UH6461001 Mathematics with Economics' ? 'selected' : ''}>UH6461001 Mathematics with Economics</option>
-                    <option value="UH6461002 Mathematics Computer Graphics" ${profileState.programme === 'UH6461002 Mathematics Computer Graphics' ? 'selected' : ''}>UH6461002 Mathematics Computer Graphics</option>
-                    <option value="UH6545001 Biotechnology" ${profileState.programme === 'UH6545001 Biotechnology' ? 'selected' : ''}>UH6545001 Biotechnology</option>
-                    <option value="UH6545002 Industrial Chemistry" ${profileState.programme === 'UH6545002 Industrial Chemistry' ? 'selected' : ''}>UH6545002 Industrial Chemistry</option>
-                  </select>
-                </div>
-
-                <div id="academic_rank_field" style="display:none;">
-                  <label for="academic_rank" class="block text-sm font-semibold text-gray-700 mb-2">Academic Rank</label>
-                  <select id="academic_rank" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
-                    <option value="">Select rank</option>
-                    <option value="Professor" ${profileState.academic_rank === 'Professor' ? 'selected' : ''}>Professor</option>
-                    <option value="Associate Professor" ${profileState.academic_rank === 'Associate Professor' ? 'selected' : ''}>Associate Professor</option>
-                    <option value="Senior Lecturer" ${profileState.academic_rank === 'Senior Lecturer' ? 'selected' : ''}>Senior Lecturer</option>
-                    <option value="Lecturer" ${profileState.academic_rank === 'Lecturer' ? 'selected' : ''}>Lecturer</option>
-                  </select>
-                </div>
-
-                <div id="administrative_position_field" style="display:none;">
-                  <label for="administrative_position" class="block text-sm font-semibold text-gray-700 mb-2">Administrative Position</label>
-                  <input type="text" id="administrative_position"
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         value="${escapeHtml(profileState.administrative_position)}"
-                         placeholder="e.g., Deputy Dean">
-                </div>
-
-                <div id="laboratory_position_field" style="display:none;">
-                  <label for="laboratory_position" class="block text-sm font-semibold text-gray-700 mb-2">Laboratory Position</label>
-                  <input type="text" id="laboratory_position"
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         value="${escapeHtml(profileState.laboratory_position)}"
-                         placeholder="e.g., Laboratory Coordinator">
-                </div>
-
-                <div class="md:col-span-2">
-                  <label for="reporting_tags" class="block text-sm font-semibold text-gray-700 mb-2">Reporting Tags</label>
-                  <input type="text" id="reporting_tags"
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         value="${escapeHtml(profileState.reporting_tags)}"
-                         placeholder="Optional: specialty or reporting tags">
-                </div>
-
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+              <div>
+                <h3 class="heading-font text-xl font-bold text-gray-900">Workload snapshot</h3>
+                <p class="text-sm text-gray-600">Current total score based on saved entries.</p>
               </div>
-
-              <button type="submit" id="save_profile_btn" class="w-full px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
-                💾 Save Profile
-              </button>
-            </form>
-
-            ${profile ? `
-              <button type="button" onclick="deleteProfile('${profile.__backendId}')"
-                      class="mt-4 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium text-sm border border-red-200">
-                Delete Profile
-              </button>
-            ` : ''}
+              <div class="text-right">
+                <div class="text-3xl font-bold text-gray-900">${scores.total.toFixed(1)}</div>
+                <div class="text-xs text-gray-500">points</div>
+              </div>
+            </div>
+            <div class="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+              <div class="h-full bg-sky-600" style="width: ${Math.min(scores.total, 100)}%"></div>
+            </div>
           </div>
+
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+              <h3 class="heading-font text-xl font-bold text-gray-900">Section guide</h3>
+              <div class="flex gap-2">
+                <button onclick="expandAllHomeGuide()" class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition">Expand all</button>
+                <button onclick="collapseAllHomeGuide()" class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition">Collapse all</button>
+              </div>
+            </div>
+            <div class="space-y-3">
+              ${renderHomeSectionAccordion()}
+            </div>
+          </div>
+
+          <p class="text-xs text-gray-500 px-1">Data is stored in your browser and is only submitted when you use Submit report.</p>
         </div>
       `;
-    }
-
-    function setupProfileEventListeners() {
-      [
-        'staff_name', 'staff_id', 'staff_category', 'staff_grade',
-        'reporting_period_type', 'reporting_start_date', 'reporting_end_date',
-        'programme', 'academic_rank', 'administrative_position', 'laboratory_position', 'reporting_tags', 'admin_status'
-      ].forEach((id) => {
-        const element = document.getElementById(id);
-        if (!element) return;
-        element.addEventListener('change', () => {
-          if (id === 'staff_category') toggleCategoryFields();
-          if (id === 'reporting_period_type') applyReportingPeriodPreset();
-          if (id === 'reporting_period_type' || id === 'reporting_start_date' || id === 'reporting_end_date') {
-            updateReportingDurationPreview();
-          }
-        });
-        if (id === 'reporting_start_date' || id === 'reporting_end_date') {
-          element.addEventListener('input', updateReportingDurationPreview);
-        }
-      });
-
-      toggleCategoryFields();
-      updateReportingDurationPreview();
-    }
-
-    function toggleCategoryFields() {
-      const categoryKey = normalizeProfileCategoryKey(document.getElementById('staff_category')?.value || '');
-      const programmeField = document.getElementById('programme_field');
-      const rankField = document.getElementById('academic_rank_field');
-      const adminField = document.getElementById('administrative_position_field');
-      const labField = document.getElementById('laboratory_position_field');
-      const adminStatusField = document.getElementById('admin_status');
-      const adminStatusNote = document.getElementById('admin_status_note');
-
-      if (programmeField) programmeField.style.display = categoryKey === 'academic' ? 'block' : 'none';
-      if (rankField) rankField.style.display = categoryKey === 'academic' ? 'block' : 'none';
-      if (adminField) adminField.style.display = categoryKey === 'admin' ? 'block' : 'none';
-      if (labField) labField.style.display = categoryKey === 'lab' ? 'block' : 'none';
-
-      if (adminStatusField) {
-        const placeholderOption = adminStatusField.querySelector('option[value=""]');
-        if (categoryKey === 'academic') {
-          adminStatusField.disabled = false;
-          adminStatusField.required = true;
-          if (placeholderOption) placeholderOption.textContent = 'Select admin status';
-          if (adminStatusNote) adminStatusNote.classList.add('hidden');
-        } else {
-          adminStatusField.value = '';
-          adminStatusField.disabled = true;
-          adminStatusField.required = false;
-          if (placeholderOption) placeholderOption.textContent = 'Not applicable';
-          if (adminStatusNote) adminStatusNote.classList.remove('hidden');
-        }
-      }
-
-      if (categoryKey !== 'academic') {
-        const programme = document.getElementById('programme');
-        const rank = document.getElementById('academic_rank');
-        if (programme) programme.value = '';
-        if (rank) rank.value = '';
-      }
-      if (categoryKey !== 'admin') {
-        const adminPos = document.getElementById('administrative_position');
-        if (adminPos) adminPos.value = '';
-      }
-      if (categoryKey !== 'lab') {
-        const labPos = document.getElementById('laboratory_position');
-        if (labPos) labPos.value = '';
-      }
-    }
-
-    function applyReportingPeriodPreset() {
-      const periodType = document.getElementById('reporting_period_type')?.value || 'Semester';
-      if (periodType === 'Custom') return;
-      const preset = getReportingPeriodPreset(periodType);
-      const startInput = document.getElementById('reporting_start_date');
-      const endInput = document.getElementById('reporting_end_date');
-      if (startInput) startInput.value = formatDateInputValue(preset.start);
-      if (endInput) endInput.value = formatDateInputValue(preset.end);
-    }
-
-    function updateReportingDurationPreview() {
-      const startDate = document.getElementById('reporting_start_date')?.value || '';
-      const endDate = document.getElementById('reporting_end_date')?.value || '';
-      const reportingDays = calculateReportingDays(startDate, endDate);
-      const reportingWeeks = reportingDays ? (reportingDays / 7).toFixed(1) : '';
-      const durationDisplay = document.getElementById('reporting_duration_display');
-      if (durationDisplay) {
-        durationDisplay.textContent = reportingDays
-          ? `${reportingDays} days (${reportingWeeks} weeks)`
-          : 'Enter a valid start and end date.';
-      }
-    }
-
-    async function saveProfile(event) {
-      event.preventDefault();
-
-      if (allRecords.length >= 999) {
-        showToast('Maximum limit of 999 records reached', 'error');
-        return;
-      }
-
-      const btn = document.getElementById('save_profile_btn');
-      btn.disabled = true;
-      btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
-
-      const staffId = (document.getElementById('staff_id')?.value || '').trim();
-      if (staffId && !/^[A-Za-z0-9-]{4,20}$/.test(staffId)) {
-        showToast('Staff ID format is invalid. Use 4-20 letters, numbers, or hyphens.', 'error');
-        btn.disabled = false;
-        btn.innerHTML = '💾 Save Profile';
-        return;
-      }
-
-      const profileState = {
-        staff_name: (document.getElementById('staff_name')?.value || '').trim(),
-        staff_id: staffId,
-        staff_category: normalizeProfileCategory(document.getElementById('staff_category')?.value || ''),
-        admin_status: '',
-        staff_grade: (document.getElementById('staff_grade')?.value || '').trim(),
-        reporting_period_type: (document.getElementById('reporting_period_type')?.value || 'Semester').trim(),
-        reporting_start_date: formatDateInputValue(document.getElementById('reporting_start_date')?.value || ''),
-        reporting_end_date: formatDateInputValue(document.getElementById('reporting_end_date')?.value || ''),
-        programme: (document.getElementById('programme')?.value || '').trim(),
-        academic_rank: (document.getElementById('academic_rank')?.value || '').trim(),
-        administrative_position: (document.getElementById('administrative_position')?.value || '').trim(),
-        laboratory_position: (document.getElementById('laboratory_position')?.value || '').trim(),
-        reporting_tags: (document.getElementById('reporting_tags')?.value || '').trim()
-      };
-      const categoryKey = normalizeProfileCategoryKey(profileState.staff_category);
-      profileState.admin_status = categoryKey === 'academic' ? (document.getElementById('admin_status')?.value || '').trim() : null;
-      profileState.academic_rank = categoryKey === 'academic' ? profileState.academic_rank : null;
-
-      if (categoryKey === 'academic' && !profileState.admin_status) {
-        showToast('Admin Status is required for Academic Staff.', 'error');
-        btn.disabled = false;
-        btn.innerHTML = '💾 Save Profile';
-        return;
-      }
-
-      const reportingDays = calculateReportingDays(profileState.reporting_start_date, profileState.reporting_end_date);
-      if (!reportingDays) {
-        showToast('Please enter a valid reporting start and end date.', 'error');
-        btn.disabled = false;
-        btn.innerHTML = '💾 Save Profile';
-        return;
-      }
-
-      writeLocalJson(PROFILE_STATE_STORAGE_KEY, profileState);
-
-      const profileData = {
-        section: 'profile',
-        profile_name: profileState.staff_name,
-        profile_staff_id: profileState.staff_id,
-        profile_category: profileState.staff_category,
-        admin_status: categoryKey === 'academic' ? profileState.admin_status : null,
-        profile_programme: categoryKey === 'academic' ? profileState.programme : '',
-        profile_rank: categoryKey === 'academic' ? profileState.academic_rank : null,
-        profile_admin_position: categoryKey === 'admin' ? profileState.administrative_position : '',
-        profile_other_admin_position: '',
-        profile_state: JSON.stringify(profileState),
-        profile_json: '',
-        created_at: new Date().toISOString()
-      };
-
-      const existingProfile = getProfile();
-      let result;
-
-      if (existingProfile) {
-        result = await window.dataSdk.update({ ...existingProfile, ...profileData });
-      } else {
-        result = await window.dataSdk.create(profileData);
-      }
-
-      btn.disabled = false;
-      btn.innerHTML = '💾 Save Profile';
-
-      if (result.isOk) {
-        if (currentSection === 'profile') {
-          renderSection('profile');
-        }
-        showToast('Profile saved successfully!');
-        setTimeout(() => {
-          navigateToSection('teaching');
-        }, 1000);
-      } else {
-        showToast('Failed to save profile', 'error');
-      }
-    }
-
-    async function deleteProfile(backendId) {
-      const profile = allRecords.find(r => r.__backendId === backendId);
-      if (!profile) return;
-
-      const result = await window.dataSdk.delete(profile);
-
-      if (result.isOk) {
-        writeLocalJson(PROFILE_STATE_STORAGE_KEY, {});
-        showToast('Profile deleted successfully!');
-      } else {
-        showToast('Failed to delete profile', 'error');
-      }
     }
 
     function renderTeaching() {
