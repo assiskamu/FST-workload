@@ -774,6 +774,32 @@ const WORKLOAD_STATUS_THRESHOLDS = {
       }
     }
 
+    function parseProfileState(profile) {
+      if (profile && typeof profile === 'object') {
+        return profile;
+      }
+
+      if (typeof localStorage === 'undefined') return {};
+
+      const storageKeys = [PROFILE_STATE_STORAGE_KEY, ...LEGACY_PROFILE_STORAGE_KEYS, 'profile'];
+
+      try {
+        for (const key of storageKeys) {
+          const raw = localStorage.getItem(key);
+          if (!raw) continue;
+
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') {
+            return parsed;
+          }
+        }
+      } catch (error) {
+        return {};
+      }
+
+      return {};
+    }
+
     function getSubmissionHistory() {
       const history = readLocalJson(SUBMISSION_HISTORY_KEY, []);
       return Array.isArray(history) ? history : [];
