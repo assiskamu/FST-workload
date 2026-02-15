@@ -2344,152 +2344,132 @@ function getSubmitToken() {
         id: 'profile',
         icon: '👤',
         name: 'Staff Profile',
-        measures: 'Reporting period and staff profile defaults used by all sections.',
-        counts: ['Reporting period start and end dates', 'Staff category and role details'],
-        notCounts: ['Performance targets or KPIs'],
-        notes: 'Set this first to ensure section calculations use the correct reporting window.'
+        measures: 'Profile context and reporting window used to interpret all recorded workload.',
+        recordHere: ['Reporting period dates', 'Staff category and role details'],
+        doNotRecordHere: ['Teaching, supervision, or research activities', 'Performance targets or KPIs'],
+        notes: 'Set this first so all workload entries are interpreted in the correct reporting period.'
       },
       {
         id: 'teaching',
         icon: '📚',
         name: 'Teaching',
-        measures: 'Teaching load points by contact hours, class size, and role.',
-        counts: ['Lecture, tutorial, laboratory, and fieldwork hours', 'Class size factor', 'Course role'],
-        notCounts: ['Teaching quality ratings', 'Student feedback scores'],
-        notes: 'Add one entry per course offering to avoid duplicates.'
+        measures: 'Teaching workload from course delivery effort across lecture, tutorial, lab, and fieldwork activities.',
+        recordHere: ['Lecture and tutorial contact hours', 'Lab or fieldwork teaching hours', 'Course-level teaching responsibilities'],
+        doNotRecordHere: ['Student feedback or quality ratings', 'Formal internal committee work (Admin Duties)', 'Professional training credentials (Professional)'],
+        notes: 'Record each course offering once only to avoid double counting.'
       },
       {
         id: 'supervision',
         icon: '🎓',
         name: 'Supervision',
-        measures: 'Supervision workload by student level, role, and active status.',
-        counts: ['Actively supervised students in the reporting period'],
-        notCounts: ['Student outcomes used as performance indicators'],
-        notes: 'Only active supervision should be claimed.'
+        measures: 'Student supervision workload based on active supervision responsibilities in the reporting period.',
+        recordHere: ['Active undergraduate supervision', 'Active postgraduate supervision', 'Co-supervision responsibilities'],
+        doNotRecordHere: ['Student outcome achievements', 'Teaching contact hours (Teaching)', 'External reviewing roles (Service)'],
+        notes: 'Only include students you actively supervised during the period.'
       },
       {
         id: 'research',
         icon: '🔬',
         name: 'Research',
-        measures: 'Project workload points based on role and in-period activity.',
-        counts: ['Projects with active work during the reporting period'],
-        notCounts: ['Grant prestige or outcomes as performance'],
-        notes: 'Do not enter projects with no activity in the period.'
+        measures: 'Research project workload from active project roles and in-period project activity.',
+        recordHere: ['Projects with active work in the period', 'Research role responsibilities on active projects'],
+        doNotRecordHere: ['Grant prestige indicators', 'Journal reviewing or keynote talks (Service)', 'Internal coordination committees (Admin Duties)'],
+        notes: 'Do not record projects with no actual activity in the reporting period.'
       },
       {
         id: 'publications',
         icon: '📄',
         name: 'Publications',
-        measures: 'Scholarly writing workload from work completed in the period.',
-        counts: ['Drafting', 'Revisions', 'Reviewer responses', 'Proofing'],
-        notCounts: ['Journal ranking', 'Author order', 'Acceptance status as success'],
-        notes: 'This section tracks writing workload, not publication impact.'
+        measures: 'Publication writing workload from manuscript development and revision effort in the period.',
+        recordHere: ['Manuscript drafting', 'Revision and resubmission work', 'Reviewer response preparation'],
+        doNotRecordHere: ['Journal ranking or prestige', 'Internal committee tasks (Admin Duties)', 'Professional certifications (Professional)'],
+        notes: 'Track writing effort, not publication impact or performance outcomes.'
       },
       {
         id: 'administration',
         icon: '🏛️',
         name: 'Admin Leadership',
-        measures: 'Formal leadership appointment workload within the reporting period.',
-        counts: ['Appointments with valid start and end dates in the period'],
-        notCounts: ['Allowance amount', 'Title prestige beyond category'],
-        notes: 'Points may be prorated by period overlap.'
+        measures: 'Formal internal leadership appointment workload based on assigned administrative positions.',
+        recordHere: ['Dean or deputy appointments', 'Head of programme appointments', 'Official internal leadership roles'],
+        doNotRecordHere: ['General internal committee participation (Admin Duties)', 'External examiner work (Service)', 'Professional membership only (Professional)'],
+        notes: 'Use this only for formal appointment-based leadership roles.'
       },
       {
         id: 'admin_duties',
         icon: '📋',
         name: 'Admin Duties',
-        measures: 'Administrative duty workload by duty type and frequency.',
-        counts: ['Committee, coordination, and accreditation duties done in period'],
-        notCounts: ['Formal leadership appointments'],
-        notes: 'Record each duty once to avoid double counting.'
+        measures: 'Formal internal operational duties assigned by Faculty or University, governance, compliance, accreditation, coordination, and internal committee work.',
+        recordHere: ['Committee member roles', 'Accreditation tasks', 'Exam coordination', 'Curriculum development committee'],
+        doNotRecordHere: ['External examiner or invited talk (Service)', 'Professional body membership or certification (Professional)', 'Paid leadership appointment (Admin Leadership)'],
+        notes: 'Record once in the best-fit internal administration section and avoid double counting.'
       },
       {
         id: 'service',
         icon: '🤝',
         name: 'Service',
-        measures: 'Service and engagement workload by role and effort in period.',
-        counts: ['Examiner work', 'Reviews', 'Outreach talks', 'Committee service'],
-        notCounts: ['Prestige labels unless explicitly scored'],
-        notes: ''
+        measures: 'External engagement or contributions to community, profession, or scholarly ecosystems where the primary audience is outside internal administration.',
+        recordHere: ['External examiner', 'Keynote speaker', 'Journal reviewer', 'Community outreach'],
+        doNotRecordHere: ['Internal committees (Admin Duties)', 'Professional certification or membership (Professional)', 'Internal leadership appointment (Admin Leadership)'],
+        notes: 'Use Service when the contribution is outward-facing rather than internal operations.'
       },
       {
         id: 'laboratory',
         icon: '🧪',
         name: 'Laboratory',
-        measures: 'Laboratory responsibility workload by scope and frequency.',
-        counts: ['Coordination', 'Safety', 'Inventory', 'Equipment maintenance'],
-        notCounts: ['Teaching contact hours'],
-        notes: 'Avoid overlapping entries with Teaching.'
+        measures: 'Laboratory operations workload for lab coordination, safety, inventory, and equipment responsibility.',
+        recordHere: ['Lab safety oversight', 'Equipment maintenance coordination', 'Lab inventory management'],
+        doNotRecordHere: ['Teaching contact hours (Teaching)', 'External examiner roles (Service)', 'Professional memberships (Professional)'],
+        notes: 'Record operational lab responsibilities once and avoid overlap with Teaching.'
       },
       {
         id: 'professional',
         icon: '💼',
         name: 'Professional',
-        measures: 'Professional activity workload by activity type and effort band.',
-        counts: ['Training', 'Certifications', 'Professional leadership roles'],
-        notCounts: ['Membership only without responsibilities'],
-        notes: ''
+        measures: 'Professional development and professional standing activities such as training, credentials, memberships, and professional practice roles.',
+        recordHere: ['Professional certification', 'Membership in professional society', 'Consultancy role if modelled as professional practice'],
+        doNotRecordHere: ['External examiner or invited talk (Service)', 'Internal committee work (Admin Duties)'],
+        notes: 'Use this section for credentials and continuing professional standing activities.'
       },
       {
         id: 'assistants',
         icon: '👨‍🏫',
         name: 'Assistants',
-        measures: 'Eligibility based on combined Teaching and Supervision score.',
-        counts: ['Saved Teaching score', 'Saved Supervision score'],
-        notCounts: ['Other sections unless policy changes'],
-        notes: 'This is a threshold check, not an extra performance score.'
+        measures: 'Assistant support eligibility workload derived from relevant teaching and supervision totals.',
+        recordHere: ['Saved Teaching totals', 'Saved Supervision totals'],
+        doNotRecordHere: ['Separate manual assistant claims', 'Research-only or service-only activities'],
+        notes: 'This is an eligibility check view; do not re-enter activities here.'
       },
       {
         id: 'results',
         icon: '📊',
         name: 'Results',
-        measures: 'Consolidated workload points and section breakdown.',
-        counts: ['Sum of saved entries counted by section rules'],
-        notCounts: ['Qualitative performance judgments'],
+        measures: 'Consolidated workload snapshot across saved sections for reporting and review.',
+        recordHere: ['Section totals and overall index review', 'Cross-check for missing or duplicate entries'],
+        doNotRecordHere: ['New raw activities', 'Performance appraisals or KPI judgments'],
         notes: 'Review missing or duplicate entries before final submission.'
       }
     ];
 
-    const HOME_CLASSIFICATION_GUIDE = [
-      {
-        id: 'admin_duties',
-        icon: '📋',
-        name: 'Administration Duties',
-        measures: 'Formal internal duties assigned by the Faculty or University for administration, governance, operations, compliance, accreditation, coordination, or committee work that is part of official internal responsibilities.',
-        recordHere: ['Internal committee membership', 'Accreditation tasks', 'Programme coordination tasks when not counted as a leadership position'],
-        doNotRecordHere: ['Professional body membership (Professional)', 'External reviewing or invited talk (Service)', 'Paid leadership appointment (Admin Leadership)'],
-        notes: 'Include exam coordination and internal event committee roles here. If it is an appointed paid leadership position, record it in Admin Leadership.'
-      },
-      {
-        id: 'service',
-        icon: '🤝',
-        name: 'Service',
-        measures: 'External engagement or contributions to the community, profession, or scholarly ecosystem where the main audience is outside the Faculty’s internal administration.',
-        recordHere: ['External examiner', 'Keynote speaker', 'Journal or conference reviewer'],
-        doNotRecordHere: ['Internal committees (Administration Duties)', 'Professional certifications and memberships (Professional)', 'Internal role appointments (Admin Leadership)'],
-        notes: 'Include community outreach here, and record internal role appointments in Admin Leadership. Use Service when the beneficiary is external and the activity is an engagement or contribution rather than a credential.'
-      },
-      {
-        id: 'professional',
-        icon: '💼',
-        name: 'Professional',
-        measures: 'Professional development, credentials, memberships, and professional roles that reflect continuing practice or recognition, not internal governance and not external service events.',
-        recordHere: ['Professional certification', 'Membership in a professional society', 'Consultancy role'],
-        doNotRecordHere: ['External examiner or invited talk (Service)', 'Internal committee work (Administration Duties)'],
-        notes: 'Include professional training courses here. Use Professional for credentials and memberships, use Service for external contributions, use Administration Duties for internal operations.'
-      }
-    ];
-
-    const HOME_CLASSIFICATION_EXAMPLES = [
-      { activity: 'Member of Faculty accreditation committee', section: 'Administration Duties' },
-      { activity: 'External examiner for another university', section: 'Service' },
-      { activity: 'Membership in professional society', section: 'Professional' },
-      { activity: 'Head of Programme appointment', section: 'Admin Leadership' },
-      { activity: 'Organizing internal faculty event committee', section: 'Administration Duties' },
-      { activity: 'Invited speaker at external conference', section: 'Service' }
-    ];
-
     let homeGuideExpandedSections = new Set();
+    let homeRecordHelperSelection = '';
+
+    const HOME_RECORD_HELPERS = {
+      internal_committee: {
+        label: 'Internal committee or coordination',
+        section: 'Admin Duties',
+        reason: 'This is formal internal operational or governance work assigned within Faculty or University administration.'
+      },
+      external_engagement: {
+        label: 'External engagement or review',
+        section: 'Service',
+        reason: 'This is primarily external-facing contribution to the wider community, profession, or scholarly ecosystem.'
+      },
+      credential_training: {
+        label: 'Credential, training, membership',
+        section: 'Professional',
+        reason: 'This reflects professional development, credentials, or standing rather than internal administration duties.'
+      }
+    };
 
     function hasReportingPeriod(profile) {
       const state = parseProfileState(profile);
@@ -2523,9 +2503,56 @@ function getSubmitToken() {
       }
     }
 
-    function renderHomeSectionAccordion() {
+    function getHomeStaffCategoryDetails(profile) {
+      const profileState = parseProfileState(profile);
+      const categoryKey = normalizeProfileCategoryKey(profileState.staff_category);
+      const categoryLabels = {
+        academic: 'Academic Staff',
+        admin: 'Administration Staff',
+        lab: 'Laboratory Staff'
+      };
+      return {
+        key: categoryKey,
+        label: categoryLabels[categoryKey] || 'Not set'
+      };
+    }
+
+    function getSectionRelevanceLine(sectionId) {
+      if (['teaching', 'supervision', 'research', 'publications', 'assistants'].includes(sectionId)) {
+        return 'Most relevant for: Academic Staff.';
+      }
+      if (sectionId === 'laboratory') {
+        return 'Most relevant for: Laboratory Staff.';
+      }
+      if (['admin_duties', 'service'].includes(sectionId)) {
+        return 'Most relevant for: All staff categories depending on assignment.';
+      }
+      return 'Most relevant for: Depends on assigned role and responsibilities.';
+    }
+
+    function getSectionNotApplicableNote(sectionId, categoryKey) {
+      const oftenNotApplicableForAdmin = ['teaching', 'supervision', 'research', 'publications', 'assistants'];
+      const oftenNotApplicableForLab = ['teaching', 'supervision', 'research', 'publications', 'assistants'];
+      if (categoryKey === 'admin' && oftenNotApplicableForAdmin.includes(sectionId)) {
+        return 'If not applicable to your role, leave this section empty.';
+      }
+      if (categoryKey === 'lab' && oftenNotApplicableForLab.includes(sectionId)) {
+        return 'If not applicable to your role, leave this section empty.';
+      }
+      return '';
+    }
+
+    function setHomeRecordHelperSelection(helperId) {
+      homeRecordHelperSelection = helperId;
+      if (currentSection === 'home') {
+        renderSection('home');
+      }
+    }
+
+    function renderHomeSectionAccordion(staffCategoryKey) {
       return HOME_SECTION_GUIDE.map((section) => {
         const isExpanded = homeGuideExpandedSections.has(section.id);
+        const notApplicableNote = getSectionNotApplicableNote(section.id, staffCategoryKey);
         return `
           <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <button onclick="toggleHomeGuideSection('${section.id}')" class="w-full px-4 py-4 text-left flex items-start justify-between gap-4 hover:bg-gray-50 transition">
@@ -2537,20 +2564,22 @@ function getSubmitToken() {
             </button>
             ${isExpanded ? `
               <div class="px-4 pb-4 border-t border-gray-100">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3 text-sm text-gray-700">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 text-sm text-gray-700">
                   <div class="rounded-lg border border-gray-200 p-3">
-                    <div class="font-semibold text-gray-900 mb-1">What it measures</div>
+                    <div class="font-semibold text-gray-900 mb-1">Measures</div>
                     <p>${section.measures}</p>
                   </div>
                   <div class="rounded-lg border border-gray-200 p-3">
-                    <div class="font-semibold text-gray-900 mb-1">What counts</div>
-                    <ul class="list-disc ml-5 space-y-1">${section.counts.map((item) => `<li>${item}</li>`).join('')}</ul>
+                    <div class="font-semibold text-gray-900 mb-1">Record here</div>
+                    <ul class="list-disc ml-5 space-y-1">${section.recordHere.map((item) => `<li>${item}</li>`).join('')}</ul>
                   </div>
-                  <div class="rounded-lg border border-gray-200 p-3">
-                    <div class="font-semibold text-gray-900 mb-1">What does not count</div>
-                    <ul class="list-disc ml-5 space-y-1">${section.notCounts.map((item) => `<li>${item}</li>`).join('')}</ul>
+                  <div class="rounded-lg border border-gray-200 p-3 md:col-span-2">
+                    <div class="font-semibold text-gray-900 mb-1">Do not record here</div>
+                    <ul class="list-disc ml-5 space-y-1">${section.doNotRecordHere.map((item) => `<li>${item}</li>`).join('')}</ul>
                   </div>
                 </div>
+                <p class="mt-3 text-xs text-gray-500"><span class="font-semibold">${getSectionRelevanceLine(section.id)}</span></p>
+                ${notApplicableNote ? `<p class="mt-1 text-xs text-amber-700">${notApplicableNote}</p>` : ''}
                 ${section.notes ? `<p class="mt-3 text-xs text-gray-500"><span class="font-semibold">Note:</span> ${section.notes}</p>` : ''}
               </div>
             ` : ''}
@@ -2559,32 +2588,13 @@ function getSubmitToken() {
       }).join('');
     }
 
-    function renderHomeClassificationGuide() {
-      return HOME_CLASSIFICATION_GUIDE.map((section) => `
-        <div class="bg-white rounded-xl border border-gray-200 p-4">
-          <h4 class="font-semibold text-gray-900 mb-2">${section.icon} ${section.name}</h4>
-          <p class="text-sm text-gray-700"><span class="font-semibold">Measures:</span> ${section.measures}</p>
-          <p class="text-sm text-gray-700 mt-2"><span class="font-semibold">Record here:</span> ${section.recordHere.join(', ')}.</p>
-          <p class="text-sm text-gray-700 mt-2"><span class="font-semibold">Do not record here:</span> ${section.doNotRecordHere.join(', ')}.</p>
-          <p class="mt-2 text-xs text-gray-500"><span class="font-semibold">Note:</span> ${section.notes}</p>
-        </div>
-      `).join('');
-    }
-
-    function renderHomeClassificationExamples() {
-      return HOME_CLASSIFICATION_EXAMPLES.map((example) => `
-        <tr class="border-b border-gray-100 last:border-b-0">
-          <td class="px-3 py-2 text-sm text-gray-700">${example.activity}</td>
-          <td class="px-3 py-2 text-sm font-semibold text-gray-900">${example.section}</td>
-        </tr>
-      `).join('');
-    }
-
     function renderHome() {
       const profile = getProfile();
       const scores = calculateScores();
       const indexMetrics = getWorkloadIndexMetrics(scores.total);
       const reportingPeriodSet = hasReportingPeriod(profile);
+      const staffCategory = getHomeStaffCategoryDetails(profile);
+      const helperAnswer = HOME_RECORD_HELPERS[homeRecordHelperSelection] || null;
 
       return `
         <div class="space-y-5">
@@ -2613,6 +2623,18 @@ function getSubmitToken() {
             </div>
           </div>
 
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Your staff category</p>
+                <p class="text-base font-semibold text-gray-900 mt-1">${staffCategory.label}</p>
+              </div>
+              ${staffCategory.key ? '' : `
+                <button onclick="navigateToSection('profile')" class="px-3 py-2 text-sm font-semibold bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition">Set in Staff Profile</button>
+              `}
+            </div>
+          </div>
+
           <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
             <button onclick="navigateToSection('profile')" class="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold text-gray-700 hover:border-sky-400 hover:text-sky-700 transition">👤 Staff Profile</button>
             <button onclick="navigateToSection('teaching')" class="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold text-gray-700 hover:border-sky-400 hover:text-sky-700 transition">📚 Teaching</button>
@@ -2634,42 +2656,42 @@ function getSubmitToken() {
             <div class="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
               <div class="h-full bg-sky-600" style="width: ${indexMetrics.fillPercent.toFixed(2)}%"></div>
             </div>
+            <div class="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-4">
+              <h4 class="font-semibold text-gray-900 mb-1">Provisional index bands</h4>
+              <p class="text-xs text-gray-600 mb-3">Bands are provisional until calibrated with faculty data. Use for rough triage only.</p>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-gray-700">
+                <div>Light: 0 to 19</div>
+                <div>Moderate: 20 to 34</div>
+                <div>Balanced: 35 to 49</div>
+                <div>Overloaded: 50 plus</div>
+              </div>
+            </div>
           </div>
 
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h3 class="heading-font text-xl font-bold text-gray-900 mb-4">Section guide</h3>
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
-              ${renderHomeClassificationGuide()}
+            <h3 class="heading-font text-xl font-bold text-gray-900 mb-3">Where do I record this?</h3>
+            <div class="flex flex-wrap gap-2">
+              ${Object.entries(HOME_RECORD_HELPERS).map(([id, helper]) => `
+                <button onclick="setHomeRecordHelperSelection('${id}')" class="px-3 py-1.5 text-sm font-semibold rounded-full border transition ${homeRecordHelperSelection === id ? 'bg-sky-100 border-sky-300 text-sky-800' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}">${helper.label}</button>
+              `).join('')}
             </div>
-          </div>
-
-          <div class="bg-gradient-to-r from-blue-50 to-sky-50 rounded-xl shadow-sm border-2 border-blue-200 p-6">
-            <h3 class="font-bold text-lg text-blue-900 mb-3">🧩 Common classification examples</h3>
-            <div class="bg-white rounded-lg p-4 border border-blue-100 overflow-x-auto">
-              <table class="w-full text-xs text-gray-700 border border-gray-200 rounded-lg overflow-hidden">
-                <thead class="bg-blue-100 text-blue-900">
-                  <tr>
-                    <th class="text-left px-3 py-2 border-b border-gray-200">Activity</th>
-                    <th class="text-left px-3 py-2 border-b border-gray-200">Record in section</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${renderHomeClassificationExamples()}
-                </tbody>
-              </table>
-            </div>
+            ${helperAnswer ? `
+              <div class="mt-3 text-sm bg-sky-50 border border-sky-200 rounded-lg p-3 text-sky-900">
+                <span class="font-semibold">Record in:</span> ${helperAnswer.section}. ${helperAnswer.reason}
+              </div>
+            ` : '<p class="mt-3 text-xs text-gray-500">Select a chip to see the recommended section.</p>'}
           </div>
 
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-              <h3 class="heading-font text-xl font-bold text-gray-900">All sections reference</h3>
+              <h3 class="heading-font text-xl font-bold text-gray-900">Section guide</h3>
               <div class="flex gap-2">
                 <button onclick="expandAllHomeGuide()" class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition">Expand all</button>
                 <button onclick="collapseAllHomeGuide()" class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition">Collapse all</button>
               </div>
             </div>
             <div class="space-y-3">
-              ${renderHomeSectionAccordion()}
+              ${renderHomeSectionAccordion(staffCategory.key)}
             </div>
           </div>
 
