@@ -529,6 +529,7 @@ const WORKLOAD_STATUS_THRESHOLDS = {
 
     function updateBreadcrumb() {
       const breadcrumb = document.getElementById('breadcrumb-nav');
+      if (!breadcrumb) return;
       const currentSectionObj = sections.find(s => s.id === currentSection);
       
       if (!currentSectionObj) return;
@@ -617,6 +618,540 @@ const WORKLOAD_STATUS_THRESHOLDS = {
         addNotification('Maximum record limit reached (999/999). Please delete some records to add new ones.', 'warning');
       }
     }
+
+    const PROFILE_CATEGORY_LABELS = {
+      academic: 'Academic Staff',
+      admin: 'Administration Staff',
+      lab: 'Lab Staff'
+    };
+
+    function normalizeProfileCategoryKey(value) {
+      const category = String(value || '').trim().toLowerCase();
+      if (category === 'academic staff' || category === 'academic') return 'academic';
+      if (category === 'administration staff' || category === 'admin') return 'admin';
+      if (category === 'lab staff' || category === 'laboratory staff' || category === 'lab') return 'lab';
+      return '';
+    }
+
+    function normalizeProfileCategory(value) {
+      const key = normalizeProfileCategoryKey(value);
+      return key ? PROFILE_CATEGORY_LABELS[key] : '';
+    }
+
+    function getProfileCategoryLabel(value) {
+      return normalizeProfileCategory(value);
+    }
+
+    function getReportingPeriodPreset(periodType) {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth();
+
+      if (periodType === 'Monthly') {
+        return {
+          start: new Date(year, month, 1),
+          end: new Date(year, month + 1, 0)
+        };
+      }
+
+      const isFirstHalf = month < 6;
+      return {
+        start: new Date(year, isFirstHalf ? 0 : 6, 1),
+        end: new Date(year, isFirstHalf ? 5 : 11, isFirstHalf ? 30 : 31)
+      };
+    }
+
+    function formatDateInputValue(value) {
+      if (!value) return '';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return '';
+      return date.toISOString().split('T')[0];
+    }
+
+    function calculateReportingDays(startDate, endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 0;
+      const millisecondsPerDay = 24 * 60 * 60 * 1000;
+      return Math.floor((end - start) / millisecondsPerDay) + 1;
+    }
+
+    function parseProfileState(profile, options = {}) {
+      const { includeLocalState = true } = options;
+      const defaults = {
+        staff_name: '',
+        staff_id: '',
+        staff_category: '',
+        admin_status: '',
+        staff_grade: '',
+        reporting_period_type: 'Semester',
+        reporting_start_date: '',
+        reporting_end_date: '',
+        programme: '',
+        academic_rank: '',
+        administrative_position: '',
+        laboratory_position: '',
+        reporting_tags: ''
+      };
+
+      const legacyExtras = (() => {
+        if (!profile?.profile_json) return {};
+        try {
+          return JSON.parse(profile.profile_json) || {};
+        } catch (error) {
+          return {};
+        }
+      })();
+
+      const legacyCategory = normalizeProfileCategory(profile?.profile_category || legacyExtras.staff_category);
+      const parsedState = (() => {
+        if (!profile?.profile_state) return {};
+        if (typeof profile.profile_state === 'string') {
+          try {
+            return JSON.parse(profile.profile_state) || {};
+          } catch (error) {
+            return {};
+          }
+        }
+        if (typeof profile.profile_state === 'object') return profile.profile_state;
+        return {};
+      })();
+
+      const localState = includeLocalState ? readLocalJson(PROFILE_STATE_STORAGE_KEY, {}) : {};
+      const resolvedAdminStatus = String(parsedState.admin_status || profile?.admin_status || localState.admin_status || '').trim().toLowerCase();
+      const state = {
+        ...defaults,
+        ...localState,
+        ...legacyExtras,
+        ...parsedState,
+        staff_name: parsedState.staff_name || profile?.profile_name || legacyExtras.staff_display_name || localState.staff_name || '',
+        staff_id: parsedState.staff_id || profile?.profile_staff_id || localState.staff_id || '',
+        staff_category: normalizeProfileCategory(parsedState.staff_category || legacyCategory || localState.staff_category),
+        admin_status: resolvedAdminStatus === 'admin' || resolvedAdminStatus === 'non_admin' ? resolvedAdminStatus : '',
+        programme: parsedState.programme || profile?.profile_programme || localState.programme || '',
+        academic_rank: parsedState.academic_rank || profile?.profile_rank || localState.academic_rank || '',
+        administrative_position: parsedState.administrative_position
+          || (profile?.profile_admin_position === 'Other' ? profile?.profile_other_admin_position : profile?.profile_admin_position)
+          || localState.administrative_position
+          || '',
+        reporting_period_type: parsedState.reporting_period_type || localState.reporting_period_type || 'Semester',
+        reporting_start_date: formatDateInputValue(parsedState.reporting_start_date || localState.reporting_start_date || ''),
+        reporting_end_date: formatDateInputValue(parsedState.reporting_end_date || localState.reporting_end_date || '')
+      };
+
+      if (!['Semester', 'Monthly', 'Custom'].includes(state.reporting_period_type)) {
+        state.reporting_period_type = 'Semester';
+      }
+
+      if (!state.reporting_start_date || !state.reporting_end_date) {
+        const preset = getReportingPeriodPreset(state.reporting_period_type);
+        state.reporting_start_date = state.reporting_start_date || formatDateInputValue(preset.start);
+        state.reporting_end_date = state.reporting_end_date || formatDateInputValue(preset.end);
+      }
+
+      return state;
+    }
+
+    function formatAdminStatusValue(value, staffCategory) {
+      if (normalizeProfileCategoryKey(staffCategory) !== 'academic') return 'Not applicable';
+      if (value === 'admin') return 'Admin';
+      if (value === 'non_admin') return 'Non admin';
+      return '';
+    }
+
+    function renderSavedProfileSummary(profile) {
+      if (!profile) return '';
+      const savedState = parseProfileState(profile, { includeLocalState: false });
+      const startDate = savedState.reporting_start_date;
+      const endDate = savedState.reporting_end_date;
+
+      const rows = [
+        ['Staff Name', savedState.staff_name],
+        ['Staff ID', savedState.staff_id],
+        ['Staff Category', getProfileCategoryLabel(savedState.staff_category)],
+        ['Admin Status', formatAdminStatusValue(savedState.admin_status, savedState.staff_category)],
+        ['Grade', savedState.staff_grade],
+        ['Reporting Period Type', savedState.reporting_period_type],
+        ['Start Date', startDate],
+        ['End Date', endDate],
+        ['Programme', savedState.programme],
+        ['Academic Rank', savedState.academic_rank],
+        ['Administrative Position', savedState.administrative_position],
+        ['Laboratory Position', savedState.laboratory_position],
+        ['Reporting Tags', savedState.reporting_tags]
+      ].filter(([, value]) => String(value || '').trim() !== '');
+
+      return `
+        <div id="profile_summary_card" class="bg-white border border-sky-200 rounded-xl p-4 shadow-sm">
+          <h3 class="text-sm font-semibold text-sky-700 mb-2">Saved profile summary</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+            ${rows.map(([label, value]) => `<div><span class="text-gray-500">${escapeHtml(label)}:</span> <span class="font-medium text-gray-900">${escapeHtml(String(value))}</span></div>`).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderProfile() {
+      const profile = getProfile();
+      const profileState = parseProfileState(profile);
+      const isAcademicStaff = normalizeProfileCategoryKey(profileState.staff_category) === 'academic';
+      const adminStatus = profileState.admin_status === 'admin' || profileState.admin_status === 'non_admin' ? profileState.admin_status : '';
+
+      return `
+        <div class="max-w-3xl mx-auto space-y-4">
+          ${renderSavedProfileSummary(profile)}
+
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="heading-font text-2xl font-bold mb-2">👤 Staff Profile</h2>
+            <p class="text-sm text-gray-600 mb-6">Enter your profile details for reporting and section defaults.</p>
+
+            <form id="profile_form" onsubmit="saveProfile(event)" class="space-y-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="md:col-span-2">
+                  <label for="staff_name" class="block text-sm font-semibold text-gray-700 mb-2">Staff Name *</label>
+                  <input type="text" id="staff_name" required
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         value="${escapeHtml(profileState.staff_name)}"
+                         placeholder="Enter staff name">
+                </div>
+
+                <div>
+                  <label for="staff_id" class="block text-sm font-semibold text-gray-700 mb-2">Staff ID</label>
+                  <input type="text" id="staff_id" pattern="[A-Za-z0-9-]{4,20}" title="Use 4-20 letters, numbers, or hyphens"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         value="${escapeHtml(profileState.staff_id)}"
+                         placeholder="e.g., 250505-05050">
+                  <p class="text-xs text-gray-500 mt-1">Optional. Use letters, numbers, and hyphens only.</p>
+                </div>
+
+                <div>
+                  <label for="staff_category" class="block text-sm font-semibold text-gray-700 mb-2">Staff Category *</label>
+                  <select id="staff_category" required onchange="toggleCategoryFields()" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
+                    <option value="">Select category</option>
+                    <option value="Academic Staff" ${profileState.staff_category === 'Academic Staff' ? 'selected' : ''}>Academic Staff</option>
+                    <option value="Administration Staff" ${profileState.staff_category === 'Administration Staff' ? 'selected' : ''}>Administration Staff</option>
+                    <option value="Lab Staff" ${profileState.staff_category === 'Lab Staff' ? 'selected' : ''}>Lab Staff</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label for="staff_grade" class="block text-sm font-semibold text-gray-700 mb-2">Grade</label>
+                  <input type="text" id="staff_grade"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         value="${escapeHtml(profileState.staff_grade)}"
+                         placeholder="e.g., DS51">
+                  <p class="text-xs text-gray-500 mt-1">Optional classification code for reporting.</p>
+                </div>
+
+                <div>
+                  <label for="admin_status" class="block text-sm font-semibold text-gray-700 mb-2">Admin Status ${isAcademicStaff ? '*' : ''}</label>
+                  <select id="admin_status" ${isAcademicStaff ? 'required' : 'disabled'} class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500">
+                    <option value="" ${adminStatus === '' ? 'selected' : ''}>${isAcademicStaff ? 'Select admin status' : 'Not applicable'}</option>
+                    <option value="non_admin" ${adminStatus === 'non_admin' ? 'selected' : ''}>Non admin</option>
+                    <option value="admin" ${adminStatus === 'admin' ? 'selected' : ''}>Admin</option>
+                  </select>
+                  <p id="admin_status_note" class="text-xs text-amber-700 mt-1 ${isAcademicStaff ? 'hidden' : ''}">Applies to Academic Staff only.</p>
+                </div>
+
+                <div>
+                  <label for="reporting_period_type" class="block text-sm font-semibold text-gray-700 mb-2">Reporting Period Type *</label>
+                  <select id="reporting_period_type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
+                    <option value="Semester" ${profileState.reporting_period_type === 'Semester' ? 'selected' : ''}>Semester</option>
+                    <option value="Monthly" ${profileState.reporting_period_type === 'Monthly' ? 'selected' : ''}>Monthly</option>
+                    <option value="Custom" ${profileState.reporting_period_type === 'Custom' ? 'selected' : ''}>Custom</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label for="reporting_start_date" class="block text-sm font-semibold text-gray-700 mb-2">Start Date *</label>
+                  <input type="date" id="reporting_start_date" required
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         value="${escapeHtml(profileState.reporting_start_date)}">
+                </div>
+
+                <div>
+                  <label for="reporting_end_date" class="block text-sm font-semibold text-gray-700 mb-2">End Date *</label>
+                  <input type="date" id="reporting_end_date" required
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         value="${escapeHtml(profileState.reporting_end_date)}">
+                </div>
+
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Reporting Days / Weeks</label>
+                  <p id="reporting_duration_display" class="w-full px-4 py-3 border border-gray-200 rounded-lg bg-gray-50 text-gray-700 text-sm">0 days (0.0 weeks)</p>
+                </div>
+
+                <div id="programme_field" style="display:none;">
+                  <label for="programme" class="block text-sm font-semibold text-gray-700 mb-2">Programme</label>
+                  <select id="programme" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
+                    <option value="">Select Programme</option>
+                    <option value="UH6422001 Environmental Science" ${profileState.programme === 'UH6422001 Environmental Science' ? 'selected' : ''}>UH6422001 Environmental Science</option>
+                    <option value="UH6441001 Industrial Physics" ${profileState.programme === 'UH6441001 Industrial Physics' ? 'selected' : ''}>UH6441001 Industrial Physics</option>
+                    <option value="UH6443002 Geology" ${profileState.programme === 'UH6443002 Geology' ? 'selected' : ''}>UH6443002 Geology</option>
+                    <option value="UH6443003 Marine Science" ${profileState.programme === 'UH6443003 Marine Science' ? 'selected' : ''}>UH6443003 Marine Science</option>
+                    <option value="UH6461001 Mathematics with Economics" ${profileState.programme === 'UH6461001 Mathematics with Economics' ? 'selected' : ''}>UH6461001 Mathematics with Economics</option>
+                    <option value="UH6461002 Mathematics Computer Graphics" ${profileState.programme === 'UH6461002 Mathematics Computer Graphics' ? 'selected' : ''}>UH6461002 Mathematics Computer Graphics</option>
+                    <option value="UH6545001 Biotechnology" ${profileState.programme === 'UH6545001 Biotechnology' ? 'selected' : ''}>UH6545001 Biotechnology</option>
+                    <option value="UH6545002 Industrial Chemistry" ${profileState.programme === 'UH6545002 Industrial Chemistry' ? 'selected' : ''}>UH6545002 Industrial Chemistry</option>
+                  </select>
+                </div>
+
+                <div id="academic_rank_field" style="display:none;">
+                  <label for="academic_rank" class="block text-sm font-semibold text-gray-700 mb-2">Academic Rank</label>
+                  <select id="academic_rank" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
+                    <option value="">Select rank</option>
+                    <option value="Professor" ${profileState.academic_rank === 'Professor' ? 'selected' : ''}>Professor</option>
+                    <option value="Associate Professor" ${profileState.academic_rank === 'Associate Professor' ? 'selected' : ''}>Associate Professor</option>
+                    <option value="Senior Lecturer" ${profileState.academic_rank === 'Senior Lecturer' ? 'selected' : ''}>Senior Lecturer</option>
+                    <option value="Lecturer" ${profileState.academic_rank === 'Lecturer' ? 'selected' : ''}>Lecturer</option>
+                  </select>
+                </div>
+
+                <div id="administrative_position_field" style="display:none;">
+                  <label for="administrative_position" class="block text-sm font-semibold text-gray-700 mb-2">Administrative Position</label>
+                  <input type="text" id="administrative_position"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         value="${escapeHtml(profileState.administrative_position)}"
+                         placeholder="e.g., Deputy Dean">
+                </div>
+
+                <div id="laboratory_position_field" style="display:none;">
+                  <label for="laboratory_position" class="block text-sm font-semibold text-gray-700 mb-2">Laboratory Position</label>
+                  <input type="text" id="laboratory_position"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         value="${escapeHtml(profileState.laboratory_position)}"
+                         placeholder="e.g., Laboratory Coordinator">
+                </div>
+
+                <div class="md:col-span-2">
+                  <label for="reporting_tags" class="block text-sm font-semibold text-gray-700 mb-2">Reporting Tags</label>
+                  <input type="text" id="reporting_tags"
+                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
+                         value="${escapeHtml(profileState.reporting_tags)}"
+                         placeholder="Optional: specialty or reporting tags">
+                </div>
+
+              </div>
+
+              <button type="submit" id="save_profile_btn" class="w-full px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
+                💾 Save Profile
+              </button>
+            </form>
+
+            ${profile ? `
+              <button type="button" onclick="deleteProfile('${profile.__backendId}')"
+                      class="mt-4 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium text-sm border border-red-200">
+                Delete Profile
+              </button>
+            ` : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    function setupProfileEventListeners() {
+      [
+        'staff_name', 'staff_id', 'staff_category', 'staff_grade',
+        'reporting_period_type', 'reporting_start_date', 'reporting_end_date',
+        'programme', 'academic_rank', 'administrative_position', 'laboratory_position', 'reporting_tags', 'admin_status'
+      ].forEach((id) => {
+        const element = document.getElementById(id);
+        if (!element) return;
+        element.addEventListener('change', () => {
+          if (id === 'staff_category') toggleCategoryFields();
+          if (id === 'reporting_period_type') applyReportingPeriodPreset();
+          if (id === 'reporting_period_type' || id === 'reporting_start_date' || id === 'reporting_end_date') {
+            updateReportingDurationPreview();
+          }
+        });
+        if (id === 'reporting_start_date' || id === 'reporting_end_date') {
+          element.addEventListener('input', updateReportingDurationPreview);
+        }
+      });
+
+      toggleCategoryFields();
+      updateReportingDurationPreview();
+    }
+
+    function toggleCategoryFields() {
+      const categoryKey = normalizeProfileCategoryKey(document.getElementById('staff_category')?.value || '');
+      const programmeField = document.getElementById('programme_field');
+      const rankField = document.getElementById('academic_rank_field');
+      const adminField = document.getElementById('administrative_position_field');
+      const labField = document.getElementById('laboratory_position_field');
+      const adminStatusField = document.getElementById('admin_status');
+      const adminStatusNote = document.getElementById('admin_status_note');
+
+      if (programmeField) programmeField.style.display = categoryKey === 'academic' ? 'block' : 'none';
+      if (rankField) rankField.style.display = categoryKey === 'academic' ? 'block' : 'none';
+      if (adminField) adminField.style.display = categoryKey === 'admin' ? 'block' : 'none';
+      if (labField) labField.style.display = categoryKey === 'lab' ? 'block' : 'none';
+
+      if (adminStatusField) {
+        const placeholderOption = adminStatusField.querySelector('option[value=""]');
+        if (categoryKey === 'academic') {
+          adminStatusField.disabled = false;
+          adminStatusField.required = true;
+          if (placeholderOption) placeholderOption.textContent = 'Select admin status';
+          if (adminStatusNote) adminStatusNote.classList.add('hidden');
+        } else {
+          adminStatusField.value = '';
+          adminStatusField.disabled = true;
+          adminStatusField.required = false;
+          if (placeholderOption) placeholderOption.textContent = 'Not applicable';
+          if (adminStatusNote) adminStatusNote.classList.remove('hidden');
+        }
+      }
+
+      if (categoryKey !== 'academic') {
+        const programme = document.getElementById('programme');
+        const rank = document.getElementById('academic_rank');
+        if (programme) programme.value = '';
+        if (rank) rank.value = '';
+      }
+      if (categoryKey !== 'admin') {
+        const adminPos = document.getElementById('administrative_position');
+        if (adminPos) adminPos.value = '';
+      }
+      if (categoryKey !== 'lab') {
+        const labPos = document.getElementById('laboratory_position');
+        if (labPos) labPos.value = '';
+      }
+    }
+
+    function applyReportingPeriodPreset() {
+      const periodType = document.getElementById('reporting_period_type')?.value || 'Semester';
+      if (periodType === 'Custom') return;
+      const preset = getReportingPeriodPreset(periodType);
+      const startInput = document.getElementById('reporting_start_date');
+      const endInput = document.getElementById('reporting_end_date');
+      if (startInput) startInput.value = formatDateInputValue(preset.start);
+      if (endInput) endInput.value = formatDateInputValue(preset.end);
+    }
+
+    function updateReportingDurationPreview() {
+      const startDate = document.getElementById('reporting_start_date')?.value || '';
+      const endDate = document.getElementById('reporting_end_date')?.value || '';
+      const reportingDays = calculateReportingDays(startDate, endDate);
+      const reportingWeeks = reportingDays ? (reportingDays / 7).toFixed(1) : '';
+      const durationDisplay = document.getElementById('reporting_duration_display');
+      if (durationDisplay) {
+        durationDisplay.textContent = reportingDays
+          ? `${reportingDays} days (${reportingWeeks} weeks)`
+          : 'Enter a valid start and end date.';
+      }
+    }
+
+    async function saveProfile(event) {
+      event.preventDefault();
+
+      if (allRecords.length >= 999) {
+        showToast('Maximum limit of 999 records reached', 'error');
+        return;
+      }
+
+      const btn = document.getElementById('save_profile_btn');
+      btn.disabled = true;
+      btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
+
+      const staffId = (document.getElementById('staff_id')?.value || '').trim();
+      if (staffId && !/^[A-Za-z0-9-]{4,20}$/.test(staffId)) {
+        showToast('Staff ID format is invalid. Use 4-20 letters, numbers, or hyphens.', 'error');
+        btn.disabled = false;
+        btn.innerHTML = '💾 Save Profile';
+        return;
+      }
+
+      const profileState = {
+        staff_name: (document.getElementById('staff_name')?.value || '').trim(),
+        staff_id: staffId,
+        staff_category: normalizeProfileCategory(document.getElementById('staff_category')?.value || ''),
+        admin_status: '',
+        staff_grade: (document.getElementById('staff_grade')?.value || '').trim(),
+        reporting_period_type: (document.getElementById('reporting_period_type')?.value || 'Semester').trim(),
+        reporting_start_date: formatDateInputValue(document.getElementById('reporting_start_date')?.value || ''),
+        reporting_end_date: formatDateInputValue(document.getElementById('reporting_end_date')?.value || ''),
+        programme: (document.getElementById('programme')?.value || '').trim(),
+        academic_rank: (document.getElementById('academic_rank')?.value || '').trim(),
+        administrative_position: (document.getElementById('administrative_position')?.value || '').trim(),
+        laboratory_position: (document.getElementById('laboratory_position')?.value || '').trim(),
+        reporting_tags: (document.getElementById('reporting_tags')?.value || '').trim()
+      };
+      const categoryKey = normalizeProfileCategoryKey(profileState.staff_category);
+      profileState.admin_status = categoryKey === 'academic' ? (document.getElementById('admin_status')?.value || '').trim() : null;
+      profileState.academic_rank = categoryKey === 'academic' ? profileState.academic_rank : null;
+
+      if (categoryKey === 'academic' && !profileState.admin_status) {
+        showToast('Admin Status is required for Academic Staff.', 'error');
+        btn.disabled = false;
+        btn.innerHTML = '💾 Save Profile';
+        return;
+      }
+
+      const reportingDays = calculateReportingDays(profileState.reporting_start_date, profileState.reporting_end_date);
+      if (!reportingDays) {
+        showToast('Please enter a valid reporting start and end date.', 'error');
+        btn.disabled = false;
+        btn.innerHTML = '💾 Save Profile';
+        return;
+      }
+
+      writeLocalJson(PROFILE_STATE_STORAGE_KEY, profileState);
+
+      const profileData = {
+        section: 'profile',
+        profile_name: profileState.staff_name,
+        profile_staff_id: profileState.staff_id,
+        profile_category: profileState.staff_category,
+        admin_status: categoryKey === 'academic' ? profileState.admin_status : null,
+        profile_programme: categoryKey === 'academic' ? profileState.programme : '',
+        profile_rank: categoryKey === 'academic' ? profileState.academic_rank : null,
+        profile_admin_position: categoryKey === 'admin' ? profileState.administrative_position : '',
+        profile_other_admin_position: '',
+        profile_state: JSON.stringify(profileState),
+        profile_json: '',
+        created_at: new Date().toISOString()
+      };
+
+      const existingProfile = getProfile();
+      let result;
+
+      if (existingProfile) {
+        result = await window.dataSdk.update({ ...existingProfile, ...profileData });
+      } else {
+        result = await window.dataSdk.create(profileData);
+      }
+
+      btn.disabled = false;
+      btn.innerHTML = '💾 Save Profile';
+
+      if (result.isOk) {
+        if (currentSection === 'profile') {
+          renderSection('profile');
+        }
+        showToast('Profile saved successfully!');
+        setTimeout(() => {
+          navigateToSection('teaching');
+        }, 1000);
+      } else {
+        showToast('Failed to save profile', 'error');
+      }
+    }
+
+    async function deleteProfile(backendId) {
+      const profile = allRecords.find(r => r.__backendId === backendId);
+      if (!profile) return;
+
+      const result = await window.dataSdk.delete(profile);
+
+      if (result.isOk) {
+        writeLocalJson(PROFILE_STATE_STORAGE_KEY, {});
+        showToast('Profile deleted successfully!');
+      } else {
+        showToast('Failed to delete profile', 'error');
+      }
+    }
+
 
     // =========================
     // Navigation & Section Renderers
@@ -772,32 +1307,6 @@ const WORKLOAD_STATUS_THRESHOLDS = {
       } catch (error) {
         // Ignore storage write errors
       }
-    }
-
-    function parseProfileState(profile) {
-      if (profile && typeof profile === 'object') {
-        return profile;
-      }
-
-      if (typeof localStorage === 'undefined') return {};
-
-      const storageKeys = [PROFILE_STATE_STORAGE_KEY, ...LEGACY_PROFILE_STORAGE_KEYS, 'profile'];
-
-      try {
-        for (const key of storageKeys) {
-          const raw = localStorage.getItem(key);
-          if (!raw) continue;
-
-          const parsed = JSON.parse(raw);
-          if (parsed && typeof parsed === 'object') {
-            return parsed;
-          }
-        }
-      } catch (error) {
-        return {};
-      }
-
-      return {};
     }
 
     function getSubmissionHistory() {
