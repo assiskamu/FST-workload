@@ -1527,6 +1527,20 @@ function getSubmitToken() {
             });
           }
 
+          if (sectionKey === 'publications' && record.pub_type === 'other' && !record.pub_type_other_text) {
+            errors.push({
+              section: 'publications',
+              message: `Specify item type details for publication entry #${index + 1}.`
+            });
+          }
+
+          if (sectionKey === 'publications' && record.pub_status === 'Other' && !record.pub_status_other_text) {
+            errors.push({
+              section: 'publications',
+              message: `Specify status details for publication entry #${index + 1}.`
+            });
+          }
+
           if (sectionKey === 'admin_duties' && record.duty_type === 'Other' && !record.duty_type_other_text) {
             errors.push({
               section: 'admin_duties',
@@ -2154,6 +2168,7 @@ function getSubmitToken() {
         return { base_points: 0, stage_factor: 0, entry_points: 0, is_counted: false };
       }
       const descriptive = getPublicationDescriptiveMetadata(pub);
+      const statusMeta = getPublicationStatusMetadata(pub);
       const basePoints = getPublicationBasePoints(pub.pub_type);
       const stageFactor = getWritingStageFactor(pub.pub_stage);
       const entryPoints = Math.round(basePoints * stageFactor * 100) / 100;
@@ -2163,7 +2178,7 @@ function getSubmitToken() {
         indexing: descriptive.indexing_display,
         author_position: descriptive.author_position_display,
         venue: pub.pub_venue || '-',
-        status: pub.pub_status || '-',
+        status: statusMeta.status_display,
         entry_points: entryPoints,
         is_counted: true
       };
@@ -3328,6 +3343,7 @@ function getSubmitToken() {
       teachingSemester: ['Semester 1 2025/2026', 'Semester 2 2025/2026', 'Semester 1 2026/2027', 'Semester 2 2026/2027', 'Other'],
       publicationIndexing: ['Scopus', 'Web of Science', 'MyCite', 'ERA', 'Not indexed', 'Other'],
       publicationAuthorPosition: ['First author', 'Corresponding author', 'Co author', 'Single author', 'Editor', 'Other'],
+      publicationStatus: ['Drafting', 'Submitted', 'Under review', 'Revision requested', 'Accepted', 'Published', 'Rejected', 'Withdrawn', 'Other'],
       administrationPosition: ['Dean', 'Deputy Dean', 'Centre Director', 'Head of Programme', 'Postgraduate Coordinator', 'Programme Coordinator', 'Other'],
       adminDutyType: ['Accreditation Work', 'Curriculum Development', 'Committee Chair', 'Event Organizer', 'Exam Coordinator', 'Committee Member', 'Other'],
       serviceType: ['Committee Service', 'Community Engagement', 'Expert Contribution', 'Event Support', 'Other'],
@@ -3550,6 +3566,14 @@ function getSubmitToken() {
 
     const PUBLICATION_INDEXING_OPTIONS = OTHER_SPECIFY_OPTIONS.publicationIndexing;
     const PUBLICATION_AUTHOR_POSITION_OPTIONS = OTHER_SPECIFY_OPTIONS.publicationAuthorPosition;
+    const PUBLICATION_STATUS_OPTIONS = OTHER_SPECIFY_OPTIONS.publicationStatus;
+    const PUBLICATION_ITEM_TYPE_OPTIONS = {
+      journal: 'Journal manuscript',
+      conference: 'Conference paper',
+      chapter: 'Book chapter',
+      proceeding: 'Proceeding',
+      other: 'Other'
+    };
 
     function normalizePublicationDescriptiveValue(rawValue, allowedOptions) {
       return normalizeSelectWithOther(rawValue, allowedOptions);
@@ -3574,12 +3598,34 @@ function getSubmitToken() {
       };
     }
 
+    function getPublicationItemTypeDisplay(pub = {}) {
+      const itemTypeOther = (pub.pub_type_other_text || '').trim();
+      if (pub.pub_type === 'other' && itemTypeOther) {
+        return `Other: ${itemTypeOther}`;
+      }
+      return PUBLICATION_ITEM_TYPE_OPTIONS[pub.pub_type] || '-';
+    }
+
+    function getPublicationStatusMetadata(pub = {}) {
+      const normalizedStatus = normalizePublicationDescriptiveValue(pub.pub_status || '', PUBLICATION_STATUS_OPTIONS);
+      const statusLabel = normalizedStatus.selected || '';
+      const statusOther = (pub.pub_status_other_text || normalizedStatus.other || '').trim();
+      return {
+        status_label: statusLabel,
+        status_other_text: statusOther,
+        status_display: statusLabel === 'Other' && statusOther ? `Other: ${statusOther}` : (statusLabel || '-')
+      };
+    }
+
     function getPublicationsDraftInputState() {
       const indexingLabel = document.getElementById('pub-index-select')?.value || '';
       const authorPositionLabel = document.getElementById('pub-position-select')?.value || '';
+      const statusLabel = document.getElementById('pub-status-select')?.value || '';
+      const itemType = document.getElementById('pub-type')?.value || '';
       return {
         pub_title: document.getElementById('pub-title')?.value || '',
-        pub_type: document.getElementById('pub-type')?.value || '',
+        pub_type: itemType,
+        pub_type_other_text: itemType === 'other' ? (document.getElementById('pub-type-other')?.value || '') : '',
         pub_stage: document.getElementById('pub-stage')?.value || '',
         indexing_label: indexingLabel,
         author_position_label: authorPositionLabel,
@@ -3587,7 +3633,8 @@ function getSubmitToken() {
         author_position_other_text: authorPositionLabel === 'Other' ? (document.getElementById('pub-position-other')?.value || '') : '',
         pub_venue: document.getElementById('pub-venue')?.value || '',
         pub_year: document.getElementById('pub-year')?.value || '',
-        pub_status: document.getElementById('pub-status')?.value || ''
+        pub_status: statusLabel,
+        pub_status_other_text: statusLabel === 'Other' ? (document.getElementById('pub-status-other')?.value || '') : ''
       };
     }
 
@@ -3610,7 +3657,14 @@ function getSubmitToken() {
             <form id="publication-form" onsubmit="savePublication(event)" class="space-y-6">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="md:col-span-2"><label for="pub-title" class="block text-sm font-semibold text-gray-700 mb-2">Title *</label><input id="pub-title" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-                <div><label for="pub-type" class="block text-sm font-semibold text-gray-700 mb-2">Item Type *</label><select id="pub-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select Type</option><option value="journal">Journal manuscript</option><option value="conference">Conference paper</option><option value="chapter">Book chapter</option><option value="proceeding">Proceeding</option><option value="other">Other</option></select></div>
+                <div>
+                  <label for="pub-type" class="block text-sm font-semibold text-gray-700 mb-2">Item Type *</label>
+                  <select id="pub-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select Type</option><option value="journal">Journal manuscript</option><option value="conference">Conference paper</option><option value="chapter">Book chapter</option><option value="proceeding">Proceeding</option><option value="other">Other</option></select>
+                  <div id="pub-type-other-wrap" class="mt-3 hidden">
+                    <label for="pub-type-other" class="block text-sm font-semibold text-gray-700 mb-2">Specify</label>
+                    <input id="pub-type-other" placeholder="Enter item type details" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
+                  </div>
+                </div>
                 <div><label for="pub-stage" class="block text-sm font-semibold text-gray-700 mb-2">Writing Stage *</label><select id="pub-stage" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select Stage</option><option value="drafting">Drafting (1.0)</option><option value="revising">Revising (0.8)</option><option value="responding_reviewers">Responding to reviewers (0.9)</option><option value="proofing">Proofing (0.5)</option><option value="no_activity">No activity (0.0)</option></select></div>
                 ${createOtherSpecifyBlock({
                   sectionKey: 'publications',
@@ -3636,7 +3690,17 @@ function getSubmitToken() {
                 })}
                 <div><label for="pub-venue" class="block text-sm font-semibold text-gray-700 mb-2">Venue *</label><input id="pub-venue" aria-describedby="pub-venue-note" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><p id="pub-venue-note" class="mt-2 text-xs text-gray-600">Target outlet for this item, for example the journal or conference name. Used for identification and reporting only, it does not affect points.</p></div>
                 <div><label for="pub-year" class="block text-sm font-semibold text-gray-700 mb-2">Year *</label><input id="pub-year" required type="number" min="2000" max="2035" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-                <div><label for="pub-status" class="block text-sm font-semibold text-gray-700 mb-2">Status (descriptive only)</label><input id="pub-status" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div>
+                  <label for="pub-status-select" class="block text-sm font-semibold text-gray-700 mb-2">Status (descriptive only)</label>
+                  <select id="pub-status-select" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
+                    <option value="">Select status</option>
+                    ${PUBLICATION_STATUS_OPTIONS.map((option) => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`).join('')}
+                  </select>
+                  <div id="pub-status-other-wrap" class="mt-3 hidden">
+                    <label for="pub-status-other" class="block text-sm font-semibold text-gray-700 mb-2">Specify</label>
+                    <input id="pub-status-other" placeholder="Enter status details" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
+                  </div>
+                </div>
               </div>
               <div class="flex justify-end"><button type="submit" id="save-publication-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add</button></div>
             </form>
@@ -3648,7 +3712,8 @@ function getSubmitToken() {
             renderItem: (item) => {
               const b = getPublicationEntryBreakdown(item);
               const descriptive = getPublicationDescriptiveMetadata(item);
-              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Item type: <strong>${escapeHtml(item.pub_type || '-')}</strong></p><p>Writing stage: ${escapeHtml(item.pub_stage || '-')}</p><p>Indexing: ${escapeHtml(descriptive.indexing_display)}</p><p>Author position: ${escapeHtml(descriptive.author_position_display)}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deletePublication('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
+              const statusMeta = getPublicationStatusMetadata(item);
+              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Item type: <strong>${escapeHtml(getPublicationItemTypeDisplay(item))}</strong></p><p>Writing stage: ${escapeHtml(item.pub_stage || '-')}</p><p>Indexing: ${escapeHtml(descriptive.indexing_display)}</p><p>Author position: ${escapeHtml(descriptive.author_position_display)}</p><p>Status: ${escapeHtml(statusMeta.status_display)}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deletePublication('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
             }
           })}
 
@@ -3662,8 +3727,30 @@ function getSubmitToken() {
       const form = document.getElementById('publication-form');
       if (!form) return;
 
-      wireOtherSpecifyBlock({ baseId: 'pub-index' });
-      wireOtherSpecifyBlock({ baseId: 'pub-position' });
+      const wirePublicationOtherToggle = ({ selectId, otherWrapId, otherInputId, otherValue }) => {
+        const select = document.getElementById(selectId);
+        const otherWrap = document.getElementById(otherWrapId);
+        const otherInput = document.getElementById(otherInputId);
+        if (!select || !otherWrap || !otherInput) return;
+
+        const sync = () => {
+          const show = select.value === otherValue;
+          otherWrap.classList.toggle('hidden', !show);
+          otherInput.required = show;
+          if (!show) {
+            otherInput.value = '';
+          }
+          renderPublicationsLivePreview();
+        };
+
+        select.addEventListener('change', sync);
+        sync();
+      };
+
+      wireOtherSpecifyBlock({ baseId: 'pub-index', onToggle: renderPublicationsLivePreview });
+      wireOtherSpecifyBlock({ baseId: 'pub-position', onToggle: renderPublicationsLivePreview });
+      wirePublicationOtherToggle({ selectId: 'pub-type', otherWrapId: 'pub-type-other-wrap', otherInputId: 'pub-type-other', otherValue: 'other' });
+      wirePublicationOtherToggle({ selectId: 'pub-status-select', otherWrapId: 'pub-status-other-wrap', otherInputId: 'pub-status-other', otherValue: 'Other' });
 
       form.querySelectorAll('input, select').forEach((field) => {
         field.addEventListener('input', renderPublicationsLivePreview);
@@ -3690,6 +3777,7 @@ function getSubmitToken() {
       const draft = getPublicationsDraftInputState();
       const breakdown = getPublicationEntryBreakdown(draft);
       const descriptive = getPublicationDescriptiveMetadata(draft);
+      const statusMeta = getPublicationStatusMetadata(draft);
       const publicationData = {
         section: 'publications',
         ...draft,
@@ -3697,6 +3785,8 @@ function getSubmitToken() {
         author_position_label: descriptive.author_position_label,
         indexing_other_text: descriptive.indexing_other_text,
         author_position_other_text: descriptive.author_position_other_text,
+        pub_status: statusMeta.status_label,
+        pub_status_other_text: statusMeta.status_other_text,
         entry_points: breakdown.entry_points,
         created_at: new Date().toISOString()
       };
@@ -5319,14 +5409,15 @@ function getSubmitToken() {
               ],
               mapRow: (pub) => {
                 const descriptive = getPublicationDescriptiveMetadata(pub);
+                const statusMeta = getPublicationStatusMetadata(pub);
                 return {
                   pub_title: pub.pub_title,
-                  pub_type: pub.pub_type,
+                  pub_type: getPublicationItemTypeDisplay(pub),
                   indexing: descriptive.indexing_display,
                   pub_venue: pub.pub_venue,
                   author_position: descriptive.author_position_display,
                   pub_year: pub.pub_year,
-                  pub_status: pub.pub_status
+                  pub_status: statusMeta.status_display
                 };
               }
             }),
