@@ -1664,6 +1664,117 @@ function getSubmitToken() {
       return { label: 'Light', color: 'blue', icon: '💡' };
     }
 
+
+    const HOME_SECTION_GUIDE = [
+      {
+        title: '👤 Staff Profile',
+        measures: 'Sets reporting period and profile defaults used by all sections.',
+        counts: ['Reporting period start and end dates', 'Staff category selection'],
+        notCounts: ['Performance indicators or targets'],
+        notes: 'The reporting period applies to every section. Only record activities within this period.'
+      },
+      {
+        title: '📚 Teaching',
+        measures: 'Teaching load points per course based on contact hours and class size factor.',
+        counts: ['Lecture, tutorial, lab, and fieldwork hours for the course in the period', 'Class size', 'Role'],
+        notCounts: ['Teaching quality', 'Student evaluation scores', 'Awards'],
+        notes: 'Add one entry per course offering. Avoid splitting one course into multiple entries.'
+      },
+      {
+        title: '🎓 Supervision',
+        measures: 'Supervision workload points per supervisee based on level, role, registration mode, and current status.',
+        counts: ['Supervisees with active engagement during the reporting period'],
+        notCounts: ['Student outcomes such as graduation as a performance indicator'],
+        notes: 'Choose current status accurately. Not active and terminated should not be claimed.'
+      },
+      {
+        title: '🔬 Research',
+        measures: 'Research project workload points based on your role and work during the reporting period.',
+        counts: ['Projects where you had active work during the reporting period'],
+        notCounts: ['Grant size as prestige', 'Completion status as an outcome'],
+        notes: 'Do not claim projects with no activity in the reporting period.'
+      },
+      {
+        title: '📄 Publications',
+        measures: 'Scholarly writing workload points based on writing work done during the reporting period.',
+        counts: ['Drafting', 'Revising', 'Responding to reviewers', 'Proofing'],
+        notCounts: ['Journal ranking', 'Indexing', 'Author order', 'Acceptance as success'],
+        notes: 'This section is writing workload, not publication performance.'
+      },
+      {
+        title: '🏛️ Admin Leadership',
+        measures: 'Workload points for formal leadership appointments during the reporting period.',
+        counts: ['Positions held during the reporting period with correct start and end dates'],
+        notCounts: ['Allowance amount', 'Title prestige beyond the appointment category'],
+        notes: 'Points may be prorated by overlap with the reporting period.'
+      },
+      {
+        title: '📋 Admin Duties',
+        measures: 'Administrative duty workload based on duty type and frequency within the reporting period.',
+        counts: ['Committee work', 'Coordination', 'Accreditation tasks performed in the period'],
+        notCounts: ['Formal leadership appointments, record those under Admin Leadership'],
+        notes: 'Do not duplicate the same duty multiple times.'
+      },
+      {
+        title: '🤝 Service',
+        measures: 'Service and engagement workload based on service type and time spent in the reporting period.',
+        counts: ['Examiner roles', 'Reviews', 'Outreach talks', 'Committee service performed in the period'],
+        notCounts: ['Scope prestige such as international versus local unless scoring explicitly uses it'],
+        notes: 'Enter realistic duration or effort category as defined in the section.'
+      },
+      {
+        title: '🧪 Laboratory',
+        measures: 'Laboratory responsibility workload based on responsibility frequency and support scope.',
+        counts: ['Lab coordination', 'Safety', 'Inventory', 'Equipment maintenance', 'Teaching lab support tasks'],
+        notCounts: ['Teaching contact hours, record those in Teaching'],
+        notes: 'Avoid double counting between Teaching and Laboratory.'
+      },
+      {
+        title: '💼 Professional',
+        measures: 'Professional activity workload based on activity type and effort in the reporting period.',
+        counts: ['Training', 'Certification maintenance', 'Professional roles and office bearer responsibilities'],
+        notCounts: ['Membership alone without responsibilities'],
+        notes: 'Select effort band consistent with actual work during the period.'
+      },
+      {
+        title: '👨‍🏫 Assistants',
+        measures: 'Teaching assistant eligibility based on combined Teaching plus Supervision score.',
+        counts: ['Saved Teaching score plus saved Supervision score'],
+        notCounts: ['Other sections unless policy changes'],
+        notes: 'Eligibility is a threshold check, not a performance award.'
+      },
+      {
+        title: '📊 Results',
+        measures: 'Total workload points and section breakdown for the reporting period.',
+        counts: ['Sum of saved entries that fall within the reporting rules'],
+        notCounts: ['Qualitative performance judgments'],
+        notes: 'Review for duplicates and missing sections before exporting or sharing.'
+      }
+    ];
+
+    function renderHomeSectionGuideCards() {
+      return HOME_SECTION_GUIDE.map((section) => `
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+          <h4 class="font-bold text-lg text-gray-900 mb-3">${section.title}</h4>
+          <div class="space-y-3 text-sm text-gray-700">
+            <div><span class="font-semibold text-gray-900">What it measures:</span> ${section.measures}</div>
+            <div>
+              <div class="font-semibold text-gray-900 mb-1">What counts:</div>
+              <ul class="list-disc ml-5 space-y-1">${section.counts.map((item) => `<li>${item}</li>`).join('')}</ul>
+            </div>
+            <div>
+              <div class="font-semibold text-gray-900 mb-1">What does not count:</div>
+              <ul class="list-disc ml-5 space-y-1">${section.notCounts.map((item) => `<li>${item}</li>`).join('')}</ul>
+            </div>
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-900">
+              <p class="font-semibold mb-1">Notes</p>
+              <p>${section.notes}</p>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
     function renderHome() {
       const profile = getProfile();
       const scores = calculateScores();
@@ -1844,41 +1955,54 @@ function getSubmitToken() {
             </div>
           ` : ''}
 
-          <!-- Understanding Workload vs Performance -->
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h3 class="heading-font text-2xl font-bold mb-4 text-gray-900">💡 Understanding Workload vs Performance</h3>
-            
-            <div class="space-y-4">
-              <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
-                <h4 class="font-bold text-blue-900 mb-2">📊 Workload (Beban Tugas)</h4>
-                <p class="text-sm text-gray-700 mb-2">
-                  <strong>Definition:</strong> The quantity and distribution of tasks assigned to academic staff.
-                </p>
-                <p class="text-sm text-gray-600">
-                  <strong>Example:</strong> Teaching 3 courses, supervising 5 students, leading 2 research projects.
-                </p>
+          <!-- Home Onboarding Guide -->
+          <div class="space-y-6">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 class="heading-font text-2xl font-bold mb-4 text-gray-900">How to use this calculator</h3>
+              <div class="space-y-3 text-sm text-gray-700">
+                <p><span class="font-semibold text-gray-900">Step 1:</span> Complete Staff Profile and set reporting period.</p>
+                <p><span class="font-semibold text-gray-900">Step 2:</span> Fill relevant sections and click Add to save each entry.</p>
+                <p><span class="font-semibold text-gray-900">Step 3:</span> Open Results to review totals and correct mistakes.</p>
               </div>
+            </div>
 
-              <div class="bg-green-50 border-l-4 border-green-500 p-4 rounded">
-                <h4 class="font-bold text-green-900 mb-2">🏆 Performance (Prestasi Kerja)</h4>
-                <p class="text-sm text-gray-700 mb-2">
-                  <strong>Definition:</strong> The quality and impact of work delivered by academic staff.
-                </p>
-                <p class="text-sm text-gray-600">
-                  <strong>Example:</strong> High student satisfaction scores, Q1 journal publications, successful grant acquisitions.
-                </p>
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 class="heading-font text-2xl font-bold mb-4 text-gray-900">Key definitions</h3>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-700">
+                <div class="bg-gray-50 rounded-lg border border-gray-200 p-4"><span class="font-semibold text-gray-900">Workload points:</span> Proxy for workload responsibilities and effort, not quality or success.</div>
+                <div class="bg-gray-50 rounded-lg border border-gray-200 p-4"><span class="font-semibold text-gray-900">Reporting period:</span> Only activities within the dates count.</div>
+                <div class="bg-gray-50 rounded-lg border border-gray-200 p-4"><span class="font-semibold text-gray-900">Entry:</span> One saved record in a section.</div>
+                <div class="bg-gray-50 rounded-lg border border-gray-200 p-4"><span class="font-semibold text-gray-900">Double counting:</span> Recording the same workload in multiple sections.</div>
               </div>
+              <div class="mt-4 bg-amber-50 border-l-4 border-amber-500 p-4 rounded">
+                <h4 class="font-bold text-amber-900 mb-1">Workload versus performance</h4>
+                <p class="text-sm text-amber-800">Workload points represent quantity and effort of responsibilities. They do not measure teaching quality, publication prestige, or outcome success.</p>
+              </div>
+            </div>
 
-              <div class="bg-amber-50 border-l-4 border-amber-500 p-4 rounded">
-                <h4 class="font-bold text-amber-900 mb-2">🔑 Key Difference</h4>
-                <p class="text-sm text-gray-700 mb-2">
-                  <strong>Workload = Quantity</strong> (How much work you do) <br>
-                  <strong>Performance = Quality</strong> (How well you do the work)
-                </p>
-                <p class="text-sm text-gray-600 mt-2">
-                  <em>Note:</em> This calculator focuses on workload distribution and task allocation. 
-                  Performance is assessed separately through KPIs, evaluations, and institutional assessments.
-                </p>
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 class="heading-font text-2xl font-bold mb-4 text-gray-900">Section guide</h3>
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                ${renderHomeSectionGuideCards()}
+              </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 class="heading-font text-2xl font-bold mb-4 text-gray-900">Common mistakes to avoid</h3>
+              <ul class="list-disc ml-5 space-y-2 text-sm text-gray-700">
+                <li>Recording activities outside the reporting period.</li>
+                <li>Splitting one activity into multiple entries to increase points.</li>
+                <li>Double counting the same workload in more than one section.</li>
+                <li>Using prestige fields to infer higher workload when the calculator does not score prestige.</li>
+              </ul>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 class="heading-font text-2xl font-bold mb-4 text-gray-900">Buttons and saving</h3>
+              <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-900">
+                <p><span class="font-semibold">Add:</span> Saves an entry and it should appear in the saved list in that section.</p>
+                <p class="mt-2"><span class="font-semibold">Next:</span> Moves to the next section and does not save your current form.</p>
+                <p class="mt-2">If you do not see the saved entry after Add, return to that section and confirm it was saved.</p>
               </div>
             </div>
           </div>
