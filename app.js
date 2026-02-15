@@ -1263,6 +1263,15 @@ function getSubmitToken() {
 
     function bindSubmitButton() {
       document.addEventListener('click', (event) => {
+        const exportMenu = document.getElementById('results-export-menu');
+        if (exportMenu && !event.target.closest('#results-export-menu-container')) {
+          exportMenu.classList.add('hidden');
+        }
+
+        if (event.target.id === 'results-drilldown-modal') {
+          closeSectionDrilldown();
+        }
+
         const submitButton = event.target.closest('#submit-report');
         if (!submitButton) return;
         event.preventDefault();
@@ -4323,167 +4332,358 @@ function getSubmitToken() {
       `;
     }
 
+    function formatResultDate(value) {
+      if (!value) return 'Not set';
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) return 'Invalid date';
+      return parsed.toLocaleDateString();
+    }
+
+    function getResultsSectionDefinitions(scores) {
+      return [
+        { id: 'teaching', label: 'Teaching', icon: '📚', score: scores.teaching, color: 'blue', unitLabel: 'entries' },
+        { id: 'supervision', label: 'Supervision', icon: '🧑‍🏫', score: scores.supervision, color: 'purple', unitLabel: 'entries' },
+        { id: 'research', label: 'Research', icon: '🔬', score: scores.research, color: 'green', unitLabel: 'entries' },
+        { id: 'publications', label: 'Publications', icon: '📝', score: scores.publications, color: 'indigo', unitLabel: 'entries' },
+        { id: 'administration', label: 'Admin Leadership', icon: '🏛️', score: scores.adminLeadership, color: 'rose', unitLabel: 'entries' },
+        { id: 'admin_duties', label: 'Admin Duties', icon: '📌', score: scores.adminDuties, color: 'amber', unitLabel: 'entries' },
+        { id: 'service', label: 'Service', icon: '🤝', score: scores.service, color: 'cyan', unitLabel: 'entries' },
+        { id: 'laboratory', label: 'Laboratory', icon: '🧪', score: scores.laboratory, color: 'teal', unitLabel: 'entries' },
+        { id: 'professional', label: 'Professional', icon: '💼', score: scores.professional, color: 'violet', unitLabel: 'entries' }
+      ].map((section) => ({ ...section, records: getRecordsBySection(section.id), count: getRecordsBySection(section.id).length }));
+    }
+
+    function getSectionEntryBreakdown(sectionId, entry) {
+      if (sectionId === 'teaching') {
+        const b = getTeachingCourseBreakdown(entry);
+        return { ...b, entry_points: b.course_points };
+      }
+      if (sectionId === 'supervision') return getSupervisionEntryBreakdown(entry);
+      if (sectionId === 'research') return getResearchEntryBreakdown(entry);
+      if (sectionId === 'publications') return getPublicationEntryBreakdown(entry);
+      if (sectionId === 'administration') return getAdministrationEntryBreakdown(entry);
+      if (sectionId === 'admin_duties') return getAdminDutyEntryBreakdown(entry);
+      if (sectionId === 'service') return getServiceEntryBreakdown(entry);
+      if (sectionId === 'laboratory') return getLabEntryBreakdown(entry);
+      if (sectionId === 'professional') return getProfessionalEntryBreakdown(entry);
+      return { entry_points: 0, is_counted: false };
+    }
+
+    function getSectionEntryTitle(sectionId, entry, index) {
+      const fallback = `Entry ${index + 1}`;
+      const titleBySection = {
+        teaching: entry.course_code || entry.course_name,
+        supervision: entry.student_name || entry.student_title,
+        research: entry.research_title,
+        publications: entry.pub_title,
+        administration: entry.admin_position,
+        admin_duties: entry.duty_name || entry.duty_type,
+        service: entry.service_title || entry.service_type,
+        laboratory: entry.lab_name || entry.lab_responsibility,
+        professional: entry.prof_title || entry.prof_type
+      };
+      return titleBySection[sectionId] || fallback;
+    }
+
+    function renderResultsSummary(profile, scores, status, sections) {
+      const categoryKey = normalizeProfileCategoryKey(profile?.profile_category || '');
+      const isAcademic = categoryKey === 'academic';
+      const startDate = profile?.reporting_start_date;
+      const endDate = profile?.reporting_end_date;
+      const start = startDate ? new Date(startDate) : null;
+      const end = endDate ? new Date(endDate) : null;
+      const hasValidPeriod = start && end && !Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && end >= start;
+      const periodDays = hasValidPeriod ? Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1 : 0;
+      const periodWeeks = hasValidPeriod ? (periodDays / 7).toFixed(2) : '0.00';
+      const totalEntries = sections.reduce((sum, section) => sum + section.count, 0);
+
+      return `
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h3 class="heading-font text-2xl font-bold mb-4 text-gray-900">📋 Executive Summary</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+            <div><p class="text-gray-500">Staff name</p><p class="font-semibold text-gray-900">${escapeHtml(profile?.profile_name || 'Not provided')}</p></div>
+            <div><p class="text-gray-500">Staff category</p><p class="font-semibold text-gray-900">${escapeHtml(getProfileCategoryLabel(profile?.profile_category || '') || 'Not provided')}</p></div>
+            <div><p class="text-gray-500">Admin status</p><p class="font-semibold text-gray-900">${escapeHtml(isAcademic ? (profile?.admin_status || 'Not provided') : 'Not applicable')}</p></div>
+            <div><p class="text-gray-500">Generated on</p><p class="font-semibold text-gray-900">${new Date().toLocaleString()}</p></div>
+            <div class="md:col-span-2"><p class="text-gray-500">Reporting period</p><p class="font-semibold text-gray-900">${formatResultDate(startDate)} to ${formatResultDate(endDate)}</p><p class="text-xs text-gray-600">${periodDays} days (${periodWeeks} weeks)</p></div>
+            <div><p class="text-gray-500">Total entries</p><p class="font-semibold text-gray-900">${totalEntries}</p></div>
+            <div><p class="text-gray-500">Total workload score</p><p class="font-semibold text-gray-900">${scores.total.toFixed(2)} • ${status.label}</p></div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderSectionBreakdownTiles(sections) {
+      return `
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h3 class="heading-font text-2xl font-bold mb-2">Score Breakdown by Category</h3>
+          <p class="text-sm text-gray-600 mb-5">Select a category to review saved entries and points details.</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            ${sections.map((section) => `
+              <button onclick="openSectionDrilldown('${section.id}')" class="text-left bg-gradient-to-br from-${section.color}-50 to-white rounded-lg p-5 border-l-4 border-${section.color}-500 hover:shadow-md transition">
+                <div class="text-sm font-semibold text-gray-600 mb-1">${section.icon} ${section.label}</div>
+                <div class="text-3xl font-bold text-${section.color}-600">${section.score.toFixed(2)}</div>
+                <div class="text-xs text-gray-500 mt-2">${section.count} ${section.unitLabel}</div>
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderSectionDrilldownModal() {
+      return `
+        <div id="results-drilldown-modal" class="hidden fixed inset-0 bg-black/40 z-40 p-4">
+          <div class="max-w-3xl mx-auto mt-8 bg-white rounded-xl shadow-xl border border-gray-200 max-h-[80vh] overflow-hidden flex flex-col">
+            <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h4 id="results-drilldown-title" class="font-bold text-gray-900 text-lg">Section details</h4>
+              <button onclick="closeSectionDrilldown()" class="px-3 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 text-sm font-semibold">Close</button>
+            </div>
+            <div id="results-drilldown-body" class="p-5 overflow-y-auto"></div>
+          </div>
+        </div>
+      `;
+    }
+
+    function openSectionDrilldown(sectionId) {
+      const modal = document.getElementById('results-drilldown-modal');
+      const title = document.getElementById('results-drilldown-title');
+      const body = document.getElementById('results-drilldown-body');
+      if (!modal || !title || !body) return;
+
+      const scores = calculateScores();
+      const sections = getResultsSectionDefinitions(scores);
+      const section = sections.find((item) => item.id === sectionId);
+      if (!section) return;
+
+      title.textContent = `${section.icon} ${section.label} entries`;
+      if (!section.records.length) {
+        body.innerHTML = '<p class="text-sm text-gray-600">No entries recorded.</p>';
+      } else {
+        body.innerHTML = section.records.map((entry, index) => {
+          const breakdown = getSectionEntryBreakdown(section.id, entry);
+          const points = Number(breakdown.entry_points);
+          const breakdownRows = Object.entries(breakdown)
+            .filter(([key]) => key !== 'entry_points')
+            .map(([key, value]) => `<li><span class="font-medium">${escapeHtml(key.replace(/_/g, ' '))}:</span> ${escapeHtml(String(value))}</li>`)
+            .join('');
+          return `
+            <div class="border border-gray-200 rounded-lg p-4 mb-3">
+              <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                  <p class="font-semibold text-gray-900">${escapeHtml(getSectionEntryTitle(section.id, entry, index))}</p>
+                  <p class="text-sm text-gray-600">Computed points: <strong>${Number.isFinite(points) ? points.toFixed(2) : 'Missing'}</strong></p>
+                </div>
+                <div class="flex gap-2">
+                  <button onclick="toggleDrilldownDetails('${section.id}-${index}')" class="px-3 py-2 bg-gray-100 rounded-lg text-sm font-semibold hover:bg-gray-200">View details</button>
+                  <button onclick="jumpToSectionFromResults('${section.id}')" class="px-3 py-2 bg-sky-600 text-white rounded-lg text-sm font-semibold hover:bg-sky-700">Jump to section</button>
+                </div>
+              </div>
+              <div id="drilldown-detail-${section.id}-${index}" class="hidden mt-3 text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-lg p-3">
+                <ul class="space-y-1">${breakdownRows}</ul>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      modal.classList.remove('hidden');
+    }
+
+    function closeSectionDrilldown() {
+      const modal = document.getElementById('results-drilldown-modal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function toggleDrilldownDetails(detailId) {
+      const detail = document.getElementById(`drilldown-detail-${detailId}`);
+      if (!detail) return;
+      detail.classList.toggle('hidden');
+    }
+
+    function jumpToSectionFromResults(sectionId) {
+      closeSectionDrilldown();
+      navigateToSection(sectionId);
+    }
+
+    function renderCompositionBlock(sections, totalScore) {
+      const normalizedTotal = totalScore > 0 ? totalScore : 0;
+      return `
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h3 class="heading-font text-xl font-bold mb-4">Workload Composition</h3>
+          <div class="w-full h-5 rounded-full overflow-hidden bg-gray-100 flex mb-4">
+            ${sections.map((section) => {
+              const pct = normalizedTotal > 0 ? (section.score / normalizedTotal) * 100 : 0;
+              return `<div class="h-full bg-${section.color}-500" style="width:${pct.toFixed(2)}%" title="${escapeHtml(section.label)} ${pct.toFixed(1)}%"></div>`;
+            }).join('')}
+          </div>
+          <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+              <thead>
+                <tr class="text-left border-b border-gray-200 text-gray-600">
+                  <th class="py-2 pr-3">Section</th><th class="py-2 pr-3">Total points</th><th class="py-2 pr-3">Entries</th><th class="py-2 pr-3">Avg/entry</th><th class="py-2">% of total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${sections.map((section) => {
+                  const pct = normalizedTotal > 0 ? (section.score / normalizedTotal) * 100 : 0;
+                  const avg = section.count > 0 ? section.score / section.count : 0;
+                  return `<tr class="border-b border-gray-100"><td class="py-2 pr-3">${section.icon} ${escapeHtml(section.label)}</td><td class="py-2 pr-3">${section.score.toFixed(2)}</td><td class="py-2 pr-3">${section.count}</td><td class="py-2 pr-3">${avg.toFixed(2)}</td><td class="py-2">${pct.toFixed(1)}%</td></tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function runDataChecks(profile, sections, totalScore) {
+      const checks = [];
+      const hasProfile = Boolean(profile?.profile_name && profile?.profile_category);
+      const startDate = profile?.reporting_start_date ? new Date(profile.reporting_start_date) : null;
+      const endDate = profile?.reporting_end_date ? new Date(profile.reporting_end_date) : null;
+      const validDates = Boolean(
+        startDate &&
+        endDate &&
+        !Number.isNaN(startDate.getTime()) &&
+        !Number.isNaN(endDate.getTime()) &&
+        endDate >= startDate
+      );
+
+      checks.push({
+        label: 'Profile and reporting period',
+        status: hasProfile && validDates ? 'ok' : 'warning',
+        message: hasProfile && validDates ? 'Profile and reporting period dates are recorded.' : 'Profile fields or reporting period dates need verification.'
+      });
+
+      const emptySections = sections.filter((section) => section.count === 0).map((section) => section.label);
+      checks.push({
+        label: 'Sections with zero entries',
+        status: emptySections.length ? 'warning' : 'ok',
+        message: emptySections.length ? `No entries recorded in: ${emptySections.join(', ')}.` : 'All sections include at least one entry.'
+      });
+
+      const invalidPoints = [];
+      sections.forEach((section) => {
+        section.records.forEach((entry, index) => {
+          const breakdown = getSectionEntryBreakdown(section.id, entry);
+          const points = Number(breakdown.entry_points);
+          if (!Number.isFinite(points)) {
+            invalidPoints.push(`${section.label} — ${getSectionEntryTitle(section.id, entry, index)}`);
+          }
+        });
+      });
+      checks.push({
+        label: 'Missing or invalid points',
+        status: invalidPoints.length ? 'warning' : 'ok',
+        message: invalidPoints.length ? `Review entries: ${invalidPoints.join('; ')}.` : 'No missing or invalid points detected.'
+      });
+
+      const outliers = [];
+      if (totalScore > 0) {
+        sections.forEach((section) => {
+          section.records.forEach((entry, index) => {
+            const breakdown = getSectionEntryBreakdown(section.id, entry);
+            const points = Number(breakdown.entry_points);
+            if (Number.isFinite(points) && points / totalScore > 0.25) {
+              outliers.push(`${section.label} — ${getSectionEntryTitle(section.id, entry, index)} (${points.toFixed(2)} points)`);
+            }
+          });
+        });
+      }
+      checks.push({
+        label: 'Outlier entries (>25% of total)',
+        status: outliers.length ? 'warning' : 'ok',
+        message: outliers.length ? `Review high-share entries: ${outliers.join('; ')}.` : 'No single entry exceeds 25% of total workload score.'
+      });
+
+      const teachingCount = sections.find((section) => section.id === 'teaching')?.count || 0;
+      const labCount = sections.find((section) => section.id === 'laboratory')?.count || 0;
+      if (teachingCount > 0 && labCount > 0) {
+        checks.push({
+          label: 'Teaching and Laboratory overlap reminder',
+          status: 'warning',
+          message: 'Review entries for overlap. Do not double count the same workload between Teaching and Laboratory sections.'
+        });
+      }
+
+      const adminLeadCount = sections.find((section) => section.id === 'administration')?.count || 0;
+      const adminDutyCount = sections.find((section) => section.id === 'admin_duties')?.count || 0;
+      if (adminLeadCount > 0 && adminDutyCount > 0) {
+        checks.push({
+          label: 'Admin Leadership and Admin Duties overlap reminder',
+          status: 'warning',
+          message: 'Review entries for overlap. Do not double count the same workload between Admin Leadership and Admin Duties sections.'
+        });
+      }
+
+      return checks;
+    }
+
+    function renderDataChecks(profile, sections, totalScore) {
+      const checks = runDataChecks(profile, sections, totalScore);
+      return `
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h3 class="heading-font text-2xl font-bold mb-4">🧾 Data checks</h3>
+          <div class="space-y-3">
+            ${checks.map((check) => `
+              <div class="border rounded-lg p-4 ${check.status === 'ok' ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}">
+                <p class="font-semibold ${check.status === 'ok' ? 'text-green-900' : 'text-amber-900'}">${escapeHtml(check.label)}</p>
+                <p class="text-sm ${check.status === 'ok' ? 'text-green-800' : 'text-amber-800'}">${escapeHtml(check.message)}</p>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function toggleResultsExportMenu() {
+      const menu = document.getElementById('results-export-menu');
+      if (!menu) return;
+      menu.classList.toggle('hidden');
+    }
+
     function renderResults() {
       const scores = calculateScores();
       const status = getWorkloadStatus(scores.total);
       const profile = getProfile();
-      
+      const sections = getResultsSectionDefinitions(scores);
+
       return `
         <div class="space-y-6">
-          <!-- Export Actions Bar -->
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
-              <h3 class="font-bold text-lg text-gray-900">📊 Export Options</h3>
-              <div class="flex flex-wrap gap-3">
-                <button onclick="printResultsPDF()" class="px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition flex items-center gap-2 text-sm">
-                  <span>📄</span> Print PDF
-                </button>
-                <button onclick="exportToExcel()" class="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition flex items-center gap-2 text-sm">
-                  <span>📊</span> Export to Excel
-                </button>
-                <button onclick="exportSummaryCSV()" class="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition flex items-center gap-2 text-sm">
-                  <span>📋</span> Summary CSV
-                </button>
-                <button onclick="copyToClipboard()" class="px-4 py-2 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition flex items-center gap-2 text-sm">
-                  <span>📑</span> Copy Summary
-                </button>
+              <h3 class="font-bold text-lg text-gray-900">📤 Report actions</h3>
+              <div class="flex items-center gap-3">
+                <div id="results-export-menu-container" class="relative">
+                  <button onclick="toggleResultsExportMenu()" class="px-4 py-2 bg-gray-700 text-white rounded-lg font-semibold hover:bg-gray-800 transition flex items-center gap-2 text-sm">
+                    <span>📁</span> Export
+                  </button>
+                  <div id="results-export-menu" class="hidden absolute right-0 mt-2 w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-30 overflow-hidden text-sm">
+                    <button onclick="printResultsPDF(); toggleResultsExportMenu();" class="block w-full text-left px-4 py-2 hover:bg-gray-50">📄 Print PDF</button>
+                    <button onclick="exportToExcel(); toggleResultsExportMenu();" class="block w-full text-left px-4 py-2 hover:bg-gray-50">📊 Export Excel</button>
+                    <button onclick="exportSummaryCSV(); toggleResultsExportMenu();" class="block w-full text-left px-4 py-2 hover:bg-gray-50">📋 Summary CSV</button>
+                    <button onclick="copyToClipboard(); toggleResultsExportMenu();" class="block w-full text-left px-4 py-2 hover:bg-gray-50">📑 Copy summary</button>
+                  </div>
+                </div>
                 <button id="submit-report" class="px-4 py-2 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700 transition flex items-center gap-2 text-sm">
-                  <span>🚀</span> Submit Report
+                  <span>🚀</span> Submit report
                 </button>
               </div>
             </div>
           </div>
+
           <div id="submission-status" class="hidden"></div>
+          ${renderResultsSummary(profile, scores, status, sections)}
+          ${renderSectionBreakdownTiles(sections)}
+          ${renderCompositionBlock(sections, scores.total)}
+          ${renderDataChecks(profile, sections, scores.total)}
+          ${renderSectionDrilldownModal()}
 
-          <!-- Total Score Card -->
-          <div class="bg-gradient-to-r from-sky-500 to-blue-600 rounded-2xl shadow-xl p-8 text-white text-center">
-            <h2 class="heading-font text-3xl font-bold mb-2">Total Workload Score</h2>
-            <div class="text-7xl font-bold mb-4">${scores.total}</div>
-            <div class="flex items-center justify-center gap-3">
-              <span class="text-4xl">${status.icon}</span>
-              <span class="px-6 py-2 bg-white bg-opacity-20 rounded-full text-xl font-semibold">
-                ${status.label}
-              </span>
-            </div>
-          </div>
-
-          <!-- Score Breakdown -->
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h3 class="heading-font text-2xl font-bold mb-6">Score Breakdown by Category</h3>
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div class="bg-gradient-to-br from-blue-50 to-sky-50 rounded-lg p-5 border-l-4 border-blue-500">
-                <div class="text-sm font-semibold text-gray-600 mb-1">📚 Teaching</div>
-                <div class="text-3xl font-bold text-blue-600">${scores.teaching.toFixed(2)}</div>
-                <div class="text-xs text-gray-500 mt-2">${getRecordsBySection('teaching').length} courses</div>
-              </div>
-              
-              <div class="bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg p-5 border-l-4 border-purple-500">
-                <div class="text-sm font-semibold text-gray-600 mb-1">🧑‍🏫 Supervision</div>
-                <div class="text-3xl font-bold text-purple-600">${scores.supervision.toFixed(2)}</div>
-                <div class="text-xs text-gray-500 mt-2">${getRecordsBySection('supervision').length} students</div>
-              </div>
-              
-              <div class="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg p-5 border-l-4 border-green-500">
-                <div class="text-sm font-semibold text-gray-600 mb-1">🔬 Research</div>
-                <div class="text-3xl font-bold text-green-600">${scores.research.toFixed(2)}</div>
-                <div class="text-xs text-gray-500 mt-2">${getRecordsBySection('research').length} projects</div>
-              </div>
-              
-              <div class="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-lg p-5 border-l-4 border-indigo-500">
-                <div class="text-sm font-semibold text-gray-600 mb-1">📝 Publications</div>
-                <div class="text-3xl font-bold text-indigo-600">${scores.publications.toFixed(2)}</div>
-                <div class="text-xs text-gray-500 mt-2">${getRecordsBySection('publications').length} works</div>
-              </div>
-              
-              <div class="bg-gradient-to-br from-rose-50 to-red-50 rounded-lg p-5 border-l-4 border-rose-500">
-                <div class="text-sm font-semibold text-gray-600 mb-1">🏛️ Admin Leadership</div>
-                <div class="text-3xl font-bold text-rose-600">${scores.adminLeadership.toFixed(2)}</div>
-                <div class="text-xs text-gray-500 mt-2">${getRecordsBySection('administration').length} positions</div>
-              </div>
-              
-              <div class="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-lg p-5 border-l-4 border-amber-500">
-                <div class="text-sm font-semibold text-gray-600 mb-1">📌 Admin Duties</div>
-                <div class="text-3xl font-bold text-amber-600">${scores.adminDuties.toFixed(2)}</div>
-                <div class="text-xs text-gray-500 mt-2">${getRecordsBySection('admin_duties').length} duties</div>
-              </div>
-              
-              <div class="bg-gradient-to-br from-cyan-50 to-teal-50 rounded-lg p-5 border-l-4 border-cyan-500">
-                <div class="text-sm font-semibold text-gray-600 mb-1">🧪 Laboratory</div>
-                <div class="text-3xl font-bold text-cyan-600">${scores.laboratory.toFixed(2)}</div>
-                <div class="text-xs text-gray-500 mt-2">${getRecordsBySection('laboratory').length} responsibilities</div>
-              </div>
-              
-              <div class="bg-gradient-to-br from-violet-50 to-purple-50 rounded-lg p-5 border-l-4 border-violet-500">
-                <div class="text-sm font-semibold text-gray-600 mb-1">💼 Professional</div>
-                <div class="text-3xl font-bold text-violet-600">${scores.professional.toFixed(2)}</div>
-                <div class="text-xs text-gray-500 mt-2">${getRecordsBySection('professional').length} activities</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Smart Recommendations -->
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h3 class="heading-font text-2xl font-bold mb-4">💡 Recommendations & Insights</h3>
-            
-            ${scores.total >= 100 ? `
-              <div class="bg-red-50 border-l-4 border-red-500 p-5 rounded-lg">
-                <h4 class="font-bold text-red-900 text-lg mb-3">⚠️ Workload Overload Detected</h4>
-                <p class="text-sm text-red-800 mb-3">Your workload score exceeds the recommended threshold. Consider these strategies:</p>
-                <ul class="text-sm text-red-800 space-y-2 ml-4 list-disc">
-                  <li><strong>Delegate tasks:</strong> Discuss with your supervisor about redistributing some responsibilities</li>
-                  <li><strong>Timeline adjustments:</strong> Request deadline extensions for non-critical projects</li>
-                  <li><strong>Work-life balance:</strong> Prioritize essential activities and reduce optional commitments</li>
-                  <li><strong>Seek support:</strong> Consider requesting teaching assistants or research support staff</li>
-                  <li><strong>Administrative relief:</strong> Explore temporary reduction in committee duties if possible</li>
-                </ul>
-              </div>
-            ` : scores.total >= 70 ? `
-              <div class="bg-green-50 border-l-4 border-green-500 p-5 rounded-lg">
-                <h4 class="font-bold text-green-900 text-lg mb-3">✅ Well-Balanced Workload</h4>
-                <p class="text-sm text-green-800 mb-3">Your workload is in the optimal productivity zone. To maintain this balance:</p>
-                <ul class="text-sm text-green-800 space-y-2 ml-4 list-disc">
-                  <li><strong>Maintain momentum:</strong> Continue your current pace without taking on major new commitments</li>
-                  <li><strong>Quality focus:</strong> Invest time in deepening the impact of existing projects</li>
-                  <li><strong>Mentorship opportunities:</strong> Share your balanced approach with junior colleagues</li>
-                  <li><strong>Strategic planning:</strong> Use this stable period to plan long-term research directions</li>
-                  <li><strong>Professional development:</strong> Attend workshops or conferences to enhance skills</li>
-                </ul>
-              </div>
-            ` : scores.total >= 40 ? `
-              <div class="bg-yellow-50 border-l-4 border-yellow-500 p-5 rounded-lg">
-                <h4 class="font-bold text-yellow-900 text-lg mb-3">⚡ Moderate Workload - Growth Opportunities</h4>
-                <p class="text-sm text-yellow-800 mb-3">You have capacity to expand your academic profile. Consider:</p>
-                <ul class="text-sm text-yellow-800 space-y-2 ml-4 list-disc">
-                  <li><strong>Increase teaching:</strong> Offer to teach an additional elective or take on coordinator roles</li>
-                  <li><strong>Expand research:</strong> Apply for new grants or join collaborative research projects</li>
-                  <li><strong>Supervision:</strong> Take on additional postgraduate or undergraduate supervisees</li>
-                  <li><strong>Publication pipeline:</strong> Convert existing research into journal publications</li>
-                  <li><strong>Committee participation:</strong> Join faculty or university-level committees</li>
-                </ul>
-              </div>
-            ` : `
-              <div class="bg-blue-50 border-l-4 border-blue-500 p-5 rounded-lg">
-                <h4 class="font-bold text-blue-900 text-lg mb-3">💡 Light Workload - Profile Building Phase</h4>
-                <p class="text-sm text-blue-800 mb-3">Great opportunity to build your academic profile. Focus on:</p>
-                <ul class="text-sm text-blue-800 space-y-2 ml-4 list-disc">
-                  <li><strong>Teaching expansion:</strong> Volunteer to teach core courses or develop new course materials</li>
-                  <li><strong>Research initiation:</strong> Start or join research projects, apply for seed grants</li>
-                  <li><strong>Student supervision:</strong> Actively recruit postgraduate and FYP students</li>
-                  <li><strong>Publication drive:</strong> Target 2-3 publications per year in indexed journals</li>
-                  <li><strong>Administrative roles:</strong> Express interest in programme coordinator or committee positions</li>
-                  <li><strong>Professional networking:</strong> Join professional bodies and attend conferences</li>
-                </ul>
-              </div>
-            `}
-          </div>
-
-          <!-- Reset Data Section -->
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h3 class="heading-font text-2xl font-bold mb-4 text-gray-900">🔄 Reset Data</h3>
-            
+
             <div class="space-y-4">
-              <!-- Clear Activities Only -->
               <div class="border-2 border-orange-200 bg-orange-50 rounded-lg p-5">
                 <h4 class="font-bold text-orange-900 mb-2">Clear Activities (Keep Profile)</h4>
                 <p class="text-sm text-orange-800 mb-4">
@@ -4504,22 +4704,18 @@ function getSubmitToken() {
                   </div>
                 </div>
                 <div class="flex gap-3">
-                  <button id="clear-activities-btn" onclick="showClearActivitiesConfirm()" 
-                          class="px-5 py-2 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 transition text-sm">
+                  <button id="clear-activities-btn" onclick="showClearActivitiesConfirm()" class="px-5 py-2 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 transition text-sm">
                     Clear Activities
                   </button>
-                  <button id="confirm-clear-activities-btn" onclick="confirmClearActivities()" 
-                          class="hidden px-5 py-2 bg-orange-700 text-white rounded-lg font-bold hover:bg-orange-800 transition text-sm">
+                  <button id="confirm-clear-activities-btn" onclick="confirmClearActivities()" class="hidden px-5 py-2 bg-orange-700 text-white rounded-lg font-bold hover:bg-orange-800 transition text-sm">
                     ✓ Yes, Delete All Activities
                   </button>
-                  <button id="cancel-clear-activities-btn" onclick="cancelClearActivities()" 
-                          class="hidden px-5 py-2 bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 transition text-sm">
+                  <button id="cancel-clear-activities-btn" onclick="cancelClearActivities()" class="hidden px-5 py-2 bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 transition text-sm">
                     Cancel
                   </button>
                 </div>
               </div>
 
-              <!-- Reset All Data -->
               <div class="border-2 border-red-200 bg-red-50 rounded-lg p-5">
                 <h4 class="font-bold text-red-900 mb-2">Reset All Data</h4>
                 <p class="text-sm text-red-800 mb-4">
@@ -4534,20 +4730,17 @@ function getSubmitToken() {
                       <li>All publications and administrative data</li>
                       <li>All service, laboratory, and professional activities</li>
                     </ul>
-                    <p class="text-xs text-red-700 font-bold">⚠️ Consider exporting your data first using the buttons above!</p>
+                    <p class="text-xs text-red-700 font-bold">⚠️ Consider exporting your data first using the export menu above.</p>
                   </div>
                 </div>
                 <div class="flex gap-3">
-                  <button id="reset-all-btn" onclick="showResetAllConfirm()" 
-                          class="px-5 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition text-sm">
+                  <button id="reset-all-btn" onclick="showResetAllConfirm()" class="px-5 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition text-sm">
                     Reset All Data
                   </button>
-                  <button id="confirm-reset-all-btn" onclick="confirmResetAll()" 
-                          class="hidden px-5 py-2 bg-red-700 text-white rounded-lg font-bold hover:bg-red-800 transition text-sm">
+                  <button id="confirm-reset-all-btn" onclick="confirmResetAll()" class="hidden px-5 py-2 bg-red-700 text-white rounded-lg font-bold hover:bg-red-800 transition text-sm">
                     ✓ Yes, Delete Everything
                   </button>
-                  <button id="cancel-reset-all-btn" onclick="cancelResetAll()" 
-                          class="hidden px-5 py-2 bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 transition text-sm">
+                  <button id="cancel-reset-all-btn" onclick="cancelResetAll()" class="hidden px-5 py-2 bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 transition text-sm">
                     Cancel
                   </button>
                 </div>
