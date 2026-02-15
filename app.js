@@ -2304,14 +2304,14 @@ function getSubmitToken() {
       return Math.floor((end - start) / millisecondsPerDay) + 1;
     }
 
-    function parseProfileState(profile) {
+    function parseProfileState(profile, options = {}) {
+      const { includeLocalState = true } = options;
       const defaults = {
         staff_name: '',
         staff_id: '',
         staff_category: '',
         admin_status: '',
         staff_grade: '',
-        staff_designation: '',
         reporting_period_type: 'Semester',
         reporting_start_date: '',
         reporting_end_date: '',
@@ -2345,7 +2345,7 @@ function getSubmitToken() {
         return {};
       })();
 
-      const localState = readLocalJson(PROFILE_STATE_STORAGE_KEY, {});
+      const localState = includeLocalState ? readLocalJson(PROFILE_STATE_STORAGE_KEY, {}) : {};
       const resolvedAdminStatus = String(parsedState.admin_status || profile?.admin_status || localState.admin_status || '').trim().toLowerCase();
       const state = {
         ...defaults,
@@ -2380,6 +2380,45 @@ function getSubmitToken() {
       return state;
     }
 
+    function formatAdminStatusValue(value, staffCategory) {
+      if (normalizeProfileCategoryKey(staffCategory) !== 'academic') return 'Not applicable';
+      if (value === 'admin') return 'Admin';
+      if (value === 'non_admin') return 'Non admin';
+      return '';
+    }
+
+    function renderSavedProfileSummary(profile) {
+      if (!profile) return '';
+      const savedState = parseProfileState(profile, { includeLocalState: false });
+      const startDate = savedState.reporting_start_date;
+      const endDate = savedState.reporting_end_date;
+
+      const rows = [
+        ['Staff Name', savedState.staff_name],
+        ['Staff ID', savedState.staff_id],
+        ['Staff Category', getProfileCategoryLabel(savedState.staff_category)],
+        ['Admin Status', formatAdminStatusValue(savedState.admin_status, savedState.staff_category)],
+        ['Grade', savedState.staff_grade],
+        ['Reporting Period Type', savedState.reporting_period_type],
+        ['Start Date', startDate],
+        ['End Date', endDate],
+        ['Programme', savedState.programme],
+        ['Academic Rank', savedState.academic_rank],
+        ['Administrative Position', savedState.administrative_position],
+        ['Laboratory Position', savedState.laboratory_position],
+        ['Reporting Tags', savedState.reporting_tags]
+      ].filter(([, value]) => String(value || '').trim() !== '');
+
+      return `
+        <div id="profile_summary_card" class="bg-white border border-sky-200 rounded-xl p-4 shadow-sm">
+          <h3 class="text-sm font-semibold text-sky-700 mb-2">Saved profile summary</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+            ${rows.map(([label, value]) => `<div><span class="text-gray-500">${escapeHtml(label)}:</span> <span class="font-medium text-gray-900">${escapeHtml(String(value))}</span></div>`).join('')}
+          </div>
+        </div>
+      `;
+    }
+
     function renderProfile() {
       const profile = getProfile();
       const profileState = parseProfileState(profile);
@@ -2388,9 +2427,7 @@ function getSubmitToken() {
 
       return `
         <div class="max-w-3xl mx-auto space-y-4">
-          <div id="profile_summary_card" class="bg-white border border-sky-200 rounded-xl p-4 shadow-sm">
-            Profile summary will appear here.
-          </div>
+          ${renderSavedProfileSummary(profile)}
 
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 class="heading-font text-2xl font-bold mb-2">👤 Staff Profile</h2>
@@ -2436,20 +2473,12 @@ function getSubmitToken() {
 
                 <div>
                   <label for="admin_status" class="block text-sm font-semibold text-gray-700 mb-2">Admin Status ${isAcademicStaff ? '*' : ''}</label>
-                  <select id="admin_status" onchange="updateProfileSummaryCard()" ${isAcademicStaff ? 'required' : 'disabled'} class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500">
+                  <select id="admin_status" ${isAcademicStaff ? 'required' : 'disabled'} class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500">
                     <option value="" ${adminStatus === '' ? 'selected' : ''}>${isAcademicStaff ? 'Select admin status' : 'Not applicable'}</option>
-                    <option value="non_admin" ${adminStatus === 'non_admin' ? 'selected' : ''}>Non-Admin</option>
+                    <option value="non_admin" ${adminStatus === 'non_admin' ? 'selected' : ''}>Non admin</option>
                     <option value="admin" ${adminStatus === 'admin' ? 'selected' : ''}>Admin</option>
                   </select>
-                  <p id="admin_status_note" class="text-xs text-amber-700 mt-1 ${isAcademicStaff ? 'hidden' : ''}">Admin Status applies to Academic Staff only.</p>
-                </div>
-
-                <div>
-                  <label for="staff_designation" class="block text-sm font-semibold text-gray-700 mb-2">Designation</label>
-                  <input type="text" id="staff_designation"
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         value="${escapeHtml(profileState.staff_designation)}"
-                         placeholder="e.g., Senior Lecturer">
+                  <p id="admin_status_note" class="text-xs text-amber-700 mt-1 ${isAcademicStaff ? 'hidden' : ''}">Applies to Academic Staff only.</p>
                 </div>
 
                 <div>
@@ -2550,22 +2579,26 @@ function getSubmitToken() {
 
     function setupProfileEventListeners() {
       [
-        'staff_name', 'staff_id', 'staff_category', 'staff_grade', 'staff_designation',
+        'staff_name', 'staff_id', 'staff_category', 'staff_grade',
         'reporting_period_type', 'reporting_start_date', 'reporting_end_date',
         'programme', 'academic_rank', 'administrative_position', 'laboratory_position', 'reporting_tags', 'admin_status'
       ].forEach((id) => {
         const element = document.getElementById(id);
         if (!element) return;
-        element.addEventListener('input', updateProfileSummaryCard);
         element.addEventListener('change', () => {
           if (id === 'staff_category') toggleCategoryFields();
           if (id === 'reporting_period_type') applyReportingPeriodPreset();
-          updateProfileSummaryCard();
+          if (id === 'reporting_period_type' || id === 'reporting_start_date' || id === 'reporting_end_date') {
+            updateReportingDurationPreview();
+          }
         });
+        if (id === 'reporting_start_date' || id === 'reporting_end_date') {
+          element.addEventListener('input', updateReportingDurationPreview);
+        }
       });
 
       toggleCategoryFields();
-      updateProfileSummaryCard();
+      updateReportingDurationPreview();
     }
 
     function toggleCategoryFields() {
@@ -2624,10 +2657,7 @@ function getSubmitToken() {
       if (endInput) endInput.value = formatDateInputValue(preset.end);
     }
 
-    function updateProfileSummaryCard() {
-      const card = document.getElementById('profile_summary_card');
-      if (!card) return;
-
+    function updateReportingDurationPreview() {
       const startDate = document.getElementById('reporting_start_date')?.value || '';
       const endDate = document.getElementById('reporting_end_date')?.value || '';
       const reportingDays = calculateReportingDays(startDate, endDate);
@@ -2638,27 +2668,6 @@ function getSubmitToken() {
           ? `${reportingDays} days (${reportingWeeks} weeks)`
           : 'Enter a valid start and end date.';
       }
-
-      const rows = [
-        ['Staff Name', document.getElementById('staff_name')?.value || ''],
-        ['Staff Category', getProfileCategoryLabel(document.getElementById('staff_category')?.value || '')],
-        ['Admin Status', document.getElementById('admin_status')?.value === 'admin' ? 'Admin' : (document.getElementById('admin_status')?.value === 'non_admin' ? 'Non-Admin' : '')],
-        ['Grade', document.getElementById('staff_grade')?.value || ''],
-        ['Designation', document.getElementById('staff_designation')?.value || ''],
-        ['Reporting Period Type', document.getElementById('reporting_period_type')?.value || ''],
-        ['Start Date', startDate],
-        ['End Date', endDate],
-        ['Reporting Weeks', reportingWeeks]
-      ].filter(([, value]) => String(value).trim() !== '');
-
-      card.innerHTML = `
-        <h3 class="text-sm font-semibold text-sky-700 mb-2">Profile Summary</h3>
-        ${rows.length ? `
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-            ${rows.map(([label, value]) => `<div><span class="text-gray-500">${escapeHtml(label)}:</span> <span class="font-medium text-gray-900">${escapeHtml(String(value))}</span></div>`).join('')}
-          </div>
-        ` : '<p class="text-sm text-gray-500">Add profile details to preview your summary.</p>'}
-      `;
     }
 
     async function saveProfile(event) {
@@ -2687,7 +2696,6 @@ function getSubmitToken() {
         staff_category: normalizeProfileCategory(document.getElementById('staff_category')?.value || ''),
         admin_status: '',
         staff_grade: (document.getElementById('staff_grade')?.value || '').trim(),
-        staff_designation: (document.getElementById('staff_designation')?.value || '').trim(),
         reporting_period_type: (document.getElementById('reporting_period_type')?.value || 'Semester').trim(),
         reporting_start_date: formatDateInputValue(document.getElementById('reporting_start_date')?.value || ''),
         reporting_end_date: formatDateInputValue(document.getElementById('reporting_end_date')?.value || ''),
@@ -2698,7 +2706,8 @@ function getSubmitToken() {
         reporting_tags: (document.getElementById('reporting_tags')?.value || '').trim()
       };
       const categoryKey = normalizeProfileCategoryKey(profileState.staff_category);
-      profileState.admin_status = categoryKey === 'academic' ? (document.getElementById('admin_status')?.value || '').trim() : '';
+      profileState.admin_status = categoryKey === 'academic' ? (document.getElementById('admin_status')?.value || '').trim() : null;
+      profileState.academic_rank = categoryKey === 'academic' ? profileState.academic_rank : null;
 
       if (categoryKey === 'academic' && !profileState.admin_status) {
         showToast('Admin Status is required for Academic Staff.', 'error');
@@ -2724,7 +2733,7 @@ function getSubmitToken() {
         profile_category: profileState.staff_category,
         admin_status: categoryKey === 'academic' ? profileState.admin_status : null,
         profile_programme: categoryKey === 'academic' ? profileState.programme : '',
-        profile_rank: categoryKey === 'academic' ? profileState.academic_rank : '',
+        profile_rank: categoryKey === 'academic' ? profileState.academic_rank : null,
         profile_admin_position: categoryKey === 'admin' ? profileState.administrative_position : '',
         profile_other_admin_position: '',
         profile_state: JSON.stringify(profileState),
@@ -2745,6 +2754,9 @@ function getSubmitToken() {
       btn.innerHTML = '💾 Save Profile';
 
       if (result.isOk) {
+        if (currentSection === 'profile') {
+          renderSection('profile');
+        }
         showToast('Profile saved successfully!');
         setTimeout(() => {
           navigateToSection('teaching');
