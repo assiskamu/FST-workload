@@ -14,6 +14,17 @@ const SUBMISSION_HISTORY_KEY = 'fst_workload_submission_history_v1';
 const SUBMISSION_PENDING_KEY = 'fst_workload_submission_pending_v1';
 const SUBMIT_TOKEN_SESSION_KEY = 'fst_workload_submit_token_v1';
 const PROFILE_STATE_STORAGE_KEY = 'profile_state_v2';
+const DATA_STORE_STORAGE_KEY = 'fst_workload_v1';
+const LEGACY_PROFILE_STORAGE_KEYS = ['fst_profile', 'staffProfile', 'profileDraft', 'profileSnapshot'];
+const ALL_STORAGE_KEYS = [
+  DATA_STORE_STORAGE_KEY,
+  PROFILE_STATE_STORAGE_KEY,
+  SUBMIT_ENDPOINT_KEY,
+  SUBMISSION_HISTORY_KEY,
+  SUBMISSION_PENDING_KEY,
+  ...LEGACY_PROFILE_STORAGE_KEYS
+];
+const ALL_SESSION_STORAGE_KEYS = [SUBMIT_TOKEN_SESSION_KEY];
 const SUBMISSION_HISTORY_LIMIT = 25;
 let submissionState = { isSubmitting: false, lastError: null, lastPayload: null };
 
@@ -49,13 +60,12 @@ let submissionState = { isSubmitting: false, lastError: null, lastPayload: null 
     // Data Store (SDK + Fallback)
     // =========================
     const DataStore = (() => {
-      const STORAGE_KEY = 'fst_workload_v1';
       let dataHandler = null;
 
       const readStore = () => {
         if (typeof localStorage === 'undefined') return { records: [], elementConfig: {} };
         try {
-          const raw = localStorage.getItem(STORAGE_KEY);
+          const raw = localStorage.getItem(DATA_STORE_STORAGE_KEY);
           if (!raw) return { records: [], elementConfig: {} };
           const parsed = JSON.parse(raw);
           if (Array.isArray(parsed)) {
@@ -77,7 +87,7 @@ let submissionState = { isSubmitting: false, lastError: null, lastPayload: null 
         try {
           const store = readStore();
           const nextStore = { ...store, records };
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(nextStore));
+          localStorage.setItem(DATA_STORE_STORAGE_KEY, JSON.stringify(nextStore));
         } catch (error) {
           // Ignore storage write errors (private mode, quota, etc.)
         }
@@ -841,6 +851,38 @@ function getSubmitToken() {
       } catch (error) {
         // Ignore storage errors
       }
+    }
+
+    function clearAllPersistedState() {
+      if (typeof localStorage !== 'undefined') {
+        ALL_STORAGE_KEYS.forEach((key) => {
+          try {
+            localStorage.removeItem(key);
+          } catch (error) {
+            // Ignore storage errors
+          }
+        });
+      }
+
+      if (typeof sessionStorage !== 'undefined') {
+        ALL_SESSION_STORAGE_KEYS.forEach((key) => {
+          try {
+            sessionStorage.removeItem(key);
+          } catch (error) {
+            // Ignore storage errors
+          }
+        });
+      }
+    }
+
+    function resetInMemoryState() {
+      allRecords = [];
+      notifications = [];
+      submissionState = { isSubmitting: false, lastError: null, lastPayload: null };
+
+      updateTotalEntries();
+      renderNavigation();
+      renderSubmissionStatus();
     }
 
     function validateSubmissionState() {
@@ -5178,32 +5220,17 @@ function getSubmitToken() {
       const btn = document.getElementById('confirm-reset-all-btn');
       btn.disabled = true;
       btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
-      
-      let successCount = 0;
-      let errorCount = 0;
-      
-      for (const record of allRecords) {
-        const result = await window.dataSdk.delete(record);
-        if (result.isOk) {
-          successCount++;
-        } else {
-          errorCount++;
-        }
-      }
+
+      const deletedCount = allRecords.length;
+      clearAllPersistedState();
+      resetInMemoryState();
       
       btn.disabled = false;
       btn.innerHTML = '✓ Yes, Delete Everything';
-      
-      if (errorCount === 0) {
-        showToast(`Successfully reset all data (${successCount} records deleted)!`);
-        cancelResetAll();
-        // Navigate to home after reset
-        setTimeout(() => {
-          navigateToSection('home');
-        }, 1500);
-      } else {
-        showToast(`Deleted ${successCount} records, ${errorCount} failed`, 'error');
-      }
+
+      showToast(`Successfully reset all data (${deletedCount} records deleted)!`);
+      cancelResetAll();
+      navigateToSection('profile');
     }
 
     // Export/Reporting Module
