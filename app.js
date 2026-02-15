@@ -929,6 +929,48 @@ function getSubmitToken() {
             });
           }
 
+          if (sectionKey === 'publications' && record.indexing_label === 'Other' && !record.indexing_other_text) {
+            errors.push({
+              section: 'publications',
+              message: `Specify indexing details for publication entry #${index + 1}.`
+            });
+          }
+
+          if (sectionKey === 'publications' && record.author_position_label === 'Other' && !record.author_position_other_text) {
+            errors.push({
+              section: 'publications',
+              message: `Specify author position details for publication entry #${index + 1}.`
+            });
+          }
+
+          if (sectionKey === 'admin_duties' && record.duty_type === 'Other' && !record.duty_type_other_text) {
+            errors.push({
+              section: 'admin_duties',
+              message: `Specify duty type details for admin duties entry #${index + 1}.`
+            });
+          }
+
+          if (sectionKey === 'service' && record.service_type === 'Other' && !record.service_type_other_text) {
+            errors.push({
+              section: 'service',
+              message: `Specify service type details for service entry #${index + 1}.`
+            });
+          }
+
+          if (sectionKey === 'laboratory' && record.lab_responsibility === 'Other' && !record.lab_responsibility_other_text) {
+            errors.push({
+              section: 'laboratory',
+              message: `Specify laboratory responsibility details for laboratory entry #${index + 1}.`
+            });
+          }
+
+          if (sectionKey === 'professional' && record.prof_type === 'Other' && !record.prof_type_other_text) {
+            errors.push({
+              section: 'professional',
+              message: `Specify professional activity details for professional entry #${index + 1}.`
+            });
+          }
+
           numericBySection[sectionKey].forEach(field => {
             const value = record[field];
             if (value === null || value === undefined || value === '') return;
@@ -2845,24 +2887,18 @@ function getSubmitToken() {
                          placeholder="0">
                 </div>
                 
-                <div>
-                  <label for="course-semester" class="block text-sm font-semibold text-gray-700 mb-2">Semester *</label>
-                  <select id="course-semester" required onchange="toggleOtherSemester()" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
-                    <option value="">Select Semester</option>
-                    <option value="Semester 1 2025/2026">Semester 1 2025/2026</option>
-                    <option value="Semester 2 2025/2026">Semester 2 2025/2026</option>
-                    <option value="Semester 1 2026/2027">Semester 1 2026/2027</option>
-                    <option value="Semester 2 2026/2027">Semester 2 2026/2027</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-                
-                <div id="other-semester-field" style="display: none;">
-                  <label for="course-semester-other" class="block text-sm font-semibold text-gray-700 mb-2">Specify Semester *</label>
-                  <input type="text" id="course-semester-other"
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="e.g., Semester 3 2025/2026">
-                </div>
+                ${createOtherSpecifyBlock({
+                  sectionKey: 'teaching',
+                  baseId: 'course-semester',
+                  labelText: 'Semester',
+                  optionsArray: OTHER_SPECIFY_OPTIONS.teachingSemester,
+                  valueKey: 'course_semester',
+                  otherTextKey: 'course_semester_other',
+                  specifyLabel: 'Specify',
+                  specifyPlaceholder: 'Enter semester details',
+                  required: true,
+                  selectPlaceholder: 'Select Semester'
+                })}
                 
                 <div>
                   <label for="course-role" class="block text-sm font-semibold text-gray-700 mb-2">Role *</label>
@@ -2892,7 +2928,8 @@ function getSubmitToken() {
               <div class="space-y-3">
                 ${courses.map(course => {
                   const breakdown = getTeachingCourseBreakdown(course);
-                  const semester = course.course_semester === 'Other' ? course.course_semester_other : course.course_semester;
+                  const semesterMeta = getOtherSpecifyMetadata(course, 'course_semester', 'course_semester_other', OTHER_SPECIFY_OPTIONS.teachingSemester);
+                  const semester = semesterMeta.selected === 'Other' ? semesterMeta.display : semesterMeta.selected;
                   
                   return `
                     <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
@@ -2934,6 +2971,8 @@ function getSubmitToken() {
       renderTeachingLivePreview();
       const teachingForm = document.getElementById('teaching-form');
       if (!teachingForm) return;
+
+      wireOtherSpecifyBlock({ baseId: 'course-semester' });
 
       teachingForm.querySelectorAll('input, select').forEach((field) => {
         field.addEventListener('input', renderTeachingLivePreview);
@@ -2983,36 +3022,6 @@ function getSubmitToken() {
       `;
     }
 
-    function toggleOtherSemester() {
-      const semester = document.getElementById('course-semester').value;
-      const otherField = document.getElementById('other-semester-field');
-      const otherInput = document.getElementById('course-semester-other');
-      
-      if (semester === 'Other') {
-        otherField.style.display = 'block';
-        otherInput.required = true;
-      } else {
-        otherField.style.display = 'none';
-        otherInput.required = false;
-        otherInput.value = '';
-      }
-    }
-
-    function toggleOtherAdminPositionField() {
-      const position = document.getElementById('admin-position').value;
-      const otherField = document.getElementById('other-admin-position-field');
-      const otherInput = document.getElementById('admin-other-position');
-      
-      if (position === 'Other') {
-        otherField.style.display = 'block';
-        otherInput.required = true;
-      } else {
-        otherField.style.display = 'none';
-        otherInput.required = false;
-        otherInput.value = '';
-      }
-    }
-
     async function saveCourse(event) {
       event.preventDefault();
       
@@ -3025,7 +3034,7 @@ function getSubmitToken() {
       btn.disabled = true;
       btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
       
-      const semester = document.getElementById('course-semester').value;
+      const semesterMeta = getOtherSpecifyValue({ baseId: 'course-semester', optionsArray: OTHER_SPECIFY_OPTIONS.teachingSemester });
       
       const courseData = {
         section: 'teaching',
@@ -3037,8 +3046,8 @@ function getSubmitToken() {
         course_lab: parseFloat(document.getElementById('course-lab').value) || 0,
         course_fieldwork: parseFloat(document.getElementById('course-fieldwork').value) || 0,
         course_class_size: parseInt(document.getElementById('course-class-size').value),
-        course_semester: semester,
-        course_semester_other: semester === 'Other' ? document.getElementById('course-semester-other').value : '',
+        course_semester: semesterMeta.selected,
+        course_semester_other: semesterMeta.other,
         course_role: document.getElementById('course-role').value,
         created_at: new Date().toISOString()
       };
@@ -3051,7 +3060,6 @@ function getSubmitToken() {
       if (result.isOk) {
         showToast('Course added successfully!');
         document.getElementById('teaching-form').reset();
-        document.getElementById('other-semester-field').style.display = 'none';
         renderTeachingLivePreview();
       } else {
         showToast('Failed to add course', 'error');
@@ -3420,6 +3428,103 @@ function getSubmitToken() {
       `;
     }
 
+    const OTHER_SPECIFY_SELECT_CLASS = 'w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none';
+    const OTHER_SPECIFY_OPTIONS = {
+      teachingSemester: ['Semester 1 2025/2026', 'Semester 2 2025/2026', 'Semester 1 2026/2027', 'Semester 2 2026/2027', 'Other'],
+      publicationIndexing: ['Scopus', 'Web of Science', 'MyCite', 'ERA', 'Not indexed', 'Other'],
+      publicationAuthorPosition: ['First author', 'Corresponding author', 'Co author', 'Single author', 'Editor', 'Other'],
+      administrationPosition: ['Dean', 'Deputy Dean', 'Centre Director', 'Head of Programme', 'Postgraduate Coordinator', 'Programme Coordinator', 'Other'],
+      adminDutyType: ['Accreditation Work', 'Curriculum Development', 'Committee Chair', 'Event Organizer', 'Exam Coordinator', 'Committee Member', 'Other'],
+      serviceType: ['Committee Service', 'Community Engagement', 'Expert Contribution', 'Event Support', 'Other'],
+      laboratoryResponsibility: ['Lab Coordinator', 'Safety Officer', 'Equipment Manager', 'Inventory Manager', 'SOP Development', 'Lab Supervisor', 'Other'],
+      professionalType: ['Professional Body Leadership', 'Professional Certification', 'Conference Organizer', 'Editorial Board', 'Professional Training', 'Membership', 'Other']
+    };
+
+    function normalizeSelectWithOther(rawValue, optionsArray) {
+      const normalizedRawValue = (rawValue || '').trim();
+      if (!normalizedRawValue) return { selected: '', other: '' };
+      const matchedOption = optionsArray.find((option) => option.toLowerCase() === normalizedRawValue.toLowerCase());
+      if (matchedOption) return { selected: matchedOption, other: '' };
+      return { selected: 'Other', other: normalizedRawValue };
+    }
+
+    function createOtherSpecifyBlock(config) {
+      const {
+        sectionKey,
+        baseId,
+        labelText,
+        optionsArray,
+        valueKey,
+        otherTextKey,
+        specifyLabel = 'Specify',
+        specifyPlaceholder,
+        required = false,
+        selectPlaceholder = 'Select',
+        selectedValue = '',
+        otherText = ''
+      } = config;
+      const normalized = normalizeSelectWithOther(selectedValue, optionsArray);
+      const initialSelection = normalized.selected || '';
+      const initialOtherText = (otherText || normalized.other || '').trim();
+      const showOther = initialSelection === 'Other';
+      const selectId = `${baseId}-select`;
+      const otherWrapId = `${baseId}-other-wrap`;
+      const otherInputId = `${baseId}-other`;
+
+      return `
+        <div>
+          <label for="${selectId}" class="block text-sm font-semibold text-gray-700 mb-2">${labelText}${required ? ' *' : ''}</label>
+          <select id="${selectId}" ${required ? 'required' : ''} class="${OTHER_SPECIFY_SELECT_CLASS}">
+            <option value="">${selectPlaceholder}</option>
+            ${optionsArray.map((option) => `<option value="${escapeHtml(option)}" ${initialSelection === option ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}
+          </select>
+          <div id="${otherWrapId}" class="mt-3 ${showOther ? '' : 'hidden'}">
+            <label for="${otherInputId}" class="block text-sm font-semibold text-gray-700 mb-2">${specifyLabel}</label>
+            <input id="${otherInputId}" value="${escapeHtml(initialOtherText)}" placeholder="${escapeHtml(specifyPlaceholder || '')}" class="${OTHER_SPECIFY_SELECT_CLASS}" ${showOther ? 'required' : ''}>
+          </div>
+        </div>
+      `;
+    }
+
+    function wireOtherSpecifyBlock(config) {
+      const { baseId, onToggle } = config;
+      const select = document.getElementById(`${baseId}-select`);
+      const otherWrap = document.getElementById(`${baseId}-other-wrap`);
+      const otherInput = document.getElementById(`${baseId}-other`);
+      if (!select || !otherWrap || !otherInput) return;
+
+      const sync = () => {
+        const show = select.value === 'Other';
+        otherWrap.classList.toggle('hidden', !show);
+        otherInput.required = show;
+        if (!show) {
+          otherInput.value = '';
+        }
+        if (typeof onToggle === 'function') {
+          onToggle(show);
+        }
+      };
+
+      select.addEventListener('change', sync);
+      sync();
+    }
+
+    function getOtherSpecifyValue({ baseId, optionsArray }) {
+      const selectedValue = document.getElementById(`${baseId}-select`)?.value || '';
+      const selected = normalizeSelectWithOther(selectedValue, optionsArray).selected;
+      const other = selected === 'Other' ? (document.getElementById(`${baseId}-other`)?.value || '').trim() : '';
+      return { selected, other };
+    }
+
+
+    function getOtherSpecifyMetadata(record = {}, valueKey, otherTextKey, optionsArray) {
+      const normalized = normalizeSelectWithOther(record[valueKey] || '', optionsArray);
+      const selected = normalized.selected || '';
+      const otherText = (record[otherTextKey] || normalized.other || '').trim();
+      const display = selected === 'Other' && otherText ? `Other: ${otherText}` : (selected || '-');
+      return { selected, otherText, display };
+    }
+
     function renderLivePreview({ sectionKey, breakdown, equationText, savedTotal }) {
       const preview = document.getElementById(`${sectionKey}_live_preview`);
       if (!preview) return;
@@ -3548,15 +3653,11 @@ function getSubmitToken() {
       }
     }
 
-    const PUBLICATION_INDEXING_OPTIONS = ['Scopus', 'Web of Science', 'MyCite', 'ERA', 'Not indexed', 'Other'];
-    const PUBLICATION_AUTHOR_POSITION_OPTIONS = ['First author', 'Corresponding author', 'Co author', 'Single author', 'Editor', 'Other'];
+    const PUBLICATION_INDEXING_OPTIONS = OTHER_SPECIFY_OPTIONS.publicationIndexing;
+    const PUBLICATION_AUTHOR_POSITION_OPTIONS = OTHER_SPECIFY_OPTIONS.publicationAuthorPosition;
 
     function normalizePublicationDescriptiveValue(rawValue, allowedOptions) {
-      const normalizedRawValue = (rawValue || '').trim();
-      if (!normalizedRawValue) return { selected: '', other: '' };
-      const matchedOption = allowedOptions.find((option) => option.toLowerCase() === normalizedRawValue.toLowerCase());
-      if (matchedOption) return { selected: matchedOption, other: '' };
-      return { selected: 'Other', other: normalizedRawValue };
+      return normalizeSelectWithOther(rawValue, allowedOptions);
     }
 
     function getPublicationDescriptiveMetadata(pub = {}) {
@@ -3579,8 +3680,8 @@ function getSubmitToken() {
     }
 
     function getPublicationsDraftInputState() {
-      const indexingLabel = document.getElementById('pub-index')?.value || '';
-      const authorPositionLabel = document.getElementById('pub-position')?.value || '';
+      const indexingLabel = document.getElementById('pub-index-select')?.value || '';
+      const authorPositionLabel = document.getElementById('pub-position-select')?.value || '';
       return {
         pub_title: document.getElementById('pub-title')?.value || '',
         pub_type: document.getElementById('pub-type')?.value || '',
@@ -3616,8 +3717,28 @@ function getSubmitToken() {
                 <div class="md:col-span-2"><label for="pub-title" class="block text-sm font-semibold text-gray-700 mb-2">Title *</label><input id="pub-title" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="pub-type" class="block text-sm font-semibold text-gray-700 mb-2">Item Type *</label><select id="pub-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select Type</option><option value="journal">Journal manuscript</option><option value="conference">Conference paper</option><option value="chapter">Book chapter</option><option value="proceeding">Proceeding</option><option value="other">Other</option></select></div>
                 <div><label for="pub-stage" class="block text-sm font-semibold text-gray-700 mb-2">Writing Stage *</label><select id="pub-stage" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select Stage</option><option value="drafting">Drafting (1.0)</option><option value="revising">Revising (0.8)</option><option value="responding_reviewers">Responding to reviewers (0.9)</option><option value="proofing">Proofing (0.5)</option><option value="no_activity">No activity (0.0)</option></select></div>
-                <div><label for="pub-index" class="block text-sm font-semibold text-gray-700 mb-2">Indexing (descriptive only)</label><select id="pub-index" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select indexing</option><option value="Scopus">Scopus</option><option value="Web of Science">Web of Science</option><option value="MyCite">MyCite</option><option value="ERA">ERA</option><option value="Not indexed">Not indexed</option><option value="Other">Other</option></select><div id="pub-index-other-wrap" class="mt-3 hidden"><label for="pub-index-other" class="block text-sm font-semibold text-gray-700 mb-2">Specify</label><input id="pub-index-other" placeholder="Enter indexing details" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div></div>
-                <div><label for="pub-position" class="block text-sm font-semibold text-gray-700 mb-2">Author Position (descriptive only)</label><select id="pub-position" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select author position</option><option value="First author">First author</option><option value="Corresponding author">Corresponding author</option><option value="Co author">Co author</option><option value="Single author">Single author</option><option value="Editor">Editor</option><option value="Other">Other</option></select><div id="pub-position-other-wrap" class="mt-3 hidden"><label for="pub-position-other" class="block text-sm font-semibold text-gray-700 mb-2">Specify</label><input id="pub-position-other" placeholder="Enter author position details" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div></div>
+                ${createOtherSpecifyBlock({
+                  sectionKey: 'publications',
+                  baseId: 'pub-index',
+                  labelText: 'Indexing (descriptive only)',
+                  optionsArray: PUBLICATION_INDEXING_OPTIONS,
+                  valueKey: 'indexing_label',
+                  otherTextKey: 'indexing_other_text',
+                  specifyLabel: 'Specify',
+                  specifyPlaceholder: 'Enter indexing details',
+                  selectPlaceholder: 'Select indexing'
+                })}
+                ${createOtherSpecifyBlock({
+                  sectionKey: 'publications',
+                  baseId: 'pub-position',
+                  labelText: 'Author Position (descriptive only)',
+                  optionsArray: PUBLICATION_AUTHOR_POSITION_OPTIONS,
+                  valueKey: 'author_position_label',
+                  otherTextKey: 'author_position_other_text',
+                  specifyLabel: 'Specify',
+                  specifyPlaceholder: 'Enter author position details',
+                  selectPlaceholder: 'Select author position'
+                })}
                 <div><label for="pub-venue" class="block text-sm font-semibold text-gray-700 mb-2">Venue *</label><input id="pub-venue" aria-describedby="pub-venue-note" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><p id="pub-venue-note" class="mt-2 text-xs text-gray-600">Target outlet for this item, for example the journal or conference name. Used for identification and reporting only, it does not affect points.</p></div>
                 <div><label for="pub-year" class="block text-sm font-semibold text-gray-700 mb-2">Year *</label><input id="pub-year" required type="number" min="2000" max="2035" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="pub-status" class="block text-sm font-semibold text-gray-700 mb-2">Status (descriptive only)</label><input id="pub-status" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
@@ -3646,25 +3767,8 @@ function getSubmitToken() {
       const form = document.getElementById('publication-form');
       if (!form) return;
 
-      const toggleOtherField = (selectorId, inputWrapId, inputId) => {
-        const selector = document.getElementById(selectorId);
-        const inputWrap = document.getElementById(inputWrapId);
-        const input = document.getElementById(inputId);
-        if (!selector || !inputWrap || !input) return;
-        const show = selector.value === 'Other';
-        inputWrap.classList.toggle('hidden', !show);
-        input.required = show;
-        if (!show) input.value = '';
-      };
-
-      const syncDescriptiveFieldVisibility = () => {
-        toggleOtherField('pub-index', 'pub-index-other-wrap', 'pub-index-other');
-        toggleOtherField('pub-position', 'pub-position-other-wrap', 'pub-position-other');
-      };
-
-      document.getElementById('pub-index')?.addEventListener('change', syncDescriptiveFieldVisibility);
-      document.getElementById('pub-position')?.addEventListener('change', syncDescriptiveFieldVisibility);
-      syncDescriptiveFieldVisibility();
+      wireOtherSpecifyBlock({ baseId: 'pub-index' });
+      wireOtherSpecifyBlock({ baseId: 'pub-position' });
 
       form.querySelectorAll('input, select').forEach((field) => {
         field.addEventListener('input', renderPublicationsLivePreview);
@@ -3728,8 +3832,10 @@ function getSubmitToken() {
     }
 
     function getAdministrationDraftInputState() {
+      const position = getOtherSpecifyValue({ baseId: 'admin-position', optionsArray: OTHER_SPECIFY_OPTIONS.administrationPosition });
       return {
-        admin_position: document.getElementById('admin-position')?.value || '',
+        admin_position: position.selected,
+        admin_other_position: position.other,
         admin_faculty: document.getElementById('admin-faculty')?.value || '',
         admin_start_date: document.getElementById('admin-start-date')?.value || '',
         admin_end_date: document.getElementById('admin-end-date')?.value || '',
@@ -3754,7 +3860,18 @@ function getSubmitToken() {
             <h2 class="heading-font text-2xl font-bold mb-6">🏛️ Admin Leadership</h2>
             <form id="administration-form" onsubmit="saveAdministration(event)" class="space-y-6">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div><label for="admin-position" class="block text-sm font-semibold text-gray-700 mb-2">Position *</label><select id="admin-position" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Dean">Dean</option><option value="Deputy Dean">Deputy Dean</option><option value="Centre Director">Centre Director</option><option value="Head of Programme">Head of Programme</option><option value="Postgraduate Coordinator">Postgraduate Coordinator</option><option value="Programme Coordinator">Programme Coordinator</option><option value="Other">Other</option></select></div>
+                ${createOtherSpecifyBlock({
+                  sectionKey: 'administration',
+                  baseId: 'admin-position',
+                  labelText: 'Position',
+                  optionsArray: OTHER_SPECIFY_OPTIONS.administrationPosition,
+                  valueKey: 'admin_position',
+                  otherTextKey: 'admin_other_position',
+                  specifyLabel: 'Specify',
+                  specifyPlaceholder: 'Enter leadership position details',
+                  required: true,
+                  selectPlaceholder: 'Select'
+                })}
                 <div><label for="admin-faculty" class="block text-sm font-semibold text-gray-700 mb-2">Unit/Faculty *</label><input id="admin-faculty" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="admin-start-date" class="block text-sm font-semibold text-gray-700 mb-2">Start Date *</label><input id="admin-start-date" type="date" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="admin-end-date" class="block text-sm font-semibold text-gray-700 mb-2">End Date</label><input id="admin-end-date" type="date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
@@ -3768,7 +3885,7 @@ function getSubmitToken() {
             items: adminEntries,
             renderItem: (item) => {
               const b = getAdministrationEntryBreakdown(item);
-              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p><strong>${escapeHtml(item.admin_position || '-')}</strong></p><p>Start: ${escapeHtml(item.admin_start_date || '-')}</p><p>End: ${escapeHtml(item.admin_end_date || '-')}</p><p>Active fraction: ${b.active_fraction.toFixed(3)}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deleteAdministration('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
+              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p><strong>${escapeHtml(getOtherSpecifyMetadata(item, 'admin_position', 'admin_other_position', OTHER_SPECIFY_OPTIONS.administrationPosition).display)}</strong></p><p>Start: ${escapeHtml(item.admin_start_date || '-')}</p><p>End: ${escapeHtml(item.admin_end_date || '-')}</p><p>Active fraction: ${b.active_fraction.toFixed(3)}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deleteAdministration('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
             }
           })}
 
@@ -3781,6 +3898,7 @@ function getSubmitToken() {
       renderAdministrationLivePreview();
       const form = document.getElementById('administration-form');
       if (!form) return;
+      wireOtherSpecifyBlock({ baseId: 'admin-position' });
       form.querySelectorAll('input, select').forEach((field) => {
         field.addEventListener('input', renderAdministrationLivePreview);
         field.addEventListener('change', renderAdministrationLivePreview);
@@ -3833,8 +3951,10 @@ function getSubmitToken() {
     }
 
     function getAdminDutiesDraftInputState() {
+      const dutyType = getOtherSpecifyValue({ baseId: 'duty-type', optionsArray: OTHER_SPECIFY_OPTIONS.adminDutyType });
       return {
-        duty_type: document.getElementById('duty-type')?.value || '',
+        duty_type: dutyType.selected,
+        duty_type_other_text: dutyType.other,
         duty_name: document.getElementById('duty-name')?.value || '',
         duty_frequency: document.getElementById('duty-frequency')?.value || '',
         duty_year: document.getElementById('duty-year')?.value || ''
@@ -3859,7 +3979,18 @@ function getSubmitToken() {
             <h2 class="heading-font text-2xl font-bold mb-6">📋 Admin Duties</h2>
             <form id="duty-form" onsubmit="saveAdminDuty(event)" class="space-y-6">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div><label for="duty-type" class="block text-sm font-semibold text-gray-700 mb-2">Duty Type *</label><select id="duty-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Accreditation Work">Accreditation Work</option><option value="Curriculum Development">Curriculum Development</option><option value="Committee Chair">Committee Chair</option><option value="Event Organizer">Event Organizer</option><option value="Exam Coordinator">Exam Coordinator</option><option value="Committee Member">Committee Member</option><option value="Other">Other</option></select></div>
+                ${createOtherSpecifyBlock({
+                  sectionKey: 'admin_duties',
+                  baseId: 'duty-type',
+                  labelText: 'Duty Type',
+                  optionsArray: OTHER_SPECIFY_OPTIONS.adminDutyType,
+                  valueKey: 'duty_type',
+                  otherTextKey: 'duty_type_other_text',
+                  specifyLabel: 'Specify',
+                  specifyPlaceholder: 'Enter duty type details',
+                  required: true,
+                  selectPlaceholder: 'Select'
+                })}
                 <div><label for="duty-frequency" class="block text-sm font-semibold text-gray-700 mb-2">Frequency *</label><select id="duty-frequency" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Ongoing in Reporting Period">Ongoing in reporting period</option><option value="Per Semester">Per semester</option><option value="One-Time Event">One-time event</option></select></div>
                 <div class="md:col-span-2"><label for="duty-name" class="block text-sm font-semibold text-gray-700 mb-2">Duty Name *</label><input id="duty-name" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="duty-year" class="block text-sm font-semibold text-gray-700 mb-2">Year *</label><input id="duty-year" required type="number" min="2000" max="2035" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
@@ -3873,7 +4004,7 @@ function getSubmitToken() {
             items: duties,
             renderItem: (item) => {
               const b = getAdminDutyEntryBreakdown(item);
-              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Duty type: <strong>${escapeHtml(item.duty_type || '-')}</strong></p><p>Frequency: ${escapeHtml(item.duty_frequency || '-')}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deleteAdminDuty('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
+              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Duty type: <strong>${escapeHtml(getOtherSpecifyMetadata(item, 'duty_type', 'duty_type_other_text', OTHER_SPECIFY_OPTIONS.adminDutyType).display)}</strong></p><p>Frequency: ${escapeHtml(item.duty_frequency || '-')}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deleteAdminDuty('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
             }
           })}
 
@@ -3886,6 +4017,7 @@ function getSubmitToken() {
       renderAdminDutiesLivePreview();
       const form = document.getElementById('duty-form');
       if (!form) return;
+      wireOtherSpecifyBlock({ baseId: 'duty-type' });
       form.querySelectorAll('input, select').forEach((field) => {
         field.addEventListener('input', renderAdminDutiesLivePreview);
         field.addEventListener('change', renderAdminDutiesLivePreview);
@@ -3938,8 +4070,10 @@ function getSubmitToken() {
     }
 
     function getServiceDraftInputState() {
+      const serviceType = getOtherSpecifyValue({ baseId: 'service-type', optionsArray: OTHER_SPECIFY_OPTIONS.serviceType });
       return {
-        service_type: document.getElementById('service-type')?.value || '',
+        service_type: serviceType.selected,
+        service_type_other_text: serviceType.other,
         service_scope: document.getElementById('service-scope')?.value || '',
         service_title: document.getElementById('service-title')?.value || '',
         service_organization: document.getElementById('service-organization')?.value || '',
@@ -3974,7 +4108,18 @@ function getSubmitToken() {
             <h2 class="heading-font text-2xl font-bold mb-6">🤝 Service</h2>
             <form id="service-form" onsubmit="saveService(event)" class="space-y-6">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div><label for="service-type" class="block text-sm font-semibold text-gray-700 mb-2">Service Type *</label><select id="service-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Committee Service">Committee service</option><option value="Community Engagement">Community engagement</option><option value="Expert Contribution">Expert contribution</option><option value="Event Support">Event support</option><option value="Other">Other</option></select></div>
+                ${createOtherSpecifyBlock({
+                  sectionKey: 'service',
+                  baseId: 'service-type',
+                  labelText: 'Service Type',
+                  optionsArray: OTHER_SPECIFY_OPTIONS.serviceType,
+                  valueKey: 'service_type',
+                  otherTextKey: 'service_type_other_text',
+                  specifyLabel: 'Specify',
+                  specifyPlaceholder: 'Enter service details',
+                  required: true,
+                  selectPlaceholder: 'Select'
+                })}
                 <div><label for="service-duration" class="block text-sm font-semibold text-gray-700 mb-2">Duration (hours) *</label><input id="service-duration" type="number" min="0" step="0.5" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="service-scope" class="block text-sm font-semibold text-gray-700 mb-2">Scope (descriptive only)</label><input id="service-scope" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="service-date" class="block text-sm font-semibold text-gray-700 mb-2">Date *</label><input id="service-date" type="date" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
@@ -3990,7 +4135,7 @@ function getSubmitToken() {
             items: serviceItems,
             renderItem: (item) => {
               const b = getServiceEntryBreakdown(item);
-              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Service type: <strong>${escapeHtml(item.service_type || '-')}</strong></p><p>Duration hours: ${Number(item.service_duration || 0)}</p><p>Duration band: ${getServiceDurationBand(item.service_duration)}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deleteService('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
+              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Service type: <strong>${escapeHtml(getOtherSpecifyMetadata(item, 'service_type', 'service_type_other_text', OTHER_SPECIFY_OPTIONS.serviceType).display)}</strong></p><p>Duration hours: ${Number(item.service_duration || 0)}</p><p>Duration band: ${getServiceDurationBand(item.service_duration)}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deleteService('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
             }
           })}
 
@@ -4003,6 +4148,7 @@ function getSubmitToken() {
       renderServiceLivePreview();
       const form = document.getElementById('service-form');
       if (!form) return;
+      wireOtherSpecifyBlock({ baseId: 'service-type' });
       form.querySelectorAll('input, select').forEach((field) => {
         field.addEventListener('input', renderServiceLivePreview);
         field.addEventListener('change', renderServiceLivePreview);
@@ -4055,8 +4201,10 @@ function getSubmitToken() {
     }
 
     function getLaboratoryDraftInputState() {
+      const responsibility = getOtherSpecifyValue({ baseId: 'lab-responsibility', optionsArray: OTHER_SPECIFY_OPTIONS.laboratoryResponsibility });
       return {
-        lab_responsibility: document.getElementById('lab-responsibility')?.value || '',
+        lab_responsibility: responsibility.selected,
+        lab_responsibility_other_text: responsibility.other,
         lab_name: document.getElementById('lab-name')?.value || '',
         lab_frequency: document.getElementById('lab-frequency')?.value || '',
         number_of_courses_supported: document.getElementById('number-of-courses-supported')?.value || 1,
@@ -4082,9 +4230,20 @@ function getSubmitToken() {
             <h2 class="heading-font text-2xl font-bold mb-6">🧪 Laboratory</h2>
             <form id="laboratory-form" onsubmit="saveLaboratory(event)" class="space-y-6">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div><label for="lab-responsibility" class="block text-sm font-semibold text-gray-700 mb-2">Responsibility *</label><select id="lab-responsibility" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Lab Coordinator">Lab Coordinator</option><option value="Safety Officer">Safety Officer</option><option value="Equipment Manager">Equipment Manager</option><option value="Inventory Manager">Inventory Manager</option><option value="SOP Development">SOP Development</option><option value="Lab Supervisor">Lab Supervisor</option><option value="Other">Other</option></select></div>
+                ${createOtherSpecifyBlock({
+                  sectionKey: 'laboratory',
+                  baseId: 'lab-responsibility',
+                  labelText: 'Responsibility',
+                  optionsArray: OTHER_SPECIFY_OPTIONS.laboratoryResponsibility,
+                  valueKey: 'lab_responsibility',
+                  otherTextKey: 'lab_responsibility_other_text',
+                  specifyLabel: 'Specify',
+                  specifyPlaceholder: 'Enter laboratory responsibility details',
+                  required: true,
+                  selectPlaceholder: 'Select'
+                })}
                 <div><label for="lab-frequency" class="block text-sm font-semibold text-gray-700 mb-2">Frequency *</label><select id="lab-frequency" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Ongoing within reporting period">Ongoing within reporting period</option><option value="Per semester occurrence">Per semester occurrence</option><option value="Per course supported">Per course supported</option></select></div>
-                <div id="lab-course-count-wrap" style="display:none;"><label for="number-of-courses-supported" class="block text-sm font-semibold text-gray-700 mb-2">Number of courses supported *</label><input id="number-of-courses-supported" type="number" min="1" step="1" value="1" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div id="lab-course-count-wrap" class="hidden"><label for="number-of-courses-supported" class="block text-sm font-semibold text-gray-700 mb-2">Number of courses supported *</label><input id="number-of-courses-supported" type="number" min="1" step="1" value="1" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="lab-year" class="block text-sm font-semibold text-gray-700 mb-2">Year *</label><input id="lab-year" required type="number" min="2000" max="2035" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div class="md:col-span-2"><label for="lab-name" class="block text-sm font-semibold text-gray-700 mb-2">Laboratory / Context *</label><input id="lab-name" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
               </div>
@@ -4098,7 +4257,7 @@ function getSubmitToken() {
             renderItem: (item) => {
               const b = getLabEntryBreakdown(item);
               const courseText = item.lab_frequency === 'Per course supported' ? ` | Courses supported: ${b.course_count}` : '';
-              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Responsibility: <strong>${escapeHtml(item.lab_responsibility || '-')}</strong></p><p>Frequency: ${escapeHtml(item.lab_frequency || '-')} ${courseText}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deleteLaboratory('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
+              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Responsibility: <strong>${escapeHtml(getOtherSpecifyMetadata(item, 'lab_responsibility', 'lab_responsibility_other_text', OTHER_SPECIFY_OPTIONS.laboratoryResponsibility).display)}</strong></p><p>Frequency: ${escapeHtml(item.lab_frequency || '-')} ${courseText}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deleteLaboratory('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
             }
           })}
 
@@ -4110,10 +4269,11 @@ function getSubmitToken() {
     function setupLaboratoryEventListeners() {
       const form = document.getElementById('laboratory-form');
       if (!form) return;
+      wireOtherSpecifyBlock({ baseId: 'lab-responsibility' });
       const toggle = () => {
         const perCourse = document.getElementById('lab-frequency')?.value === 'Per course supported';
         const wrap = document.getElementById('lab-course-count-wrap');
-        if (wrap) wrap.style.display = perCourse ? 'block' : 'none';
+        if (wrap) wrap.classList.toggle('hidden', !perCourse);
         renderLaboratoryLivePreview();
       };
       form.querySelectorAll('input, select').forEach((field) => {
@@ -4169,8 +4329,10 @@ function getSubmitToken() {
     }
 
     function getProfessionalDraftInputState() {
+      const profType = getOtherSpecifyValue({ baseId: 'prof-type', optionsArray: OTHER_SPECIFY_OPTIONS.professionalType });
       return {
-        prof_type: document.getElementById('prof-type')?.value || '',
+        prof_type: profType.selected,
+        prof_type_other_text: profType.other,
         prof_effort_band: document.getElementById('prof-effort-band')?.value || '',
         prof_position: document.getElementById('prof-position')?.value || '',
         prof_scope: document.getElementById('prof-scope')?.value || '',
@@ -4199,7 +4361,18 @@ function getSubmitToken() {
             <h2 class="heading-font text-2xl font-bold mb-6">💼 Professional</h2>
             <form id="professional-form" onsubmit="saveProfessional(event)" class="space-y-6">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div><label for="prof-type" class="block text-sm font-semibold text-gray-700 mb-2">Activity Type *</label><select id="prof-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Professional Body Leadership">Professional Body Leadership</option><option value="Professional Certification">Professional Certification</option><option value="Conference Organizer">Conference Organizer</option><option value="Editorial Board">Editorial Board</option><option value="Professional Training">Professional Training</option><option value="Membership">Membership</option><option value="Other">Other</option></select></div>
+                ${createOtherSpecifyBlock({
+                  sectionKey: 'professional',
+                  baseId: 'prof-type',
+                  labelText: 'Activity Type',
+                  optionsArray: OTHER_SPECIFY_OPTIONS.professionalType,
+                  valueKey: 'prof_type',
+                  otherTextKey: 'prof_type_other_text',
+                  specifyLabel: 'Specify',
+                  specifyPlaceholder: 'Enter professional activity details',
+                  required: true,
+                  selectPlaceholder: 'Select'
+                })}
                 <div><label for="prof-effort-band" class="block text-sm font-semibold text-gray-700 mb-2">Effort Band *</label><select id="prof-effort-band" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="low">Low effort (0.5)</option><option value="standard">Standard effort (1.0)</option><option value="high">High effort (1.5)</option></select></div>
                 <div><label for="prof-position" class="block text-sm font-semibold text-gray-700 mb-2">Role/Position (optional)</label><input id="prof-position" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="prof-scope" class="block text-sm font-semibold text-gray-700 mb-2">Scope (descriptive only)</label><input id="prof-scope" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
@@ -4217,7 +4390,7 @@ function getSubmitToken() {
             items: professionalItems,
             renderItem: (item) => {
               const b = getProfessionalEntryBreakdown(item);
-              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Activity type: <strong>${escapeHtml(item.prof_type || '-')}</strong></p><p>Effort band: ${escapeHtml(item.prof_effort_band || '-')}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deleteProfessional('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
+              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Activity type: <strong>${escapeHtml(getOtherSpecifyMetadata(item, 'prof_type', 'prof_type_other_text', OTHER_SPECIFY_OPTIONS.professionalType).display)}</strong></p><p>Effort band: ${escapeHtml(item.prof_effort_band || '-')}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deleteProfessional('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
             }
           })}
 
@@ -4230,6 +4403,7 @@ function getSubmitToken() {
       renderProfessionalLivePreview();
       const form = document.getElementById('professional-form');
       if (!form) return;
+      wireOtherSpecifyBlock({ baseId: 'prof-type' });
       form.querySelectorAll('input, select, textarea').forEach((field) => {
         field.addEventListener('input', renderProfessionalLivePreview);
         field.addEventListener('change', renderProfessionalLivePreview);
