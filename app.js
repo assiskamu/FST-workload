@@ -4658,18 +4658,77 @@ function getSubmitToken() {
       const periodDays = hasValidPeriod ? Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1 : 0;
       const periodWeeks = hasValidPeriod ? (periodDays / 7).toFixed(2) : '0.00';
       const totalEntries = sections.reduce((sum, section) => sum + section.count, 0);
+      const summaryRows = [
+        {
+          section: 'Profile',
+          label: 'Staff name',
+          value: escapeHtml(profile?.profile_name || 'Not provided')
+        },
+        {
+          section: 'Profile',
+          label: 'Staff category',
+          value: escapeHtml(getProfileCategoryLabel(profile?.profile_category || '') || 'Not provided')
+        },
+        {
+          section: 'Profile',
+          label: 'Admin status',
+          value: escapeHtml(isAcademic ? (profile?.admin_status || 'Not provided') : 'Not applicable')
+        },
+        {
+          section: 'Reporting period',
+          label: 'Reporting period',
+          value: `${formatResultDate(startDate)} to ${formatResultDate(endDate)}${hasValidPeriod ? ` <span class="text-xs text-gray-500">(${periodDays} days / ${periodWeeks} weeks)</span>` : ''}`,
+          isPeriodRow: true,
+          hasWarning: !hasValidPeriod
+        },
+        {
+          section: 'Reporting period',
+          label: 'Generated on',
+          value: escapeHtml(new Date().toLocaleString())
+        },
+        {
+          section: 'Totals',
+          label: 'Total entries',
+          value: escapeHtml(String(totalEntries))
+        },
+        {
+          section: 'Totals',
+          label: 'Total workload score',
+          value: `${scores.total.toFixed(2)} • ${escapeHtml(status.label)}`
+        }
+      ];
+
+      if (!hasValidPeriod) {
+        summaryRows.sort((a, b) => Number(Boolean(b.isPeriodRow)) - Number(Boolean(a.isPeriodRow)));
+      }
+
+      const groupedRows = summaryRows.reduce((acc, row) => {
+        if (!acc[row.section]) acc[row.section] = [];
+        acc[row.section].push(row);
+        return acc;
+      }, {});
+      const sectionOrder = hasValidPeriod ? ['Profile', 'Reporting period', 'Totals'] : ['Reporting period', 'Profile', 'Totals'];
 
       return `
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 class="heading-font text-2xl font-bold mb-4 text-gray-900">📋 Executive Summary</h3>
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-            <div><p class="text-gray-500">Staff name</p><p class="font-semibold text-gray-900">${escapeHtml(profile?.profile_name || 'Not provided')}</p></div>
-            <div><p class="text-gray-500">Staff category</p><p class="font-semibold text-gray-900">${escapeHtml(getProfileCategoryLabel(profile?.profile_category || '') || 'Not provided')}</p></div>
-            <div><p class="text-gray-500">Admin status</p><p class="font-semibold text-gray-900">${escapeHtml(isAcademic ? (profile?.admin_status || 'Not provided') : 'Not applicable')}</p></div>
-            <div><p class="text-gray-500">Generated on</p><p class="font-semibold text-gray-900">${new Date().toLocaleString()}</p></div>
-            <div class="md:col-span-2"><p class="text-gray-500">Reporting period</p><p class="font-semibold text-gray-900">${formatResultDate(startDate)} to ${formatResultDate(endDate)}</p><p class="text-xs text-gray-600">${periodDays} days (${periodWeeks} weeks)</p></div>
-            <div><p class="text-gray-500">Total entries</p><p class="font-semibold text-gray-900">${totalEntries}</p></div>
-            <div><p class="text-gray-500">Total workload score</p><p class="font-semibold text-gray-900">${scores.total.toFixed(2)} • ${status.label}</p></div>
+          <h3 class="heading-font text-2xl font-bold mb-5 text-gray-900">📋 Executive Summary</h3>
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 text-sm">
+            ${sectionOrder.map((sectionName) => `
+              <div class="border border-gray-200 rounded-lg overflow-hidden">
+                <div class="px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-xs font-semibold tracking-wide uppercase text-gray-600">${escapeHtml(sectionName)}</div>
+                <div class="divide-y divide-gray-100">
+                  ${(groupedRows[sectionName] || []).map((row) => `
+                    <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] gap-3 px-4 py-2.5 items-start">
+                      <div class="text-gray-600 font-medium flex items-center gap-2">
+                        <span>${escapeHtml(row.label)}</span>
+                        ${row.hasWarning ? '<span class="inline-flex items-center rounded-full bg-amber-100 text-amber-800 text-[10px] font-semibold px-2 py-0.5">Check</span>' : ''}
+                      </div>
+                      <div class="text-gray-900 font-semibold text-right break-words">${row.value}</div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            `).join('')}
           </div>
         </div>
       `;
@@ -4680,12 +4739,15 @@ function getSubmitToken() {
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h3 class="heading-font text-2xl font-bold mb-2">Score Breakdown by Category</h3>
           <p class="text-sm text-gray-600 mb-5">Select a category to review saved entries and points details.</p>
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             ${sections.map((section) => `
-              <button onclick="openSectionDrilldown('${section.id}')" class="text-left bg-gradient-to-br from-${section.color}-50 to-white rounded-lg p-5 border-l-4 border-${section.color}-500 hover:shadow-md transition">
-                <div class="text-sm font-semibold text-gray-600 mb-1">${section.icon} ${section.label}</div>
-                <div class="text-3xl font-bold text-${section.color}-600">${section.score.toFixed(2)}</div>
-                <div class="text-xs text-gray-500 mt-2">${section.count} ${section.unitLabel}</div>
+              <button onclick="openSectionDrilldown('${section.id}')" class="text-left bg-white rounded-lg p-4 border border-gray-200 border-l-4 border-l-${section.color}-500 hover:shadow-md transition min-h-[132px] flex flex-col justify-between">
+                <div>
+                  <div class="text-sm font-semibold text-gray-700 mb-1">${section.icon} ${section.label}</div>
+                  <div class="text-2xl font-bold text-${section.color}-600 leading-tight">${section.score.toFixed(2)}</div>
+                  <div class="text-xs text-gray-500 mt-2">${section.count} ${section.unitLabel}</div>
+                </div>
+                <div class="text-xs text-gray-400 mt-3">View details →</div>
               </button>
             `).join('')}
           </div>
@@ -4773,24 +4835,24 @@ function getSubmitToken() {
       return `
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h3 class="heading-font text-xl font-bold mb-4">Workload Composition</h3>
-          <div class="w-full h-5 rounded-full overflow-hidden bg-gray-100 flex mb-4">
+          <div class="w-full h-3 rounded-full overflow-hidden bg-slate-100 flex mb-4 border border-slate-200">
             ${sections.map((section) => {
               const pct = normalizedTotal > 0 ? (section.score / normalizedTotal) * 100 : 0;
-              return `<div class="h-full bg-${section.color}-500" style="width:${pct.toFixed(2)}%" title="${escapeHtml(section.label)} ${pct.toFixed(1)}%"></div>`;
+              return `<div class="h-full bg-${section.color}-400/80" style="width:${pct.toFixed(2)}%" title="${escapeHtml(section.label)} ${pct.toFixed(2)}%"></div>`;
             }).join('')}
           </div>
           <div class="overflow-x-auto">
             <table class="min-w-full text-sm">
               <thead>
                 <tr class="text-left border-b border-gray-200 text-gray-600">
-                  <th class="py-2 pr-3">Section</th><th class="py-2 pr-3">Total points</th><th class="py-2 pr-3">Entries</th><th class="py-2 pr-3">Avg/entry</th><th class="py-2">% of total</th>
+                  <th class="py-2 pr-3">Section</th><th class="py-2 pr-3 text-right">Total points</th><th class="py-2 pr-3 text-right">Entries</th><th class="py-2 pr-3 text-right">Avg/entry</th><th class="py-2 text-right">% of total</th>
                 </tr>
               </thead>
               <tbody>
                 ${sections.map((section) => {
                   const pct = normalizedTotal > 0 ? (section.score / normalizedTotal) * 100 : 0;
                   const avg = section.count > 0 ? section.score / section.count : 0;
-                  return `<tr class="border-b border-gray-100"><td class="py-2 pr-3">${section.icon} ${escapeHtml(section.label)}</td><td class="py-2 pr-3">${section.score.toFixed(2)}</td><td class="py-2 pr-3">${section.count}</td><td class="py-2 pr-3">${avg.toFixed(2)}</td><td class="py-2">${pct.toFixed(1)}%</td></tr>`;
+                  return `<tr class="border-b border-gray-100 even:bg-gray-50/70"><td class="py-1.5 pr-3">${section.icon} ${escapeHtml(section.label)}</td><td class="py-1.5 pr-3 text-right tabular-nums">${section.score.toFixed(2)}</td><td class="py-1.5 pr-3 text-right tabular-nums">${Number(section.count).toFixed(2)}</td><td class="py-1.5 pr-3 text-right tabular-nums">${avg.toFixed(2)}</td><td class="py-1.5 text-right tabular-nums">${pct.toFixed(2)}%</td></tr>`;
                 }).join('')}
               </tbody>
             </table>
@@ -4884,16 +4946,36 @@ function getSubmitToken() {
 
     function renderDataChecks(profile, sections, totalScore) {
       const checks = runDataChecks(profile, sections, totalScore);
+      const severityWeight = { error: 0, warning: 1, ok: 2 };
+      const sortedChecks = [...checks].sort((a, b) => {
+        const aWeight = severityWeight[a.status] ?? 3;
+        const bWeight = severityWeight[b.status] ?? 3;
+        return aWeight - bWeight;
+      });
+      const visual = {
+        error: { icon: '⛔', badgeClass: 'bg-red-100 text-red-700', iconClass: 'bg-red-100 text-red-700', label: 'Error' },
+        warning: { icon: '⚠️', badgeClass: 'bg-amber-100 text-amber-700', iconClass: 'bg-amber-100 text-amber-700', label: 'Warning' },
+        ok: { icon: '✅', badgeClass: 'bg-emerald-100 text-emerald-700', iconClass: 'bg-emerald-100 text-emerald-700', label: 'OK' }
+      };
+
       return `
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h3 class="heading-font text-2xl font-bold mb-4">🧾 Data checks</h3>
-          <div class="space-y-3">
-            ${checks.map((check) => `
-              <div class="border rounded-lg p-4 ${check.status === 'ok' ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}">
-                <p class="font-semibold ${check.status === 'ok' ? 'text-green-900' : 'text-amber-900'}">${escapeHtml(check.label)}</p>
-                <p class="text-sm ${check.status === 'ok' ? 'text-green-800' : 'text-amber-800'}">${escapeHtml(check.message)}</p>
+          <div class="divide-y divide-gray-100 border border-gray-200 rounded-lg overflow-hidden">
+            ${sortedChecks.map((check) => {
+              const style = visual[check.status] || visual.warning;
+              return `
+              <div class="p-3.5 flex items-start gap-3">
+                <span class="inline-flex items-center justify-center w-7 h-7 rounded-full text-sm ${style.iconClass}">${style.icon}</span>
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-2 mb-1">
+                    <p class="font-semibold text-gray-900">${escapeHtml(check.label)}</p>
+                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${style.badgeClass}">${style.label}</span>
+                  </div>
+                  <p class="text-sm text-gray-600">${escapeHtml(check.message)}</p>
+                </div>
               </div>
-            `).join('')}
+            `;}).join('')}
           </div>
         </div>
       `;
@@ -4918,7 +5000,7 @@ function getSubmitToken() {
               <h3 class="font-bold text-lg text-gray-900">📤 Report actions</h3>
               <div class="flex items-center gap-3">
                 <div id="results-export-menu-container" class="relative">
-                  <button onclick="toggleResultsExportMenu()" class="px-4 py-2 bg-gray-700 text-white rounded-lg font-semibold hover:bg-gray-800 transition flex items-center gap-2 text-sm">
+                  <button onclick="toggleResultsExportMenu()" class="h-10 px-4 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700 transition flex items-center gap-2 text-sm">
                     <span>📁</span> Export
                   </button>
                   <div id="results-export-menu" class="hidden absolute right-0 mt-2 w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-30 overflow-hidden text-sm">
@@ -4928,7 +5010,7 @@ function getSubmitToken() {
                     <button onclick="copyToClipboard(); toggleResultsExportMenu();" class="block w-full text-left px-4 py-2 hover:bg-gray-50">📑 Copy summary</button>
                   </div>
                 </div>
-                <button id="submit-report" class="px-4 py-2 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700 transition flex items-center gap-2 text-sm">
+                <button id="submit-report" class="h-10 px-4 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700 transition flex items-center gap-2 text-sm">
                   <span>🚀</span> Submit report
                 </button>
               </div>
