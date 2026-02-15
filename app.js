@@ -27,6 +27,13 @@ const ALL_STORAGE_KEYS = [
 const ALL_SESSION_STORAGE_KEYS = [SUBMIT_TOKEN_SESSION_KEY];
 const SUBMISSION_HISTORY_LIMIT = 25;
 let submissionState = { isSubmitting: false, lastError: null, lastPayload: null };
+const WORKLOAD_INDEX_MAX = 50;
+const WORKLOAD_STATUS_THRESHOLDS = {
+  lightMax: 19,
+  moderateMin: 20,
+  balancedMin: 35,
+  overloadedMin: 50
+};
 
     const sections = [
       { id: 'home', label: '🏠 Home', showBadge: false },
@@ -598,8 +605,8 @@ let submissionState = { isSubmitting: false, lastError: null, lastPayload: null 
       
       if (!profile) return;
       
-      if (scores.total >= 100 && !notifications.some(n => n.message.includes('workload has reached overload'))) {
-        addNotification('Your workload has reached overload level (100+). Consider rebalancing your activities.', 'warning');
+      if (scores.total >= WORKLOAD_STATUS_THRESHOLDS.overloadedMin && !notifications.some(n => n.message.includes('workload has reached overload'))) {
+        addNotification('Your workload has reached overload level (50+). Consider rebalancing your activities.', 'warning');
       }
       
       if (allRecords.length >= 900 && !notifications.some(n => n.message.includes('approaching the 999 record limit'))) {
@@ -1764,10 +1771,21 @@ function getSubmitToken() {
     }
 
     function getWorkloadStatus(totalScore) {
-      if (totalScore >= 100) return { label: 'Overloaded', color: 'red', icon: '⚠️' };
-      if (totalScore >= 70) return { label: 'Balanced', color: 'green', icon: '✅' };
-      if (totalScore >= 40) return { label: 'Moderate', color: 'yellow', icon: '⚡' };
+      if (totalScore >= WORKLOAD_STATUS_THRESHOLDS.overloadedMin) return { label: 'Overloaded', color: 'red', icon: '⚠️' };
+      if (totalScore >= WORKLOAD_STATUS_THRESHOLDS.balancedMin) return { label: 'Balanced', color: 'green', icon: '✅' };
+      if (totalScore >= WORKLOAD_STATUS_THRESHOLDS.moderateMin) return { label: 'Moderate', color: 'yellow', icon: '⚡' };
       return { label: 'Light', color: 'blue', icon: '💡' };
+    }
+
+    function getWorkloadIndexMetrics(rawTotalPoints) {
+      const safeTotal = Number.isFinite(Number(rawTotalPoints)) ? Number(rawTotalPoints) : 0;
+      const displayIndexValue = Math.min(safeTotal, WORKLOAD_INDEX_MAX);
+      const fillPercent = WORKLOAD_INDEX_MAX > 0 ? (displayIndexValue / WORKLOAD_INDEX_MAX) * 100 : 0;
+      return {
+        rawTotalPoints: safeTotal,
+        displayIndexValue,
+        fillPercent
+      };
     }
 
 
@@ -1955,6 +1973,7 @@ function getSubmitToken() {
     function renderHome() {
       const profile = getProfile();
       const scores = calculateScores();
+      const indexMetrics = getWorkloadIndexMetrics(scores.total);
       const reportingPeriodSet = hasReportingPeriod(profile);
 
       return `
@@ -1991,15 +2010,15 @@ function getSubmitToken() {
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
               <div>
                 <h3 class="heading-font text-xl font-bold text-gray-900">Workload snapshot</h3>
-                <p class="text-sm text-gray-600">Current total score based on saved entries.</p>
+                <p class="text-sm text-gray-600">Current workload index based on saved entries.</p>
               </div>
               <div class="text-right">
-                <div class="text-3xl font-bold text-gray-900">${scores.total.toFixed(1)}</div>
-                <div class="text-xs text-gray-500">points</div>
+                <div class="text-3xl font-bold text-gray-900">${indexMetrics.displayIndexValue.toFixed(1)} / ${WORKLOAD_INDEX_MAX}</div>
+                <div class="text-xs text-gray-500">Total score: ${scores.total.toFixed(1)}</div>
               </div>
             </div>
             <div class="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
-              <div class="h-full bg-sky-600" style="width: ${Math.min(scores.total, 100)}%"></div>
+              <div class="h-full bg-sky-600" style="width: ${indexMetrics.fillPercent.toFixed(2)}%"></div>
             </div>
           </div>
 
@@ -3889,6 +3908,7 @@ function getSubmitToken() {
     }
 
     function renderResultsSummary(profile, scores, status, sections) {
+      const indexMetrics = getWorkloadIndexMetrics(scores.total);
       const categoryKey = normalizeProfileCategoryKey(profile?.profile_category || '');
       const isAcademic = categoryKey === 'academic';
       const startDate = profile?.reporting_start_date;
@@ -3934,8 +3954,18 @@ function getSubmitToken() {
         },
         {
           section: 'Totals',
-          label: 'Total workload score',
-          value: `${scores.total.toFixed(2)} • ${escapeHtml(status.label)}`
+          label: 'Workload Index',
+          value: `${indexMetrics.displayIndexValue.toFixed(2)} / ${WORKLOAD_INDEX_MAX}`
+        },
+        {
+          section: 'Totals',
+          label: 'Total score',
+          value: scores.total.toFixed(2)
+        },
+        {
+          section: 'Totals',
+          label: 'Status',
+          value: `${escapeHtml(status.label)} ${status.icon}`
         }
       ];
 
@@ -3970,6 +4000,26 @@ function getSubmitToken() {
                 </div>
               </div>
             `).join('')}
+          </div>
+          <div class="mt-5 border border-gray-200 rounded-lg p-4">
+            <div class="flex items-center justify-between mb-2">
+              <p class="text-xs font-semibold uppercase tracking-wide text-gray-600">Workload Index scale</p>
+              <p class="text-sm font-semibold text-gray-900">${indexMetrics.displayIndexValue.toFixed(2)} / ${WORKLOAD_INDEX_MAX}</p>
+            </div>
+            <div class="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div class="h-full bg-sky-600" style="width: ${indexMetrics.fillPercent.toFixed(2)}%"></div>
+            </div>
+            <div class="mt-2 flex justify-between text-[11px] text-gray-500"><span>0</span><span>20</span><span>35</span><span>50</span></div>
+            <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-700">
+              <p><strong>Light:</strong> 0 to 19</p>
+              <p><strong>Moderate:</strong> 20 to 34</p>
+              <p><strong>Balanced:</strong> 35 to 49</p>
+              <p><strong>Overloaded:</strong> 50 plus</p>
+            </div>
+            <div class="mt-3 bg-slate-50 border border-slate-200 rounded-md p-3 text-xs text-gray-700">
+              <p class="font-semibold text-gray-900 mb-1">Recommendation</p>
+              <p>${status.label === 'Overloaded' ? 'Review commitments and rebalance duties to reduce current load.' : status.label === 'Balanced' ? 'Maintain your current distribution and monitor upcoming additions.' : status.label === 'Moderate' ? 'Monitor trend and rebalance if additional duties are expected.' : 'Capacity appears available; plan upcoming assignments carefully.'}</p>
+            </div>
           </div>
         </div>
       `;
@@ -4790,6 +4840,9 @@ function getSubmitToken() {
             sections,
             summary: {
               byCategory: summaryByCategory,
+              workloadIndex: getWorkloadIndexMetrics(scores.total).displayIndexValue,
+              workloadIndexMax: WORKLOAD_INDEX_MAX,
+              rawTotalPoints: scores.total,
               totalScore: scores.total,
               totalCount,
               status: {
@@ -4849,6 +4902,9 @@ function getSubmitToken() {
                 </table>
               </div>
               <div class="report-status">
+                <strong>Workload Index:</strong> ${Utilities.formatNumber(reportModel.summary.workloadIndex, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / ${reportModel.summary.workloadIndexMax}
+              </div>
+              <div class="report-status">
                 <strong>Status:</strong> ${reportModel.summary.status.label} ${reportModel.summary.status.icon}
               </div>
             </section>
@@ -4897,6 +4953,7 @@ function getSubmitToken() {
                 <table>
                   <thead>
                     <tr>
+                      <th>Workload Index</th>
                       <th>Total Score</th>
                       <th>Total Count</th>
                       <th>Status</th>
@@ -4904,6 +4961,7 @@ function getSubmitToken() {
                   </thead>
                   <tbody>
                     <tr class="report-total-row">
+                      <td>${Utilities.formatNumber(reportModel.summary.workloadIndex, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / ${reportModel.summary.workloadIndexMax}</td>
                       <td>${Utilities.formatNumber(reportModel.summary.totalScore, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       <td>${reportModel.summary.totalCount}</td>
                       <td>${reportModel.summary.status.label} ${reportModel.summary.status.icon}</td>
@@ -4939,7 +4997,8 @@ function getSubmitToken() {
             lines.push(`${row.category.padEnd(20)} ${row.score.toFixed(2)}`);
           });
           lines.push('-'.repeat(60));
-          lines.push(`TOTAL SCORE: ${reportModel.summary.totalScore.toFixed(2)}`);
+          lines.push(`WORKLOAD INDEX: ${reportModel.summary.workloadIndex.toFixed(2)} / ${reportModel.summary.workloadIndexMax}`);
+          lines.push(`TOTAL SCORE: ${reportModel.summary.rawTotalPoints.toFixed(2)}`);
           lines.push(`TOTAL COUNT: ${reportModel.summary.totalCount}`);
           lines.push(`STATUS: ${reportModel.summary.status.label} ${reportModel.summary.status.icon}`);
           return lines.join('\n');
@@ -4964,6 +5023,8 @@ function getSubmitToken() {
             ['Rank', reportModel.meta.rank],
             ['Programme', reportModel.meta.programme],
             ['Admin Position', reportModel.meta.adminPosition],
+            ['Workload Index', `${reportModel.summary.workloadIndex.toFixed(2)} / ${reportModel.summary.workloadIndexMax}`],
+            ['Raw Total Points', Utilities.normalizeValue(reportModel.summary.rawTotalPoints, 'score')],
             [],
             ['Category', 'Score', 'Count'],
             ...reportModel.summary.byCategory.map(row => [
@@ -5032,6 +5093,8 @@ function getSubmitToken() {
             ['Programme', reportModel.meta.programme],
             ['Admin Position', reportModel.meta.adminPosition],
             ['Filters', JSON.stringify(reportModel.meta.filters || {})],
+            ['Workload Index', `${reportModel.summary.workloadIndex.toFixed(2)} / ${reportModel.summary.workloadIndexMax}`],
+            ['Raw Total Points', reportModel.summary.rawTotalPoints.toFixed(2)],
             [],
             ['SUMMARY_BY_CATEGORY'],
             ['Category', 'Score', 'Count'],
@@ -5065,6 +5128,7 @@ function getSubmitToken() {
           });
 
           rows.push(['OVERALL_TOTALS']);
+          rows.push(['Workload Index', `${reportModel.summary.workloadIndex.toFixed(2)} / ${reportModel.summary.workloadIndexMax}`]);
           rows.push(['Total Score', reportModel.summary.totalScore.toFixed(2)]);
           rows.push(['Total Count', reportModel.summary.totalCount]);
           rows.push(['Status', reportModel.summary.status.label]);
