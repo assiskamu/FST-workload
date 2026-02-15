@@ -2435,6 +2435,45 @@ function getSubmitToken() {
       }
     ];
 
+    const HOME_CLASSIFICATION_GUIDE = [
+      {
+        id: 'admin_duties',
+        icon: '📋',
+        name: 'Administration Duties',
+        measures: 'Formal internal duties assigned by the Faculty or University for administration, governance, operations, compliance, accreditation, coordination, or committee work that is part of official internal responsibilities.',
+        recordHere: ['Internal committee membership', 'Accreditation tasks', 'Programme coordination tasks when not counted as a leadership position'],
+        doNotRecordHere: ['Professional body membership (Professional)', 'External reviewing or invited talk (Service)', 'Paid leadership appointment (Admin Leadership)'],
+        notes: 'Include exam coordination and internal event committee roles here. If it is an appointed paid leadership position, record it in Admin Leadership.'
+      },
+      {
+        id: 'service',
+        icon: '🤝',
+        name: 'Service',
+        measures: 'External engagement or contributions to the community, profession, or scholarly ecosystem where the main audience is outside the Faculty’s internal administration.',
+        recordHere: ['External examiner', 'Keynote speaker', 'Journal or conference reviewer'],
+        doNotRecordHere: ['Internal committees (Administration Duties)', 'Professional certifications and memberships (Professional)', 'Internal role appointments (Admin Leadership)'],
+        notes: 'Include community outreach here, and record internal role appointments in Admin Leadership. Use Service when the beneficiary is external and the activity is an engagement or contribution rather than a credential.'
+      },
+      {
+        id: 'professional',
+        icon: '💼',
+        name: 'Professional',
+        measures: 'Professional development, credentials, memberships, and professional roles that reflect continuing practice or recognition, not internal governance and not external service events.',
+        recordHere: ['Professional certification', 'Membership in a professional society', 'Consultancy role'],
+        doNotRecordHere: ['External examiner or invited talk (Service)', 'Internal committee work (Administration Duties)'],
+        notes: 'Include professional training courses here. Use Professional for credentials and memberships, use Service for external contributions, use Administration Duties for internal operations.'
+      }
+    ];
+
+    const HOME_CLASSIFICATION_EXAMPLES = [
+      { activity: 'Member of Faculty accreditation committee', section: 'Administration Duties' },
+      { activity: 'External examiner for another university', section: 'Service' },
+      { activity: 'Membership in professional society', section: 'Professional' },
+      { activity: 'Head of Programme appointment', section: 'Admin Leadership' },
+      { activity: 'Organizing internal faculty event committee', section: 'Administration Duties' },
+      { activity: 'Invited speaker at external conference', section: 'Service' }
+    ];
+
     let homeGuideExpandedSections = new Set();
 
     function hasReportingPeriod(profile) {
@@ -2505,6 +2544,27 @@ function getSubmitToken() {
       }).join('');
     }
 
+    function renderHomeClassificationGuide() {
+      return HOME_CLASSIFICATION_GUIDE.map((section) => `
+        <div class="bg-white rounded-xl border border-gray-200 p-4">
+          <h4 class="font-semibold text-gray-900 mb-2">${section.icon} ${section.name}</h4>
+          <p class="text-sm text-gray-700"><span class="font-semibold">Measures:</span> ${section.measures}</p>
+          <p class="text-sm text-gray-700 mt-2"><span class="font-semibold">Record here:</span> ${section.recordHere.join(', ')}.</p>
+          <p class="text-sm text-gray-700 mt-2"><span class="font-semibold">Do not record here:</span> ${section.doNotRecordHere.join(', ')}.</p>
+          <p class="mt-2 text-xs text-gray-500"><span class="font-semibold">Note:</span> ${section.notes}</p>
+        </div>
+      `).join('');
+    }
+
+    function renderHomeClassificationExamples() {
+      return HOME_CLASSIFICATION_EXAMPLES.map((example) => `
+        <tr class="border-b border-gray-100 last:border-b-0">
+          <td class="px-3 py-2 text-sm text-gray-700">${example.activity}</td>
+          <td class="px-3 py-2 text-sm font-semibold text-gray-900">${example.section}</td>
+        </tr>
+      `).join('');
+    }
+
     function renderHome() {
       const profile = getProfile();
       const scores = calculateScores();
@@ -2517,7 +2577,11 @@ function getSubmitToken() {
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div class="space-y-2">
                 <h2 class="heading-font text-3xl font-bold text-gray-900">FST UMS Workload Calculator</h2>
-                <p class="text-gray-600">Record workload activities for the reporting period and view a consolidated workload summary.</p>
+                <p class="text-gray-600">Record workload activities for the reporting period and view a consolidated workload summary used for staffing decisions.</p>
+                <p class="text-sm text-gray-700">How to use: Complete Staff Profile first, then record activities in the relevant sections, then review Results to check your consolidated workload summary.</p>
+                <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900">
+                  <span class="font-semibold">Important rule:</span> Record each activity once only in the most appropriate section, and do not double count across sections.
+                </div>
                 ${reportingPeriodSet ? `
                   <div class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200">
                     Reporting period set
@@ -2558,8 +2622,32 @@ function getSubmitToken() {
           </div>
 
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h3 class="heading-font text-xl font-bold text-gray-900 mb-4">Section guide</h3>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+              ${renderHomeClassificationGuide()}
+            </div>
+          </div>
+
+          <div class="bg-gradient-to-r from-blue-50 to-sky-50 rounded-xl shadow-sm border-2 border-blue-200 p-6">
+            <h3 class="font-bold text-lg text-blue-900 mb-3">🧩 Common classification examples</h3>
+            <div class="bg-white rounded-lg p-4 border border-blue-100 overflow-x-auto">
+              <table class="w-full text-xs text-gray-700 border border-gray-200 rounded-lg overflow-hidden">
+                <thead class="bg-blue-100 text-blue-900">
+                  <tr>
+                    <th class="text-left px-3 py-2 border-b border-gray-200">Activity</th>
+                    <th class="text-left px-3 py-2 border-b border-gray-200">Record in section</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${renderHomeClassificationExamples()}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-              <h3 class="heading-font text-xl font-bold text-gray-900">Section guide</h3>
+              <h3 class="heading-font text-xl font-bold text-gray-900">All sections reference</h3>
               <div class="flex gap-2">
                 <button onclick="expandAllHomeGuide()" class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition">Expand all</button>
                 <button onclick="collapseAllHomeGuide()" class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition">Collapse all</button>
