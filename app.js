@@ -42,8 +42,7 @@ const WORKLOAD_STATUS_THRESHOLDS = {
       { id: 'supervision', label: '🎓 Supervision', showBadge: true },
       { id: 'research', label: '🔬 Research', showBadge: true },
       { id: 'publications', label: '📄 Publications', showBadge: true },
-      { id: 'administration', label: '🏛️ Admin Leadership', showBadge: true },
-      { id: 'admin_duties', label: '📋 Admin Duties', showBadge: true },
+      { id: 'administration', label: '🏛️ Administration', showBadge: true },
       { id: 'service', label: '🤝 Service', showBadge: true },
       { id: 'laboratory', label: '🧪 Laboratory', showBadge: true },
       { id: 'professional', label: '💼 Professional', showBadge: true },
@@ -66,14 +65,37 @@ const WORKLOAD_STATUS_THRESHOLDS = {
     const CONFIG_SMART = {
       systemNameShort: 'SMART',
       systemNameFull: 'FST SMART Calculator',
-      sectionWeights: {
-        Teaching: 0.25,
-        Supervision: 0.25,
-        Research: 0.05,
-        Publications: 0.05,
-        AdminCombined: 0.30,
-        Service: 0.05,
-        Professional: 0.05
+      sectionWeightsByStaffCategory: {
+        academic: {
+          Teaching: 0.25,
+          Supervision: 0.25,
+          Research: 0.05,
+          Publications: 0.05,
+          Administration: 0.30,
+          Laboratory: 0.00,
+          Service: 0.05,
+          Professional: 0.05
+        },
+        admin: {
+          Teaching: 0.00,
+          Supervision: 0.00,
+          Research: 0.00,
+          Publications: 0.00,
+          Administration: 0.80,
+          Laboratory: 0.00,
+          Service: 0.15,
+          Professional: 0.05
+        },
+        lab: {
+          Teaching: 0.00,
+          Supervision: 0.00,
+          Research: 0.00,
+          Publications: 0.00,
+          Administration: 0.20,
+          Laboratory: 0.60,
+          Service: 0.15,
+          Professional: 0.05
+        }
       },
       sectionBenchmarks: {
         TeachingWeeklyHoursBenchmark: 5,
@@ -81,6 +103,7 @@ const WORKLOAD_STATUS_THRESHOLDS = {
         PublicationsBenchmarkPapers: 2,
         AdminBenchmarkUniversityAppointments: 1,
         ResearchBenchmark: 1,
+        LaboratoryBenchmark: 1,
         ServiceBenchmark: 1,
         ProfessionalBenchmark: 1
       },
@@ -670,6 +693,16 @@ const WORKLOAD_STATUS_THRESHOLDS = {
       return normalizeProfileCategory(value);
     }
 
+
+    function getActiveSectionWeights(profile = getProfile(), config = readSmartConfig()) {
+      const categoryKey = normalizeProfileCategoryKey(profile?.profile_category || profile?.staff_category || 'academic') || 'academic';
+      const allWeights = config.sectionWeightsByStaffCategory || CONFIG_SMART.sectionWeightsByStaffCategory;
+      return {
+        ...(allWeights?.academic || CONFIG_SMART.sectionWeightsByStaffCategory.academic),
+        ...((allWeights && allWeights[categoryKey]) || {})
+      };
+    }
+
     function getReportingPeriodPreset(periodType) {
       const now = new Date();
       const year = now.getFullYear();
@@ -1192,8 +1225,7 @@ const WORKLOAD_STATUS_THRESHOLDS = {
         supervision: allRecords.filter(r => r.section === 'supervision').length,
         research: allRecords.filter(r => r.section === 'research').length,
         publications: allRecords.filter(r => r.section === 'publications').length,
-        administration: allRecords.filter(r => r.section === 'administration').length,
-        admin_duties: allRecords.filter(r => r.section === 'admin_duties').length,
+        administration: allRecords.filter(r => r.section === 'administration' || r.section === 'admin_duties').length,
         service: getRecordsBySection('service').length,
         laboratory: getRecordsBySection('laboratory').length,
         professional: getRecordsBySection('professional').length
@@ -1253,12 +1285,12 @@ const WORKLOAD_STATUS_THRESHOLDS = {
           setupPublicationsEventListeners();
           break;
         case 'administration':
-          contentArea.innerHTML = renderAdministration();
-          setupAdministrationEventListeners();
+          contentArea.innerHTML = renderAdministrationCombined();
+          setupAdministrationCombinedEventListeners();
           break;
         case 'admin_duties':
-          contentArea.innerHTML = renderAdminDuties();
-          setupAdminDutiesEventListeners();
+          contentArea.innerHTML = renderAdministrationCombined();
+          setupAdministrationCombinedEventListeners();
           break;
         case 'service':
           contentArea.innerHTML = renderService();
@@ -1347,10 +1379,19 @@ const WORKLOAD_STATUS_THRESHOLDS = {
         if (!savedConfig || typeof savedConfig !== 'object') {
           return { ...CONFIG_SMART };
         }
+
+        const defaultWeightsByCategory = CONFIG_SMART.sectionWeightsByStaffCategory || {};
+        const savedWeightsByCategory = savedConfig.sectionWeightsByStaffCategory || {};
+        const legacyWeights = savedConfig.sectionWeights || {};
+
         return {
           ...CONFIG_SMART,
           ...savedConfig,
-          sectionWeights: { ...CONFIG_SMART.sectionWeights, ...(savedConfig.sectionWeights || {}) },
+          sectionWeightsByStaffCategory: {
+            academic: { ...(defaultWeightsByCategory.academic || {}), ...legacyWeights, ...(savedWeightsByCategory.academic || {}) },
+            admin: { ...(defaultWeightsByCategory.admin || {}), ...(savedWeightsByCategory.admin || {}) },
+            lab: { ...(defaultWeightsByCategory.lab || {}), ...(savedWeightsByCategory.lab || {}) }
+          },
           sectionBenchmarks: { ...CONFIG_SMART.sectionBenchmarks, ...(savedConfig.sectionBenchmarks || {}) },
           adminConfig: { ...CONFIG_SMART.adminConfig, ...(savedConfig.adminConfig || {}) }
         };
@@ -1365,10 +1406,15 @@ const WORKLOAD_STATUS_THRESHOLDS = {
         const raw = localStorage.getItem(DATA_STORE_STORAGE_KEY);
         const parsed = raw ? JSON.parse(raw) : { records: [], elementConfig: {} };
         const previous = parsed?.elementConfig?.smartConfig || {};
+        const defaultWeightsByCategory = CONFIG_SMART.sectionWeightsByStaffCategory || {};
         const merged = {
           ...CONFIG_SMART,
           ...nextConfig,
-          sectionWeights: { ...CONFIG_SMART.sectionWeights, ...(nextConfig.sectionWeights || {}) },
+          sectionWeightsByStaffCategory: {
+            academic: { ...(defaultWeightsByCategory.academic || {}), ...(nextConfig.sectionWeightsByStaffCategory?.academic || {}) },
+            admin: { ...(defaultWeightsByCategory.admin || {}), ...(nextConfig.sectionWeightsByStaffCategory?.admin || {}) },
+            lab: { ...(defaultWeightsByCategory.lab || {}), ...(nextConfig.sectionWeightsByStaffCategory?.lab || {}) }
+          },
           sectionBenchmarks: { ...CONFIG_SMART.sectionBenchmarks, ...(nextConfig.sectionBenchmarks || {}) },
           adminConfig: { ...CONFIG_SMART.adminConfig, ...(nextConfig.adminConfig || {}) },
           lastUpdatedAt: new Date().toISOString(),
@@ -1750,6 +1796,7 @@ function getSubmitToken() {
             publications: scores.publications,
             adminLeadership: scores.adminLeadership,
             adminDuties: scores.adminDuties,
+            administrationCombined: scores.adminLeadership + scores.adminDuties,
             service: scores.service,
             lab: scores.laboratory,
             professional: scores.professional
@@ -2057,16 +2104,20 @@ function getSubmitToken() {
     function calculateNormalizedScores() {
       const rawScores = calculateScores();
       const smartConfig = readSmartConfig();
-      const benchmarks = smartConfig.sectionBenchmarks || {};
-      const weights = smartConfig.sectionWeights || {};
-      const rawAdminCombined = rawScores.adminLeadership + rawScores.adminDuties;
+      const benchmarks = {
+        ...CONFIG_SMART.sectionBenchmarks,
+        ...(smartConfig.sectionBenchmarks || {})
+      };
+      const activeWeights = getActiveSectionWeights(getProfile(), smartConfig);
+      const rawAdministration = rawScores.adminLeadership + rawScores.adminDuties;
 
       const rawByCategory = {
         Teaching: rawScores.teaching,
         Supervision: calculateRawSupervisionEquivalentMastersMain(),
         Research: rawScores.research,
         Publications: rawScores.publications,
-        AdminCombined: rawAdminCombined,
+        Administration: rawAdministration,
+        Laboratory: rawScores.laboratory,
         Service: rawScores.service,
         Professional: rawScores.professional
       };
@@ -2076,7 +2127,8 @@ function getSubmitToken() {
         Supervision: Number(benchmarks.SupervisionBenchmarkMastersMain || 0),
         Research: Number(benchmarks.ResearchBenchmark || 0),
         Publications: Number(benchmarks.PublicationsBenchmarkPapers || 0),
-        AdminCombined: Number(benchmarks.AdminBenchmarkUniversityAppointments || 0),
+        Administration: Number(benchmarks.AdminBenchmarkUniversityAppointments || 0),
+        Laboratory: Number(benchmarks.LaboratoryBenchmark || 1),
         Service: Number(benchmarks.ServiceBenchmark || 0),
         Professional: Number(benchmarks.ProfessionalBenchmark || 0)
       };
@@ -2085,12 +2137,13 @@ function getSubmitToken() {
       const weightedContributions = {};
       const overloadFlags = {};
 
-      Object.keys(weights).forEach((category) => {
+      Object.keys(rawByCategory).forEach((category) => {
         const rawValue = Number(rawByCategory[category] || 0);
         const benchmarkValue = Number(benchmarkByCategory[category] || 0);
         const achievement = benchmarkValue > 0 ? Math.min(rawValue / benchmarkValue, 1) : 0;
+        const weight = Number(activeWeights[category] || 0);
         achievements[category] = achievement;
-        weightedContributions[category] = achievement * Number(weights[category] || 0);
+        weightedContributions[category] = achievement * weight;
         overloadFlags[category] = {
           overload: benchmarkValue > 0 ? rawValue > benchmarkValue : false,
           overloadAmount: benchmarkValue > 0 ? Math.max(rawValue - benchmarkValue, 0) : 0,
@@ -2104,13 +2157,15 @@ function getSubmitToken() {
 
       return {
         rawScores,
-        rawAdminCombined,
+        rawAdministration,
         achievements,
         weightedContributions,
         finalScore,
         overloadFlags,
         configSnapshot: smartConfig,
-        rawByCategory
+        rawByCategory,
+        benchmarkByCategory,
+        activeWeights
       };
     }
 
@@ -2484,7 +2539,7 @@ function getSubmitToken() {
         name: 'Teaching',
         measures: 'Teaching workload from course delivery effort across lecture, tutorial, lab, and fieldwork activities.',
         recordHere: ['Lecture and tutorial contact hours', 'Lab or fieldwork teaching hours', 'Course-level teaching responsibilities'],
-        doNotRecordHere: ['Student feedback or quality ratings', 'Formal internal committee work (Admin Duties)', 'Professional training credentials (Professional)'],
+        doNotRecordHere: ['Student feedback or quality ratings', 'Formal internal committee work (Administration)', 'Professional training credentials (Professional)'],
         notes: 'Record each course offering once only to avoid double counting.'
       },
       {
@@ -2502,7 +2557,7 @@ function getSubmitToken() {
         name: 'Research',
         measures: 'Research project workload from active project roles and in-period project activity.',
         recordHere: ['Projects with active work in the period', 'Research role responsibilities on active projects'],
-        doNotRecordHere: ['Grant prestige indicators', 'Journal reviewing or keynote talks (Service)', 'Internal coordination committees (Admin Duties)'],
+        doNotRecordHere: ['Grant prestige indicators', 'Journal reviewing or keynote talks (Service)', 'Internal coordination committees (Administration)'],
         notes: 'Do not record projects with no actual activity in the reporting period.'
       },
       {
@@ -2511,26 +2566,17 @@ function getSubmitToken() {
         name: 'Publications',
         measures: 'Publication writing workload from manuscript development and revision effort in the period.',
         recordHere: ['Manuscript drafting', 'Revision and resubmission work', 'Reviewer response preparation'],
-        doNotRecordHere: ['Journal ranking or prestige', 'Internal committee tasks (Admin Duties)', 'Professional certifications (Professional)'],
+        doNotRecordHere: ['Journal ranking or prestige', 'Internal committee tasks (Administration)', 'Professional certifications (Professional)'],
         notes: 'Track writing effort, not publication impact or performance outcomes.'
       },
       {
         id: 'administration',
         icon: '🏛️',
-        name: 'Admin Leadership',
-        measures: 'Formal internal leadership appointment workload based on assigned administrative positions.',
-        recordHere: ['Dean or deputy appointments', 'Head of programme appointments', 'Official internal leadership roles'],
-        doNotRecordHere: ['General internal committee participation (Admin Duties)', 'External examiner work (Service)', 'Professional membership only (Professional)'],
-        notes: 'Use this only for formal appointment-based leadership roles.'
-      },
-      {
-        id: 'admin_duties',
-        icon: '📋',
-        name: 'Admin Duties',
-        measures: 'Formal internal operational duties assigned by Faculty or University, governance, compliance, accreditation, coordination, and internal committee work.',
-        recordHere: ['Committee member roles', 'Accreditation tasks', 'Exam coordination', 'Curriculum development committee'],
-        doNotRecordHere: ['External examiner or invited talk (Service)', 'Professional body membership or certification (Professional)', 'Paid leadership appointment (Admin Leadership)'],
-        notes: 'Record once in the best-fit internal administration section and avoid double counting.'
+        name: 'Administration',
+        measures: 'Combined internal administration workload covering both formal leadership appointments and operational duties within the institution.',
+        recordHere: ['Dean or deputy appointments', 'Head of programme appointments', 'Committee member roles', 'Accreditation and governance tasks'],
+        doNotRecordHere: ['External examiner or invited talk (Service)', 'Professional body membership or certification (Professional)', 'Teaching contact hours (Teaching)'],
+        notes: 'Use one Administration page to record both leadership and duties; records are still stored in their original internal categories for reporting compatibility.'
       },
       {
         id: 'service',
@@ -2538,7 +2584,7 @@ function getSubmitToken() {
         name: 'Service',
         measures: 'External engagement or contributions to community, profession, or scholarly ecosystems where the primary audience is outside internal administration.',
         recordHere: ['External examiner', 'Keynote speaker', 'Journal reviewer', 'Community outreach'],
-        doNotRecordHere: ['Internal committees (Admin Duties)', 'Professional certification or membership (Professional)', 'Internal leadership appointment (Admin Leadership)'],
+        doNotRecordHere: ['Internal committees (Administration)', 'Professional certification or membership (Professional)', 'Internal leadership appointment (Administration)'],
         notes: 'Use Service when the contribution is outward-facing rather than internal operations.'
       },
       {
@@ -2556,7 +2602,7 @@ function getSubmitToken() {
         name: 'Professional',
         measures: 'Professional development and professional standing activities such as training, credentials, memberships, and professional practice roles.',
         recordHere: ['Professional certification', 'Membership in professional society', 'Consultancy role if modelled as professional practice'],
-        doNotRecordHere: ['External examiner or invited talk (Service)', 'Internal committee work (Admin Duties)'],
+        doNotRecordHere: ['External examiner or invited talk (Service)', 'Internal committee work (Administration)'],
         notes: 'Use this section for credentials and continuing professional standing activities.'
       },
       {
@@ -2585,7 +2631,7 @@ function getSubmitToken() {
     const HOME_RECORD_HELPERS = {
       internal_committee: {
         label: 'Internal committee or coordination',
-        section: 'Admin Duties',
+        section: 'Administration',
         reason: 'This is formal internal operational or governance work assigned within Faculty or University administration.'
       },
       external_engagement: {
@@ -2653,7 +2699,7 @@ function getSubmitToken() {
       if (sectionId === 'laboratory') {
         return 'Most relevant for: Laboratory Staff.';
       }
-      if (['admin_duties', 'service'].includes(sectionId)) {
+      if (['administration', 'service'].includes(sectionId)) {
         return 'Most relevant for: All staff categories depending on assignment.';
       }
       return 'Most relevant for: Depends on assigned role and responsibilities.';
@@ -3836,7 +3882,7 @@ function getSubmitToken() {
             }
           })}
 
-          ${createNavigationRow({ previous: { id: 'research', label: 'Research' }, next: { id: 'administration', label: 'Admin Leadership' } })}
+          ${createNavigationRow({ previous: { id: 'research', label: 'Research' }, next: { id: 'administration', label: 'Administration' } })}
         </div>
       `;
     }
@@ -3995,9 +4041,39 @@ function getSubmitToken() {
             }
           })}
 
-          ${createNavigationRow({ previous: { id: 'publications', label: 'Publications' }, next: { id: 'admin_duties', label: 'Admin Duties' } })}
+          ${createNavigationRow({ previous: { id: 'publications', label: 'Publications' }, next: { id: 'service', label: 'Service' } })}
         </div>
       `;
+    }
+
+
+    function renderAdministrationCombined() {
+      return `
+        <div class="space-y-6">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+            <h2 class="heading-font text-2xl font-bold text-gray-900 mb-3">🏛️ Administration</h2>
+            <div class="flex flex-wrap gap-2">
+              <button type="button" data-admin-tab="leadership" class="px-4 py-2 bg-sky-100 text-sky-800 rounded-lg text-sm font-semibold">Admin Leadership</button>
+              <button type="button" data-admin-tab="duties" class="px-4 py-2 bg-amber-100 text-amber-800 rounded-lg text-sm font-semibold">Admin Duties</button>
+            </div>
+          </div>
+          <div id="administration-leadership-panel">${renderAdministration()}</div>
+          <div id="administration-duties-panel">${renderAdminDuties()}</div>
+        </div>
+      `;
+    }
+
+    function setupAdministrationCombinedEventListeners() {
+      setupAdministrationEventListeners();
+      setupAdminDutiesEventListeners();
+      document.querySelectorAll('[data-admin-tab]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const panelId = button.getAttribute('data-admin-tab') === 'duties'
+            ? 'administration-duties-panel'
+            : 'administration-leadership-panel';
+          document.getElementById(panelId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      });
     }
 
     function setupAdministrationEventListeners() {
@@ -4116,7 +4192,7 @@ function getSubmitToken() {
             }
           })}
 
-          ${createNavigationRow({ previous: { id: 'administration', label: 'Admin Leadership' }, next: { id: 'service', label: 'Service' } })}
+          ${createNavigationRow({ previous: { id: 'publications', label: 'Publications' }, next: { id: 'service', label: 'Service' } })}
         </div>
       `;
     }
@@ -4159,7 +4235,7 @@ function getSubmitToken() {
       if (result.isOk) {
         showToast('Duty added successfully!');
         form.reset();
-        renderSection('admin_duties');
+        renderSection('administration');
       } else {
         showToast('Failed to add duty', 'error');
       }
@@ -4247,7 +4323,7 @@ function getSubmitToken() {
             }
           })}
 
-          ${createNavigationRow({ previous: { id: 'admin_duties', label: 'Admin Duties' }, next: { id: 'laboratory', label: 'Laboratory' } })}
+          ${createNavigationRow({ previous: { id: 'administration', label: 'Administration' }, next: { id: 'laboratory', label: 'Laboratory' } })}
         </div>
       `;
     }
@@ -4698,17 +4774,17 @@ function getSubmitToken() {
     }
 
     function getResultsSectionDefinitions(scores) {
+      const administrationRecords = [...getRecordsBySection('administration'), ...getRecordsBySection('admin_duties')];
       return [
-        { id: 'teaching', label: 'Teaching', icon: '📚', score: scores.teaching, color: 'blue', unitLabel: 'entries' },
-        { id: 'supervision', label: 'Supervision', icon: '🧑‍🏫', score: scores.supervision, color: 'purple', unitLabel: 'entries' },
-        { id: 'research', label: 'Research', icon: '🔬', score: scores.research, color: 'green', unitLabel: 'entries' },
-        { id: 'publications', label: 'Publications', icon: '📝', score: scores.publications, color: 'indigo', unitLabel: 'entries' },
-        { id: 'administration', label: 'Admin Leadership', icon: '🏛️', score: scores.adminLeadership, color: 'rose', unitLabel: 'entries' },
-        { id: 'admin_duties', label: 'Admin Duties', icon: '📌', score: scores.adminDuties, color: 'amber', unitLabel: 'entries' },
-        { id: 'service', label: 'Service', icon: '🤝', score: scores.service, color: 'cyan', unitLabel: 'entries' },
-        { id: 'laboratory', label: 'Laboratory', icon: '🧪', score: scores.laboratory, color: 'teal', unitLabel: 'entries' },
-        { id: 'professional', label: 'Professional', icon: '💼', score: scores.professional, color: 'violet', unitLabel: 'entries' }
-      ].map((section) => ({ ...section, records: getRecordsBySection(section.id), count: getRecordsBySection(section.id).length }));
+        { id: 'teaching', label: 'Teaching', icon: '📚', score: scores.teaching, color: 'blue', unitLabel: 'entries', records: getRecordsBySection('teaching') },
+        { id: 'supervision', label: 'Supervision', icon: '🧑‍🏫', score: scores.supervision, color: 'purple', unitLabel: 'entries', records: getRecordsBySection('supervision') },
+        { id: 'research', label: 'Research', icon: '🔬', score: scores.research, color: 'green', unitLabel: 'entries', records: getRecordsBySection('research') },
+        { id: 'publications', label: 'Publications', icon: '📝', score: scores.publications, color: 'indigo', unitLabel: 'entries', records: getRecordsBySection('publications') },
+        { id: 'administration', label: 'Administration', icon: '🏛️', score: (scores.adminLeadership + scores.adminDuties), color: 'rose', unitLabel: 'entries', records: administrationRecords },
+        { id: 'service', label: 'Service', icon: '🤝', score: scores.service, color: 'cyan', unitLabel: 'entries', records: getRecordsBySection('service') },
+        { id: 'laboratory', label: 'Laboratory', icon: '🧪', score: scores.laboratory, color: 'teal', unitLabel: 'entries', records: getRecordsBySection('laboratory') },
+        { id: 'professional', label: 'Professional', icon: '💼', score: scores.professional, color: 'violet', unitLabel: 'entries', records: getRecordsBySection('professional') }
+      ].map((section) => ({ ...section, count: section.records.length }));
     }
 
     function getSectionEntryBreakdown(sectionId, entry) {
@@ -4719,7 +4795,7 @@ function getSubmitToken() {
       if (sectionId === 'supervision') return getSupervisionEntryBreakdown(entry);
       if (sectionId === 'research') return getResearchEntryBreakdown(entry);
       if (sectionId === 'publications') return getPublicationEntryBreakdown(entry);
-      if (sectionId === 'administration') return getAdministrationEntryBreakdown(entry);
+      if (sectionId === 'administration') return entry.section === 'admin_duties' ? getAdminDutyEntryBreakdown(entry) : getAdministrationEntryBreakdown(entry);
       if (sectionId === 'admin_duties') return getAdminDutyEntryBreakdown(entry);
       if (sectionId === 'service') return getServiceEntryBreakdown(entry);
       if (sectionId === 'laboratory') return getLabEntryBreakdown(entry);
@@ -4734,7 +4810,7 @@ function getSubmitToken() {
         supervision: entry.student_name || entry.student_title,
         research: entry.research_title,
         publications: entry.pub_title,
-        administration: entry.admin_position,
+        administration: entry.section === 'admin_duties' ? (entry.duty_name || entry.duty_type) : entry.admin_position,
         admin_duties: entry.duty_name || entry.duty_type,
         service: entry.service_title || entry.service_type,
         laboratory: entry.lab_name || entry.lab_responsibility,
@@ -4885,11 +4961,11 @@ function getSubmitToken() {
     function renderSmartRadarPanel(normalized) {
       const chart = renderRadarChart([{ label: 'Individual', achievements: normalized.achievements }]);
       const warnings = Object.entries(normalized.overloadFlags || {}).filter(([,v]) => v.overload);
-      return `<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"><h3 class="heading-font text-2xl font-bold mb-3 text-gray-900">📡 SMART Radar (Achievements)</h3><div class="text-xs text-gray-600 mb-3">Axes: Teaching, Supervision, Research, Publications, AdminCombined, Service, Professional.</div>${chart}${warnings.length ? `<div class=\"mt-3 p-3 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800\"><strong>Overload warnings (no score penalty):</strong><ul class=\"list-disc ml-5 mt-1\">${warnings.map(([k,v])=>`<li>${k}: raw ${v.rawValue.toFixed(2)} > benchmark ${v.benchmarkValue.toFixed(2)} (${v.overloadPercent.toFixed(1)}%)</li>`).join('')}</ul></div>` : ''}</div>`;
+      return `<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"><h3 class="heading-font text-2xl font-bold mb-3 text-gray-900">📡 SMART Radar (Achievements)</h3><div class="text-xs text-gray-600 mb-3">Axes: Teaching, Supervision, Research, Publications, Administration, Laboratory, Service, Professional.</div>${chart}${warnings.length ? `<div class=\"mt-3 p-3 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800\"><strong>Overload warnings (no score penalty):</strong><ul class=\"list-disc ml-5 mt-1\">${warnings.map(([k,v])=>`<li>${k}: raw ${v.rawValue.toFixed(2)} > benchmark ${v.benchmarkValue.toFixed(2)} (${v.overloadPercent.toFixed(1)}%)</li>`).join('')}</ul></div>` : ''}</div><p class="text-xs text-gray-500 mt-3">Note: Some sections may have zero weight depending on staff category.</p></div>`;
     }
 
     function renderRadarChart(dataset = []) {
-      const axes = ['Teaching', 'Supervision', 'Research', 'Publications', 'AdminCombined', 'Service', 'Professional'];
+      const axes = ['Teaching', 'Supervision', 'Research', 'Publications', 'Administration', 'Laboratory', 'Service', 'Professional'];
       const cx = 180; const cy = 180; const radius = 130;
       const points = axes.map((axis, idx) => {
         const angle = ((Math.PI * 2) / axes.length) * idx - (Math.PI / 2);
@@ -4912,7 +4988,10 @@ function getSubmitToken() {
       if (!canEdit) return '';
       const b = normalized.configSnapshot.sectionBenchmarks;
       const locked = normalized.configSnapshot.adminConfig.isBenchmarkLocked;
-      return `<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"><h3 class="heading-font text-xl font-bold mb-4">⚙️ Settings (SMART Benchmarks)</h3><div class="grid grid-cols-1 md:grid-cols-2 gap-4">${Object.entries(b).map(([k,v])=>`<label class="text-sm"><span class="block text-gray-600 mb-1">${k}</span><input data-benchmark-key="${k}" type="number" step="0.1" value="${v}" ${locked ? 'disabled' : ''} class="w-full px-3 py-2 border border-gray-300 rounded"></label>`).join('')}</div><div class="mt-3 flex items-center gap-3"><label class="inline-flex items-center gap-2"><input type="checkbox" id="benchmark-lock-toggle" ${locked ? 'checked' : ''}><span>Lock benchmark editing</span></label><button onclick="saveSmartBenchmarks()" class="px-4 py-2 bg-sky-600 text-white rounded-lg">Save Settings</button></div><p class="text-xs text-gray-500 mt-2">Version: ${escapeHtml(normalized.configSnapshot.lastUpdatedAt || '-')} by ${escapeHtml(normalized.configSnapshot.lastUpdatedBy || '-')}</p></div>`;
+      const activeCategory = normalizeProfileCategoryKey(profile?.profile_category || '') || 'academic';
+      const activeWeights = normalized.activeWeights || getActiveSectionWeights(profile, normalized.configSnapshot);
+      const editableWeights = ['Teaching', 'Supervision', 'Research', 'Publications', 'Administration', 'Laboratory', 'Service', 'Professional'];
+      return `<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"><h3 class="heading-font text-xl font-bold mb-4">⚙️ Settings (SMART Benchmarks & Weights)</h3><p class="text-xs text-gray-600 mb-3">Weight editing defaults to active staff category: <strong>${escapeHtml(activeCategory)}</strong>.</p><div class="grid grid-cols-1 md:grid-cols-2 gap-4">${Object.entries(b).map(([k,v])=>`<label class="text-sm"><span class="block text-gray-600 mb-1">${k}</span><input data-benchmark-key="${k}" type="number" step="0.1" value="${v}" ${locked ? 'disabled' : ''} class="w-full px-3 py-2 border border-gray-300 rounded"></label>`).join('')}</div><div class="mt-4 border-t pt-4"><h4 class="font-semibold text-sm mb-2">Section weights (${escapeHtml(activeCategory)})</h4><div class="grid grid-cols-1 md:grid-cols-2 gap-3">${editableWeights.map((k)=>`<label class="text-sm"><span class="block text-gray-600 mb-1">${k}</span><input data-weight-key="${k}" type="number" step="0.01" min="0" max="1" value="${Number(activeWeights[k] || 0)}" class="w-full px-3 py-2 border border-gray-300 rounded"></label>`).join('')}</div></div><div class="mt-3 flex items-center gap-3"><label class="inline-flex items-center gap-2"><input type="checkbox" id="benchmark-lock-toggle" ${locked ? 'checked' : ''}><span>Lock benchmark editing</span></label><button onclick="saveSmartBenchmarks()" class="px-4 py-2 bg-sky-600 text-white rounded-lg">Save Settings</button></div><p class="text-xs text-gray-500 mt-2">Version: ${escapeHtml(normalized.configSnapshot.lastUpdatedAt || '-')} by ${escapeHtml(normalized.configSnapshot.lastUpdatedBy || '-')}</p></div>`;
     }
 
     async function saveSmartBenchmarks() {
@@ -4920,9 +4999,22 @@ function getSubmitToken() {
       const inputs = Array.from(document.querySelectorAll('[data-benchmark-key]'));
       const sectionBenchmarks = { ...config.sectionBenchmarks };
       inputs.forEach((el) => { sectionBenchmarks[el.dataset.benchmarkKey] = Number(el.value || 0); });
+
+      const activeCategory = normalizeProfileCategoryKey(getProfile()?.profile_category || '') || 'academic';
+      const weightInputs = Array.from(document.querySelectorAll('[data-weight-key]'));
+      const sectionWeightsByStaffCategory = {
+        ...(config.sectionWeightsByStaffCategory || CONFIG_SMART.sectionWeightsByStaffCategory),
+        [activeCategory]: {
+          ...((config.sectionWeightsByStaffCategory || CONFIG_SMART.sectionWeightsByStaffCategory)[activeCategory] || {})
+        }
+      };
+      weightInputs.forEach((el) => {
+        sectionWeightsByStaffCategory[activeCategory][el.dataset.weightKey] = Number(el.value || 0);
+      });
+
       const isLocked = Boolean(document.getElementById('benchmark-lock-toggle')?.checked);
-      writeSmartConfig({ ...config, sectionBenchmarks, adminConfig: { ...config.adminConfig, isBenchmarkLocked: isLocked } }, (getProfile()?.profile_name || 'unknown'));
-      showToast('SMART benchmark settings saved');
+      writeSmartConfig({ ...config, sectionBenchmarks, sectionWeightsByStaffCategory, adminConfig: { ...config.adminConfig, isBenchmarkLocked: isLocked } }, (getProfile()?.profile_name || 'unknown'));
+      showToast('SMART settings saved');
       renderSection('results');
     }
 
@@ -5102,13 +5194,13 @@ function getSubmitToken() {
         });
       }
 
-      const adminLeadCount = sections.find((section) => section.id === 'administration')?.count || 0;
-      const adminDutyCount = sections.find((section) => section.id === 'admin_duties')?.count || 0;
+      const adminLeadCount = getRecordsBySection('administration').length;
+      const adminDutyCount = getRecordsBySection('admin_duties').length;
       if (adminLeadCount > 0 && adminDutyCount > 0) {
         checks.push({
-          label: 'Admin Leadership and Admin Duties overlap reminder',
+          label: 'Administration overlap reminder',
           status: 'warning',
-          message: 'Review entries for overlap. Do not double count the same workload between Admin Leadership and Admin Duties sections.'
+          message: 'Review entries for overlap. Do not double count the same workload between Administration leadership and duty records.'
         });
       }
 
@@ -5453,8 +5545,7 @@ function getSubmitToken() {
             { category: 'Supervision', score: scores.supervision, count: recordsBySection.supervision.length },
             { category: 'Research', score: scores.research, count: recordsBySection.research.length },
             { category: 'Publications', score: scores.publications, count: recordsBySection.publications.length },
-            { category: 'Admin Leadership', score: scores.adminLeadership, count: recordsBySection.administration.length },
-            { category: 'Admin Duties', score: scores.adminDuties, count: recordsBySection.admin_duties.length },
+            { category: 'Administration', score: scores.adminLeadership + scores.adminDuties, count: recordsBySection.administration.length + recordsBySection.admin_duties.length },
             { category: 'Service', score: scores.service, count: recordsBySection.service.length },
             { category: 'Laboratory', score: scores.laboratory, count: recordsBySection.laboratory.length },
             { category: 'Professional', score: scores.professional, count: recordsBySection.professional.length }
@@ -5593,42 +5684,21 @@ function getSubmitToken() {
             }),
             buildSection({
               key: 'administration',
-              title: 'Admin Leadership',
-              records: recordsBySection.administration,
-              scoreFn: calculateAdministrationScore,
+              title: 'Administration',
+              records: [...recordsBySection.administration, ...recordsBySection.admin_duties],
+              scoreFn: (item) => item.section === 'admin_duties' ? calculateAdminDutyScore(item) : calculateAdministrationScore(item),
               columns: [
-                { key: 'admin_position', label: 'Position', type: 'text' },
-                { key: 'admin_faculty', label: 'Faculty/Unit', type: 'text' },
-                { key: 'admin_start_date', label: 'Start Date', type: 'date' },
-                { key: 'admin_end_date', label: 'End Date', type: 'date' },
+                { key: 'admin_type', label: 'Type', type: 'text' },
+                { key: 'admin_title', label: 'Title/Position', type: 'text' },
+                { key: 'admin_scope', label: 'Faculty/Unit', type: 'text' },
+                { key: 'admin_period', label: 'Period/Frequency', type: 'text' },
                 { key: 'rowScore', label: 'Score', type: 'score' }
               ],
               mapRow: (admin) => ({
-                admin_position: admin.admin_position === 'Other' ? admin.admin_other_position : admin.admin_position,
-                admin_faculty: admin.admin_faculty,
-                admin_start_date: admin.admin_start_date,
-                admin_end_date: admin.admin_end_date || 'Current'
-              })
-            }),
-            buildSection({
-              key: 'admin_duties',
-              title: 'Admin Duties',
-              records: recordsBySection.admin_duties,
-              scoreFn: calculateAdminDutyScore,
-              columns: [
-                { key: 'duty_name', label: 'Duty Name', type: 'text' },
-                { key: 'duty_type', label: 'Type', type: 'text' },
-                { key: 'duty_frequency', label: 'Frequency', type: 'text' },
-                { key: 'duty_year', label: 'Year', type: 'number' },
-                { key: 'duty_notes', label: 'Notes', type: 'text' },
-                { key: 'rowScore', label: 'Score', type: 'score' }
-              ],
-              mapRow: (duty) => ({
-                duty_name: duty.duty_name,
-                duty_type: duty.duty_type,
-                duty_frequency: duty.duty_frequency,
-                duty_year: duty.duty_year,
-                duty_notes: duty.duty_notes
+                admin_type: admin.section === 'admin_duties' ? 'Duty' : 'Leadership',
+                admin_title: admin.section === 'admin_duties' ? admin.duty_name : (admin.admin_position === 'Other' ? admin.admin_other_position : admin.admin_position),
+                admin_scope: admin.section === 'admin_duties' ? (admin.duty_appointment_level || '-') : (admin.admin_faculty || '-'),
+                admin_period: admin.section === 'admin_duties' ? (admin.duty_frequency || '-') : `${admin.admin_start_date || '-'} → ${admin.admin_end_date || 'Current'}`
               })
             }),
             buildSection({
