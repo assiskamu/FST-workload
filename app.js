@@ -15,8 +15,13 @@ const SUBMISSION_PENDING_KEY = 'fst_workload_submission_pending_v1';
 const SUBMIT_TOKEN_SESSION_KEY = 'fst_workload_submit_token_v1';
 const PROFILE_STATE_STORAGE_KEY = 'profile_state_v2';
 const DATA_STORE_STORAGE_KEY = 'fst_workload_v1';
+const STORAGE_KEY = 'fst_smart_calculator_state_v1';
+const SCHEMA_VERSION = 1;
+const STORAGE_NOTICE_KEY = 'fst_smart_notice_seen_v1';
 const LEGACY_PROFILE_STORAGE_KEYS = ['fst_profile', 'staffProfile', 'profileDraft', 'profileSnapshot'];
 const ALL_STORAGE_KEYS = [
+  STORAGE_KEY,
+  STORAGE_NOTICE_KEY,
   DATA_STORE_STORAGE_KEY,
   PROFILE_STATE_STORAGE_KEY,
   SUBMIT_ENDPOINT_KEY,
@@ -27,6 +32,12 @@ const ALL_STORAGE_KEYS = [
 const ALL_SESSION_STORAGE_KEYS = [SUBMIT_TOKEN_SESSION_KEY];
 const SUBMISSION_HISTORY_LIMIT = 25;
 let submissionState = { isSubmitting: false, lastError: null, lastPayload: null };
+let isDirty = false;
+let lastSavedAt = null;
+let lastUnsavedReminderAt = 0;
+let storageWarningShown = false;
+let isStorageAvailable = true;
+let appStateLoaded = false;
 const WORKLOAD_INDEX_MAX = 50;
 const WORKLOAD_STATUS_THRESHOLDS = {
   lightMax: 19,
@@ -228,16 +239,250 @@ const WORKLOAD_STATUS_THRESHOLDS = {
       };
     })();
 
+    function checkStorageAvailability() {
+      if (typeof localStorage === 'undefined') return false;
+      try {
+        const testKey = '__fst_storage_check__';
+        localStorage.setItem(testKey, '1');
+        localStorage.removeItem(testKey);
+        return true;
+      } catch (error) {
+        return false;
+      }
+    }
+
+    function showStorageWarningOnce() {
+      if (storageWarningShown) return;
+      storageWarningShown = true;
+      showToast('Local storage is unavailable. Download Data is still available for backup.', 'warning');
+    }
+
+    function getElementSmartConfig() {
+      try {
+        return window.elementSdk?.config?.smartConfig || null;
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function buildAppStateSnapshot() {
+      return {
+        schemaVersion: SCHEMA_VERSION,
+        exportedAt: new Date().toISOString(),
+        appVersion: APP_VERSION,
+        profile: getProfile(),
+        records: Array.isArray(allRecords) ? [...allRecords] : [],
+        smartConfig: getElementSmartConfig(),
+        ui: {
+          lastActiveSection: currentSection
+        }
+      };
+    }
+
+    function applyAppStateSnapshot(snapshot, options = {}) {
+      if (!snapshot || typeof snapshot !== 'object') return false;
+      if (typeof snapshot.schemaVersion !== 'number') return false;
+      if (snapshot.schemaVersion !== SCHEMA_VERSION) return false;
+
+      const defaults = {
+        records: [],
+        ui: { lastActiveSection: 'home' }
+      };
+      const merged = {
+        ...defaults,
+        ...snapshot,
+        ui: { ...defaults.ui, ...(snapshot.ui || {}) }
+      };
+
+      const migratedRecords = Array.isArray(merged.records)
+        ? merged.records.map((record) => (typeof migrateRecord === 'function' ? migrateRecord(record) : record))
+        : [];
+
+      allRecords = migratedRecords;
+      currentSection = merged.ui.lastActiveSection || currentSection || 'home';
+
+      if (merged.profile && typeof merged.profile === 'object') {
+        const parsedProfileState = parseProfileState(merged.profile, { includeLocalState: false });
+        writeLocalJson(PROFILE_STATE_STORAGE_KEY, parsedProfileState);
+      }
+
+      if (!options.skipRender) {
+        updateTotalEntries();
+        renderNavigation();
+        renderSection(currentSection);
+        updateBreadcrumb();
+        updateProfileDisplay();
+        updateLiveScore();
+      }
+      updateSaveStatusIndicator();
+      return true;
+    }
+
+    function saveToLocalStorage(reason = 'manual') {
+      if (!isStorageAvailable) {
+        showStorageWarningOnce();
+        updateSaveStatusIndicator();
+        return false;
+      }
+      try {
+        const snapshot = buildAppStateSnapshot();
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+        lastSavedAt = Date.now();
+        isDirty = false;
+        updateSaveStatusIndicator();
+        return true;
+      } catch (error) {
+        isStorageAvailable = false;
+        showStorageWarningOnce();
+        updateSaveStatusIndicator();
+        return false;
+      }
+    }
+
+    function loadFromLocalStorage() {
+      if (!isStorageAvailable) {
+        showStorageWarningOnce();
+        return false;
+      }
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return false;
+        const snapshot = JSON.parse(raw);
+        const applied = applyAppStateSnapshot(snapshot, { skipRender: true });
+        appStateLoaded = applied;
+        return applied;
+      } catch (error) {
+        try {
+          localStorage.removeItem(STORAGE_KEY);
+        } catch (removeError) {
+          // Ignore cleanup failures
+        }
+        return false;
+      }
+    }
+
+    function updateSaveStatusIndicator() {
+      const indicator = document.getElementById('save-status-indicator');
+      if (!indicator) return;
+      if (isDirty) {
+        indicator.textContent = 'Editing, not saved';
+        return;
+      }
+      if (lastSavedAt) {
+        indicator.textContent = `Saved, ${new Date(lastSavedAt).toLocaleTimeString()}`;
+        return;
+      }
+      indicator.textContent = 'Not saved yet';
+    }
+
+    function markDirty() {
+      isDirty = true;
+      updateSaveStatusIndicator();
+    }
+
+    function setupDirtyTracking() {
+      const container = document.getElementById('app') || document.body;
+      if (!container) return;
+      container.addEventListener('input', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        if (!target.matches('input, textarea, select')) return;
+        markDirty();
+      });
+      container.addEventListener('change', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        if (!target.matches('input, textarea, select')) return;
+        markDirty();
+      });
+    }
+
+    function maybeShowUnsavedReminder() {
+      if (!isDirty) return;
+      if (currentSection === 'results') return;
+      const now = Date.now();
+      if (now - lastUnsavedReminderAt < 5 * 60 * 1000) return;
+      lastUnsavedReminderAt = now;
+      showToast('You have unsaved changes, click Add or Save, or download a backup', 'warning');
+    }
+
+    function setupUnsavedReminderTimer() {
+      setInterval(() => {
+        maybeShowUnsavedReminder();
+      }, 60 * 1000);
+    }
+
+    function getFirstLoadNoticeHtml() {
+      let seen = false;
+      if (isStorageAvailable) {
+        try {
+          seen = localStorage.getItem(STORAGE_NOTICE_KEY) === 'true';
+        } catch (error) {
+          seen = false;
+        }
+      }
+      if (seen) return '';
+      return `
+        <div id="storage-first-load-note" class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900">
+          <div class="flex items-start justify-between gap-3">
+            <p>Note, your data is stored locally in this browser. Clearing site data will erase local copies. Use Download Data to keep a backup.</p>
+            <button type="button" onclick="dismissStorageNotice()" class="text-xs font-semibold px-2 py-1 rounded border border-amber-300 hover:bg-amber-100">Dismiss</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function dismissStorageNotice() {
+      const note = document.getElementById('storage-first-load-note');
+      if (note) note.remove();
+      if (!isStorageAvailable) return;
+      try {
+        localStorage.setItem(STORAGE_NOTICE_KEY, 'true');
+      } catch (error) {
+        showStorageWarningOnce();
+      }
+    }
+
+    function buildBackupFilename() {
+      const now = new Date();
+      const pad = (value) => String(value).padStart(2, '0');
+      return `fst_smart_backup_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}.json`;
+    }
+
+    function downloadDataSnapshot() {
+      const snapshot = buildAppStateSnapshot();
+      const json = JSON.stringify(snapshot, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = buildBackupFilename();
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      showToast('Download started');
+    }
+
     // =========================
     // App Initialization
     // =========================
     async function initializeApp() {
+      isStorageAvailable = checkStorageAvailability();
+      if (!isStorageAvailable) {
+        showStorageWarningOnce();
+      }
+
       const dataHandler = {
         onDataChanged(data) {
           allRecords = (Array.isArray(data) ? data : []).map(migrateRecord);
+          if (!appStateLoaded) {
+            loadFromLocalStorage();
+          }
           updateTotalEntries();
           renderNavigation();
           renderSection(currentSection);
+          updateSaveStatusIndicator();
         }
       };
 
@@ -253,6 +498,8 @@ const WORKLOAD_STATUS_THRESHOLDS = {
         showToast('Failed to initialize application', 'error');
         return;
       }
+
+      loadFromLocalStorage();
 
       if (window.elementSdk) {
         await window.elementSdk.init({
@@ -278,6 +525,7 @@ const WORKLOAD_STATUS_THRESHOLDS = {
               subtitleElement.textContent = config.app_subtitle || defaultConfig.app_subtitle;
               subtitleElement.style.fontSize = `${baseSize * 0.875}px`;
             }
+            saveToLocalStorage('config');
           },
           mapToCapabilities: (config) => ({
             recolorables: [
@@ -341,7 +589,9 @@ const WORKLOAD_STATUS_THRESHOLDS = {
       }
 
       renderNavigation();
-      renderSection('home');
+      renderSection(currentSection || 'home');
+      updateBreadcrumb();
+      updateSaveStatusIndicator();
     }
 
     // =========================
@@ -352,6 +602,17 @@ const WORKLOAD_STATUS_THRESHOLDS = {
       if (counter) {
         counter.textContent = allRecords.length;
       }
+    }
+
+    function ensureSaveStatusIndicator() {
+      if (document.getElementById('save-status-indicator')) return;
+      const headerStat = document.getElementById('total-entries')?.parentElement;
+      if (!headerStat) return;
+      const statusLine = document.createElement('div');
+      statusLine.id = 'save-status-indicator';
+      statusLine.className = 'text-xs text-gray-500 mt-1';
+      statusLine.textContent = 'Not saved yet';
+      headerStat.appendChild(statusLine);
     }
 
     function showStandaloneBanner() {
@@ -948,6 +1209,7 @@ const WORKLOAD_STATUS_THRESHOLDS = {
 
       return `
         <div class="max-w-3xl mx-auto space-y-4">
+          ${getFirstLoadNoticeHtml()}
           ${renderSavedProfileSummary(profile)}
 
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -1072,6 +1334,13 @@ const WORKLOAD_STATUS_THRESHOLDS = {
                          placeholder="e.g., Laboratory Coordinator">
                 </div>
 
+              </div>
+
+              <div class="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <button type="button" onclick="downloadDataSnapshot()" class="px-4 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 transition text-sm">Download Data</button>
+                  <p class="text-xs text-emerald-900">Clearing site data will erase local copies, download a backup regularly</p>
+                </div>
               </div>
 
               <button type="submit" id="save_profile_btn" class="w-full px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
@@ -1271,6 +1540,7 @@ const WORKLOAD_STATUS_THRESHOLDS = {
         if (currentSection === 'profile') {
           renderSection('profile');
         }
+        saveToLocalStorage('profile');
         showToast('Profile saved successfully!');
         setTimeout(() => {
           navigateToSection('teaching');
@@ -1288,6 +1558,7 @@ const WORKLOAD_STATUS_THRESHOLDS = {
 
       if (result.isOk) {
         writeLocalJson(PROFILE_STATE_STORAGE_KEY, {});
+        saveToLocalStorage('delete');
         showToast('Profile deleted successfully!');
       } else {
         showToast('Failed to delete profile', 'error');
@@ -2846,6 +3117,8 @@ function getSubmitToken() {
 
       return `
         <div class="space-y-5">
+          ${getFirstLoadNoticeHtml()}
+
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div class="space-y-2">
@@ -2888,6 +3161,15 @@ function getSubmitToken() {
             <button onclick="navigateToSection('teaching')" class="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold text-gray-700 hover:border-sky-400 hover:text-sky-700 transition">📚 Teaching</button>
             <button onclick="navigateToSection('supervision')" class="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold text-gray-700 hover:border-sky-400 hover:text-sky-700 transition">🎓 Supervision</button>
             <button onclick="navigateToSection('results')" class="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold text-gray-700 hover:border-sky-400 hover:text-sky-700 transition">📊 Results</button>
+          </div>
+
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <button type="button" onclick="downloadDataSnapshot()" class="px-4 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 transition">
+                ⬇️ Download Data
+              </button>
+              <p class="text-xs text-gray-600">Clearing site data will erase local copies, download a backup regularly</p>
+            </div>
           </div>
 
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -3214,6 +3496,7 @@ function getSubmitToken() {
       btn.innerHTML = '➕ Add Course';
       
       if (result.isOk) {
+        saveToLocalStorage('add');
         showToast('Course added successfully!');
         document.getElementById('teaching-form').reset();
         renderTeachingLivePreview();
@@ -3229,6 +3512,7 @@ function getSubmitToken() {
       const result = await window.dataSdk.delete(course);
       
       if (result.isOk) {
+        saveToLocalStorage('delete');
         showToast('Course deleted successfully!');
       } else {
         showToast('Failed to delete course', 'error');
@@ -3541,6 +3825,7 @@ function getSubmitToken() {
           if (breakdown.excluded_reason) {
             showToast('This item is outside the reporting period and will be saved but not counted in score.', 'warning');
           } else {
+            saveToLocalStorage('add');
             showToast('Student added successfully!');
           }
           form.reset();
@@ -3561,6 +3846,7 @@ function getSubmitToken() {
       const result = await window.dataSdk.delete(student);
       
       if (result.isOk) {
+        saveToLocalStorage('delete');
         showToast('Student deleted successfully!');
       } else {
         showToast('Failed to delete student', 'error');
@@ -3815,6 +4101,7 @@ function getSubmitToken() {
       btn.innerHTML = 'Add';
 
       if (result.isOk) {
+        saveToLocalStorage('add');
         if (excludedReason) { showToast('This item is outside the reporting period and will be saved but not counted in score.', 'warning'); } else { showToast('Research project added successfully!'); }
         form.reset();
         renderSection('research');
@@ -4065,6 +4352,7 @@ function getSubmitToken() {
       btn.disabled = false;
       btn.innerHTML = 'Add';
       if (result.isOk) {
+        saveToLocalStorage('add');
         showToast('Publication added successfully!');
         form.reset();
         renderSection('publications');
@@ -4078,6 +4366,7 @@ function getSubmitToken() {
       if (!publication) return;
       const result = await window.dataSdk.delete(publication);
       if (result.isOk) {
+        saveToLocalStorage('delete');
         showToast('Publication deleted successfully!');
         renderPublicationsLivePreview();
       } else {
@@ -4217,6 +4506,7 @@ function getSubmitToken() {
       btn.disabled = false;
       btn.innerHTML = 'Add';
       if (result.isOk) {
+        saveToLocalStorage('add');
         if (excludedReason) { showToast('This item is outside the reporting period and will be saved but not counted in score.', 'warning'); } else { showToast('Administration role added successfully!'); }
         form.reset();
         renderSection('administration');
@@ -4340,6 +4630,7 @@ function getSubmitToken() {
       btn.disabled = false;
       btn.innerHTML = 'Add';
       if (result.isOk) {
+        saveToLocalStorage('add');
         if (excludedReason) { showToast('This item is outside the reporting period and will be saved but not counted in score.', 'warning'); } else { showToast('Duty added successfully!'); }
         form.reset();
         renderSection('administration');
@@ -4353,6 +4644,7 @@ function getSubmitToken() {
       if (!duty) return;
       const result = await window.dataSdk.delete(duty);
       if (result.isOk) {
+        saveToLocalStorage('delete');
         showToast('Duty deleted successfully!');
         renderAdminDutiesLivePreview();
       } else {
@@ -4472,6 +4764,7 @@ function getSubmitToken() {
       btn.disabled = false;
       btn.innerHTML = 'Add';
       if (result.isOk) {
+        saveToLocalStorage('add');
         if (excludedReason) { showToast('This item is outside the reporting period and will be saved but not counted in score.', 'warning'); } else { showToast('Service entry added successfully!'); }
         form.reset();
         renderSection('service');
@@ -4485,6 +4778,7 @@ function getSubmitToken() {
       if (!service) return;
       const result = await window.dataSdk.delete(service);
       if (result.isOk) {
+        saveToLocalStorage('delete');
         showToast('Service entry deleted successfully!');
         renderServiceLivePreview();
       } else {
@@ -4602,6 +4896,7 @@ function getSubmitToken() {
       btn.disabled = false;
       btn.innerHTML = 'Add';
       if (result.isOk) {
+        saveToLocalStorage('add');
         if (excludedReason) { showToast('This item is outside the reporting period and will be saved but not counted in score.', 'warning'); } else { showToast('Laboratory item added successfully!'); }
         form.reset();
         renderSection('laboratory');
@@ -4615,6 +4910,7 @@ function getSubmitToken() {
       if (!lab) return;
       const result = await window.dataSdk.delete(lab);
       if (result.isOk) {
+        saveToLocalStorage('delete');
         showToast('Laboratory item deleted successfully!');
         renderLaboratoryLivePreview();
       } else {
@@ -4731,6 +5027,7 @@ function getSubmitToken() {
       btn.disabled = false;
       btn.innerHTML = 'Add';
       if (result.isOk) {
+        saveToLocalStorage('add');
         if (excludedReason) { showToast('This item is outside the reporting period and will be saved but not counted in score.', 'warning'); } else { showToast('Professional activity added successfully!'); }
         form.reset();
         renderSection('professional');
@@ -4744,6 +5041,7 @@ function getSubmitToken() {
       if (!prof) return;
       const result = await window.dataSdk.delete(prof);
       if (result.isOk) {
+        saveToLocalStorage('delete');
         showToast('Professional activity deleted successfully!');
         renderProfessionalLivePreview();
       } else {
@@ -5132,6 +5430,7 @@ function getSubmitToken() {
 
       const isLocked = Boolean(document.getElementById('benchmark-lock-toggle')?.checked);
       writeSmartConfig({ ...config, sectionBenchmarks, sectionWeightsByStaffCategory, adminConfig: { ...config.adminConfig, isBenchmarkLocked: isLocked } }, (getProfile()?.profile_name || 'unknown'));
+      saveToLocalStorage('config');
       showToast('SMART settings saved');
       renderSection('results');
     }
@@ -5392,6 +5691,9 @@ function getSubmitToken() {
                     <button onclick="copyToClipboard(); toggleResultsExportMenu();" class="block w-full text-left px-4 py-2 hover:bg-gray-50">📑 Copy summary</button>
                   </div>
                 </div>
+                <button type="button" onclick="downloadDataSnapshot()" class="h-10 px-4 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 transition flex items-center gap-2 text-sm">
+                  <span>⬇️</span> Download Data
+                </button>
                 <button id="submit-report" class="h-10 px-4 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700 transition flex items-center gap-2 text-sm">
                   <span>🚀</span> Submit report
                 </button>
@@ -5486,6 +5788,7 @@ function getSubmitToken() {
       const result = await window.dataSdk.delete(record);
       
       if (result.isOk) {
+        saveToLocalStorage('delete');
         showToast('Record deleted successfully!');
       } else {
         showToast('Failed to delete record', 'error');
@@ -5493,9 +5796,13 @@ function getSubmitToken() {
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+      ensureSaveStatusIndicator();
+      setupDirtyTracking();
+      setupUnsavedReminderTimer();
       initializeApp();
       bindSubmitButton();
       setupMobileNav();
+      updateSaveStatusIndicator();
     });
 
     // Reset Functions
@@ -5537,6 +5844,7 @@ function getSubmitToken() {
       btn.innerHTML = '✓ Yes, Delete All Activities';
       
       if (errorCount === 0) {
+        saveToLocalStorage('bulk');
         showToast(`Successfully cleared ${successCount} activity records!`);
         cancelClearActivities();
       } else {
@@ -5570,6 +5878,7 @@ function getSubmitToken() {
       btn.disabled = false;
       btn.innerHTML = '✓ Yes, Delete Everything';
 
+      saveToLocalStorage('bulk');
       showToast(`Successfully reset all data (${deletedCount} records deleted)!`);
       cancelResetAll();
       navigateToSection('profile');
