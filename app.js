@@ -73,7 +73,7 @@ const WORKLOAD_STATUS_THRESHOLDS = {
       app_subtitle: 'Faculty of Science and Technology, Universiti Malaysia Sabah — SMART: Staff Monitoring and Assessment for Roles and Tasks'
     };
 
-    const CONFIG_SMART = {
+const CONFIG_SMART = {
       systemNameShort: 'SMART',
       systemNameFull: 'FST SMART Calculator',
       sectionWeightsByStaffCategory: {
@@ -121,6 +121,116 @@ const WORKLOAD_STATUS_THRESHOLDS = {
       adminConfig: {
         allowBenchmarkEditRoles: ['management', 'system_admin'],
         isBenchmarkLocked: false
+      }
+    };
+
+    // Staff-category taxonomy for Administration, Service, and Professional picklists/help/benchmarks.
+    const CONFIG_ROLE_TAXONOMY = {
+      academic: {
+        administrationLeadershipRoles: [
+          { value: 'Dean', label: 'Dean' },
+          { value: 'Deputy Dean', label: 'Deputy Dean' },
+          { value: 'Head of Programme', label: 'Head of Programme' },
+          { value: 'Programme Coordinator', label: 'Programme Coordinator' },
+          { value: 'Other', label: 'Other' }
+        ],
+        administrationDutiesRoles: [
+          { value: 'chairperson', label: 'Chairperson' },
+          { value: 'deputy', label: 'Deputy' },
+          { value: 'secretary', label: 'Secretary' },
+          { value: 'member', label: 'Member' }
+        ],
+        serviceTypes: [
+          { value: 'Committee Service', label: 'Committee Service' },
+          { value: 'Community Engagement', label: 'Community Engagement' },
+          { value: 'Expert Contribution', label: 'Expert Contribution' },
+          { value: 'Other', label: 'Other' }
+        ],
+        professionalTypes: [
+          { value: 'Professional Body Leadership', label: 'Professional Body Leadership' },
+          { value: 'Professional Certification', label: 'Professional Certification' },
+          { value: 'Conference Organizer', label: 'Conference Organizer' },
+          { value: 'Professional Training', label: 'Professional Training' },
+          { value: 'Membership', label: 'Membership' },
+          { value: 'Other', label: 'Other' }
+        ],
+        sectionHelpText: {
+          administration: 'Academic administration entries should focus on leadership and committee duty roles performed during the reporting period.',
+          service: 'Academic service includes committees, outreach, and expert contribution in faculty, university, or external settings.',
+          professional: 'Academic professional activities include professional bodies, certifications, events, and recognised development work.'
+        },
+        defaultBenchmarks: { administration: 1, service: 1, professional: 1 },
+        administrationDutiesRolePoints: { chairperson: 10, deputy: 8, secretary: 6, member: 4 }
+      },
+      administration: {
+        administrationLeadershipRoles: [
+          { value: 'Director', label: 'Director' },
+          { value: 'Head of Unit', label: 'Head of Unit' },
+          { value: 'Section Lead', label: 'Section Lead' },
+          { value: 'Other', label: 'Other' }
+        ],
+        administrationDutiesRoles: [
+          { value: 'head', label: 'Head' },
+          { value: 'supervisor', label: 'Supervisor' },
+          { value: 'lead_clerk', label: 'Lead Clerk' },
+          { value: 'officer', label: 'Officer' },
+          { value: 'member', label: 'Member' }
+        ],
+        serviceTypes: [
+          { value: 'Operational Committee', label: 'Operational Committee' },
+          { value: 'Client Service', label: 'Client Service' },
+          { value: 'Process Improvement', label: 'Process Improvement' },
+          { value: 'Other', label: 'Other' }
+        ],
+        professionalTypes: [
+          { value: 'Professional Certification', label: 'Professional Certification' },
+          { value: 'Compliance Training', label: 'Compliance Training' },
+          { value: 'Workshop Facilitation', label: 'Workshop Facilitation' },
+          { value: 'Membership', label: 'Membership' },
+          { value: 'Other', label: 'Other' }
+        ],
+        sectionHelpText: {
+          administration: 'Administration staff should record leadership posts and duty roles tied to operational governance and support.',
+          service: 'Administration service reflects institutional support, customer-facing service, and process-oriented contributions.',
+          professional: 'Administration professional development should capture certifications, compliance, and role-relevant training.'
+        },
+        defaultBenchmarks: { administration: 2, service: 1, professional: 1 },
+        administrationDutiesRolePoints: { head: 10, supervisor: 8, lead_clerk: 6, officer: 4, member: 3 }
+      },
+      lab: {
+        administrationLeadershipRoles: [
+          { value: 'Lab Head', label: 'Lab Head' },
+          { value: 'Technical Coordinator', label: 'Technical Coordinator' },
+          { value: 'Unit Lead', label: 'Unit Lead' },
+          { value: 'Other', label: 'Other' }
+        ],
+        administrationDutiesRoles: [
+          { value: 'lab_manager', label: 'Lab Manager' },
+          { value: 'safety_officer', label: 'Safety Officer' },
+          { value: 'instrument_custodian', label: 'Instrument Custodian' },
+          { value: 'scheduler', label: 'Scheduler' },
+          { value: 'member', label: 'Member' }
+        ],
+        serviceTypes: [
+          { value: 'Technical Support Service', label: 'Technical Support Service' },
+          { value: 'Safety Outreach', label: 'Safety Outreach' },
+          { value: 'Equipment Advisory', label: 'Equipment Advisory' },
+          { value: 'Other', label: 'Other' }
+        ],
+        professionalTypes: [
+          { value: 'Laboratory Certification', label: 'Laboratory Certification' },
+          { value: 'Safety Compliance', label: 'Safety Compliance' },
+          { value: 'Technical Workshop', label: 'Technical Workshop' },
+          { value: 'Membership', label: 'Membership' },
+          { value: 'Other', label: 'Other' }
+        ],
+        sectionHelpText: {
+          administration: 'Lab staff administration should document technical governance duties such as safety and instrument stewardship.',
+          service: 'Lab service includes technical support, safety-facing service, and specialist advisory contributions.',
+          professional: 'Lab professional items track technical credentials and compliance-oriented development activities.'
+        },
+        defaultBenchmarks: { administration: 1, service: 1, professional: 1 },
+        administrationDutiesRolePoints: { lab_manager: 10, safety_officer: 8, instrument_custodian: 6, scheduler: 4, member: 3 }
       }
     };
 
@@ -933,6 +1043,7 @@ const WORKLOAD_STATUS_THRESHOLDS = {
 
     const PROFILE_CATEGORY_LABELS = {
       academic: 'Academic Staff',
+      administration: 'Administration Staff',
       admin: 'Administration Staff',
       lab: 'Lab Staff'
     };
@@ -940,9 +1051,24 @@ const WORKLOAD_STATUS_THRESHOLDS = {
     function normalizeProfileCategoryKey(value) {
       const category = String(value || '').trim().toLowerCase();
       if (category === 'academic staff' || category === 'academic') return 'academic';
+      if (category === 'administration' || category === 'administration staff') return 'administration';
       if (category === 'administration staff' || category === 'admin') return 'admin';
       if (category === 'lab staff' || category === 'laboratory staff' || category === 'lab') return 'lab';
       return '';
+    }
+
+    // Staff category switch helper: defaults to academic for backward compatibility.
+    function getStaffCategory(profile = getProfile()) {
+      const parsed = parseProfileState(profile, { includeLocalState: true });
+      const key = normalizeProfileCategoryKey(parsed.staff_category || profile?.profile_category || 'academic') || 'academic';
+      if (key === 'admin') return 'administration';
+      if (key === 'administration') return 'administration';
+      if (key === 'lab') return 'lab';
+      return 'academic';
+    }
+
+    function getRoleTaxonomy(staffCategory = getStaffCategory()) {
+      return CONFIG_ROLE_TAXONOMY[staffCategory] || CONFIG_ROLE_TAXONOMY.academic;
     }
 
     function normalizeProfileCategory(value) {
@@ -956,7 +1082,8 @@ const WORKLOAD_STATUS_THRESHOLDS = {
 
 
     function getActiveSectionWeights(profile = getProfile(), config = readSmartConfig()) {
-      const categoryKey = normalizeProfileCategoryKey(profile?.profile_category || profile?.staff_category || 'academic') || 'academic';
+      const categoryKeyRaw = normalizeProfileCategoryKey(profile?.profile_category || profile?.staff_category || 'academic') || 'academic';
+      const categoryKey = categoryKeyRaw === 'administration' ? 'admin' : categoryKeyRaw;
       const allWeights = config.sectionWeightsByStaffCategory || CONFIG_SMART.sectionWeightsByStaffCategory;
       return {
         ...(allWeights?.academic || CONFIG_SMART.sectionWeightsByStaffCategory.academic),
@@ -1085,6 +1212,17 @@ const WORKLOAD_STATUS_THRESHOLDS = {
         migrated.prof_start_date = toFirstDayOfYearDate(migrated.prof_year);
       }
 
+      // Backward compatibility: map stored role values to safe fallback for current staff category.
+      const activeCategory = getStaffCategory();
+      const taxonomy = getRoleTaxonomy(activeCategory);
+      if (migrated.section === 'admin_duties' && migrated.duty_role) {
+        const allowed = (taxonomy.administrationDutiesRoles || []).map((opt) => String(opt.value).toLowerCase());
+        if (!allowed.includes(String(migrated.duty_role).toLowerCase())) {
+          migrated.legacyRoleLabel = migrated.duty_role;
+          migrated.duty_role = (taxonomy.administrationDutiesRoles?.find((opt) => String(opt.value).toLowerCase() === 'member')?.value) || (taxonomy.administrationDutiesRoles?.[0]?.value) || 'member';
+        }
+      }
+
       return migrated;
     }
 
@@ -1137,7 +1275,7 @@ const WORKLOAD_STATUS_THRESHOLDS = {
         ...parsedState,
         staff_name: parsedState.staff_name || profile?.profile_name || legacyExtras.staff_display_name || localState.staff_name || '',
         staff_id: parsedState.staff_id || profile?.profile_staff_id || localState.staff_id || '',
-        staff_category: normalizeProfileCategory(parsedState.staff_category || legacyCategory || localState.staff_category),
+        staff_category: normalizeProfileCategoryKey(parsedState.staff_category || legacyCategory || localState.staff_category) || 'academic',
         admin_status: resolvedAdminStatus === 'admin' || resolvedAdminStatus === 'non_admin' ? resolvedAdminStatus : '',
         programme: parsedState.programme || profile?.profile_programme || localState.programme || '',
         academic_rank: parsedState.academic_rank || profile?.profile_rank || localState.academic_rank || '',
@@ -1239,9 +1377,9 @@ const WORKLOAD_STATUS_THRESHOLDS = {
                   <label for="staff_category" class="block text-sm font-semibold text-gray-700 mb-2">Staff Category *</label>
                   <select id="staff_category" required onchange="toggleCategoryFields()" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
                     <option value="">Select category</option>
-                    <option value="Academic Staff" ${profileState.staff_category === 'Academic Staff' ? 'selected' : ''}>Academic Staff</option>
-                    <option value="Administration Staff" ${profileState.staff_category === 'Administration Staff' ? 'selected' : ''}>Administration Staff</option>
-                    <option value="Lab Staff" ${profileState.staff_category === 'Lab Staff' ? 'selected' : ''}>Lab Staff</option>
+                    <option value="academic" ${normalizeProfileCategoryKey(profileState.staff_category) === 'academic' ? 'selected' : ''}>Academic</option>
+                    <option value="administration" ${['administration','admin'].includes(normalizeProfileCategoryKey(profileState.staff_category)) ? 'selected' : ''}>Administration</option>
+                    <option value="lab" ${normalizeProfileCategoryKey(profileState.staff_category) === 'lab' ? 'selected' : ''}>Lab</option>
                   </select>
                 </div>
 
@@ -1427,6 +1565,10 @@ const WORKLOAD_STATUS_THRESHOLDS = {
         const labPos = document.getElementById('laboratory_position');
         if (labPos) labPos.value = '';
       }
+
+      if (['administration', 'service', 'professional', 'results'].includes(currentSection)) {
+        renderSection(currentSection);
+      }
     }
 
     function applyReportingPeriodPreset() {
@@ -1475,7 +1617,7 @@ const WORKLOAD_STATUS_THRESHOLDS = {
       const profileState = {
         staff_name: (document.getElementById('staff_name')?.value || '').trim(),
         staff_id: staffId,
-        staff_category: normalizeProfileCategory(document.getElementById('staff_category')?.value || ''),
+        staff_category: normalizeProfileCategoryKey(document.getElementById('staff_category')?.value || ''),
         admin_status: '',
         staff_grade: (document.getElementById('staff_grade')?.value || '').trim(),
         reporting_period_type: (document.getElementById('reporting_period_type')?.value || 'Semester').trim(),
@@ -1721,6 +1863,14 @@ const WORKLOAD_STATUS_THRESHOLDS = {
       }
     }
 
+
+    function getDefaultBenchmarksByStaffCategory() {
+      return {
+        academic: { administration: CONFIG_ROLE_TAXONOMY.academic.defaultBenchmarks.administration, service: CONFIG_ROLE_TAXONOMY.academic.defaultBenchmarks.service, professional: CONFIG_ROLE_TAXONOMY.academic.defaultBenchmarks.professional },
+        administration: { administration: CONFIG_ROLE_TAXONOMY.administration.defaultBenchmarks.administration, service: CONFIG_ROLE_TAXONOMY.administration.defaultBenchmarks.service, professional: CONFIG_ROLE_TAXONOMY.administration.defaultBenchmarks.professional },
+        lab: { administration: CONFIG_ROLE_TAXONOMY.lab.defaultBenchmarks.administration, service: CONFIG_ROLE_TAXONOMY.lab.defaultBenchmarks.service, professional: CONFIG_ROLE_TAXONOMY.lab.defaultBenchmarks.professional }
+      };
+    }
     function readSmartConfig() {
       if (typeof localStorage === 'undefined') return { ...CONFIG_SMART };
       try {
@@ -1745,6 +1895,7 @@ const WORKLOAD_STATUS_THRESHOLDS = {
             lab: { ...(defaultWeightsByCategory.lab || {}), ...(savedWeightsByCategory.lab || {}) }
           },
           sectionBenchmarks: { ...CONFIG_SMART.sectionBenchmarks, ...(savedConfig.sectionBenchmarks || {}) },
+          sectionBenchmarksByStaffCategory: { ...getDefaultBenchmarksByStaffCategory(), ...(savedConfig.sectionBenchmarksByStaffCategory || {}) },
           adminConfig: { ...CONFIG_SMART.adminConfig, ...(savedConfig.adminConfig || {}) }
         };
       } catch (error) {
@@ -1768,6 +1919,7 @@ const WORKLOAD_STATUS_THRESHOLDS = {
             lab: { ...(defaultWeightsByCategory.lab || {}), ...(nextConfig.sectionWeightsByStaffCategory?.lab || {}) }
           },
           sectionBenchmarks: { ...CONFIG_SMART.sectionBenchmarks, ...(nextConfig.sectionBenchmarks || {}) },
+          sectionBenchmarksByStaffCategory: { ...getDefaultBenchmarksByStaffCategory(), ...(nextConfig.sectionBenchmarksByStaffCategory || {}) },
           adminConfig: { ...CONFIG_SMART.adminConfig, ...(nextConfig.adminConfig || {}) },
           lastUpdatedAt: new Date().toISOString(),
           lastUpdatedBy: actor
@@ -2462,6 +2614,8 @@ function getSubmitToken() {
         ...(smartConfig.sectionBenchmarks || {})
       };
       const activeWeights = getActiveSectionWeights(getProfile(), smartConfig);
+      const staffCategory = getStaffCategory();
+      const categoryBenchmarks = (smartConfig.sectionBenchmarksByStaffCategory || getDefaultBenchmarksByStaffCategory())[staffCategory] || CONFIG_ROLE_TAXONOMY.academic.defaultBenchmarks;
       const rawAdministration = rawScores.adminLeadership + rawScores.adminDuties;
 
       const rawByCategory = {
@@ -2480,10 +2634,10 @@ function getSubmitToken() {
         Supervision: Number(benchmarks.SupervisionBenchmarkMastersMain || 0),
         Research: Number(benchmarks.ResearchBenchmark || 0),
         Publications: Number(benchmarks.PublicationsBenchmarkPapers || 0),
-        Administration: Number(benchmarks.AdminBenchmarkUniversityAppointments || 0),
+        Administration: Number(categoryBenchmarks.administration ?? benchmarks.AdminBenchmarkUniversityAppointments ?? 0),
         Laboratory: Number(benchmarks.LaboratoryBenchmark || 1),
-        Service: Number(benchmarks.ServiceBenchmark || 0),
-        Professional: Number(benchmarks.ProfessionalBenchmark || 0)
+        Service: Number(categoryBenchmarks.service ?? benchmarks.ServiceBenchmark ?? 0),
+        Professional: Number(categoryBenchmarks.professional ?? benchmarks.ProfessionalBenchmark ?? 0)
       };
 
       const achievements = {};
@@ -2625,12 +2779,16 @@ function getSubmitToken() {
     }
 
     // ADMIN DUTIES: Role points only
-    function getAdminDutyRolePoints(role) {
-      if (role === 'Chairperson') return 4;
-      if (role === 'Secretary') return 3;
-      if (role === 'Member') return 2;
-      return 1;
+    function getAdminDutyRolePoints(role, staffCategory = getStaffCategory()) {
+      // Per-category role points table: duties scoring depends on role only.
+      const taxonomy = getRoleTaxonomy(staffCategory);
+      const pointsTable = taxonomy.administrationDutiesRolePoints || {};
+      const normalizedRole = String(role || '').trim().toLowerCase();
+      const matched = Object.keys(pointsTable).find((key) => key.toLowerCase() === normalizedRole);
+      if (matched) return Number(pointsTable[matched] || 0);
+      return Number(pointsTable.member || 0);
     }
+
 
     function getAdminDutyEntryBreakdown(duty) {
       if (!duty?.duty_role) {
@@ -3914,6 +4072,13 @@ function getSubmitToken() {
       professionalType: ['Professional Body Leadership', 'Professional Certification', 'Conference Organizer', 'Editorial Board', 'Professional Training', 'Membership', 'Other']
     };
 
+
+
+    function getCategoryOptionLabels(optionKey, staffCategory = getStaffCategory()) {
+      const taxonomy = getRoleTaxonomy(staffCategory);
+      const list = Array.isArray(taxonomy?.[optionKey]) ? taxonomy[optionKey] : [];
+      return list.map((item) => item.label);
+    }
     function normalizeSelectWithOther(rawValue, optionsArray) {
       const normalizedRawValue = (rawValue || '').trim();
       if (!normalizedRawValue) return { selected: '', other: '' };
@@ -4400,7 +4565,7 @@ function getSubmitToken() {
     }
 
     function getAdministrationDraftInputState() {
-      const position = getOtherSpecifyValue({ baseId: 'admin-position', optionsArray: OTHER_SPECIFY_OPTIONS.administrationPosition });
+      const position = getOtherSpecifyValue({ baseId: 'admin-position', optionsArray: getCategoryOptionLabels('administrationLeadershipRoles') });
       return {
         admin_position: position.selected,
         admin_other_position: position.other,
@@ -4423,7 +4588,9 @@ function getSubmitToken() {
             baseTableHtml: '<p><strong>Base points by position:</strong> Dean 20, Deputy Dean 15, Centre Director 12, Head of Programme 10, Postgraduate Coordinator 8, Programme Coordinator 6, Other 5</p>',
             factorTableHtml: '<p><strong>Active fraction:</strong> overlap_days ÷ reporting_days (clamped 0 to 1).</p>',
             workedExampleHtml: '<strong>Example:</strong> Head of Programme with 183 active days in a 366-day reporting period → 10 × (183/366) = 5.00 points.',
-            notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>Points are prorated by active days within reporting period.</li><li>Allowance does not affect points.</li></ul>'
+            notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>Points are prorated by active days within reporting period.</li><li>Allowance and unit/faculty are descriptive only.</li></ul>',
+            scoringDrivers: ['Leadership position', 'Active fraction from overlap dates'],
+            descriptiveOnlyFields: ['Unit/Faculty', 'Allowance flags and amount']
           })}
 
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -4433,8 +4600,8 @@ function getSubmitToken() {
                 ${createOtherSpecifyBlock({
                   sectionKey: 'administration',
                   baseId: 'admin-position',
-                  labelText: 'Position',
-                  optionsArray: OTHER_SPECIFY_OPTIONS.administrationPosition,
+                  labelText: 'Position' + ' *',
+                  optionsArray: getCategoryOptionLabels('administrationLeadershipRoles'),
                   valueKey: 'admin_position',
                   otherTextKey: 'admin_other_position',
                   specifyLabel: 'Specify',
@@ -4442,9 +4609,9 @@ function getSubmitToken() {
                   required: false,
                   selectPlaceholder: 'Select (optional)'
                 })}
-                <div><label for="admin-faculty" class="block text-sm font-semibold text-gray-700 mb-2">Unit/Faculty *</label><input id="admin-faculty" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="admin-faculty" class="block text-sm font-semibold text-gray-700 mb-2">Unit/Faculty (descriptive only) *</label><input id="admin-faculty" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="admin-start-date" class="block text-sm font-semibold text-gray-700 mb-2">Start Date *</label><input id="admin-start-date" type="date" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-                <div><label for="admin-end-date" class="block text-sm font-semibold text-gray-700 mb-2">End Date</label><input id="admin-end-date" type="date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div><div><label class="block text-sm font-semibold text-gray-700 mb-2">Receives allowance?</label><label class="inline-flex items-center gap-2"><input type="checkbox" id="admin-has-allowance"><span>Yes</span></label></div><div><label for="admin-allowance-amount" class="block text-sm font-semibold text-gray-700 mb-2">Allowance amount</label><input id="admin-allowance-amount" type="number" min="0" step="0.01" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="admin-end-date" class="block text-sm font-semibold text-gray-700 mb-2">End Date</label><input id="admin-end-date" type="date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div><div><label class="block text-sm font-semibold text-gray-700 mb-2">Receives allowance?</label><label class="inline-flex items-center gap-2"><input type="checkbox" id="admin-has-allowance"><span>Yes</span></label></div><div><label for="admin-allowance-amount" class="block text-sm font-semibold text-gray-700 mb-2">Allowance amount (descriptive only)</label><input id="admin-allowance-amount" type="number" min="0" step="0.01" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
               </div>
               <div class="flex justify-end"><button type="submit" id="save-administration-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add</button></div>
             </form>
@@ -4455,7 +4622,7 @@ function getSubmitToken() {
             items: adminEntries,
             renderItem: (item) => {
               const b = getAdministrationEntryBreakdown(item);
-              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p><strong>${escapeHtml(getOtherSpecifyMetadata(item, 'admin_position', 'admin_other_position', OTHER_SPECIFY_OPTIONS.administrationPosition).display)}</strong></p><p>Start: ${escapeHtml(item.admin_start_date || '-')}</p><p>End: ${escapeHtml(item.admin_end_date || '-')}</p><p>Active fraction: ${b.active_fraction.toFixed(3)}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p>${b.excluded_reason ? `<p class=\"text-amber-700 font-medium\">Excluded: ${escapeHtml(b.excluded_reason)}</p>` : ''}</div><button onclick="deleteAdministration('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
+              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p><strong>${escapeHtml(getOtherSpecifyMetadata(item, 'admin_position', 'admin_other_position', getCategoryOptionLabels('administrationLeadershipRoles')).display)}</strong></p><p>Start: ${escapeHtml(item.admin_start_date || '-')}</p><p>End: ${escapeHtml(item.admin_end_date || '-')}</p><p>Active fraction: ${b.active_fraction.toFixed(3)}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p>${b.excluded_reason ? `<p class=\"text-amber-700 font-medium\">Excluded: ${escapeHtml(b.excluded_reason)}</p>` : ''}</div><button onclick="deleteAdministration('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
             }
           })}
 
@@ -4466,13 +4633,14 @@ function getSubmitToken() {
 
 
     function renderAdministrationCombined() {
+      const taxonomy = getRoleTaxonomy(getStaffCategory());
       const leadershipSubtotal = Math.round(getRecordsBySection('administration').reduce((sum, item) => sum + calculateAdministrationScore(item), 0) * 100) / 100;
       const dutiesSubtotal = Math.round(getRecordsBySection('admin_duties').reduce((sum, item) => sum + calculateAdminDutyScore(item), 0) * 100) / 100;
       const administrationTotal = Math.round((leadershipSubtotal + dutiesSubtotal) * 100) / 100;
       return `
         <div class="space-y-6">
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-            <h2 class="heading-font text-2xl font-bold text-gray-900 mb-3">🏛️ Administration</h2>
+            <h2 class="heading-font text-2xl font-bold text-gray-900 mb-2">🏛️ Administration</h2><p class="text-sm text-gray-600 mb-3">${escapeHtml(taxonomy.sectionHelpText?.administration || '')}</p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm mb-3">
               <div class="rounded-lg border border-sky-200 bg-sky-50 p-3"><p class="text-gray-600">Administration total</p><p class="text-xl font-bold text-sky-800">${administrationTotal.toFixed(2)}</p></div>
               <div class="rounded-lg border border-gray-200 bg-white p-3"><p class="text-gray-600">Leadership subtotal</p><p class="text-lg font-semibold">${leadershipSubtotal.toFixed(2)}</p></div>
@@ -4589,55 +4757,45 @@ function getSubmitToken() {
 
     function renderAdminDuties() {
       const duties = getRecordsBySection('admin_duties');
+      const staffCategory = getStaffCategory();
+      const taxonomy = getRoleTaxonomy(staffCategory);
+      const roleOptions = taxonomy.administrationDutiesRoles || [];
+      const rolePointsText = roleOptions.map((opt) => `${opt.label} ${getAdminDutyRolePoints(opt.value, staffCategory)}`).join(', ');
       return `
         <div class="space-y-6">
           ${createCalculationPanel({
             sectionKey: 'admin_duties',
             title: '🧮 Admin Duties Workload',
             formula: 'entry_points = role_points',
-            baseTableHtml: '<p><strong>Role points:</strong> Chairperson 4, Secretary 3, Member 2, Other 1</p>',
-            factorTableHtml: '<p><strong>Scoring driver:</strong> Role only. Duty type, appointment duration, and appointment level are descriptive.</p>',
-            workedExampleHtml: '<strong>Example:</strong> Secretary role → 3.00 points.',
-            notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>Claim duties performed in the reporting period.</li><li>Do not split one duty into multiple duplicates to inflate points.</li></ul>'
+            baseTableHtml: `<p><strong>Role points (${escapeHtml(staffCategory)}):</strong> ${escapeHtml(rolePointsText)}</p>`,
+            factorTableHtml: '<p><strong>Scoring driver:</strong> Role only.</p>',
+            workedExampleHtml: '<strong>Example:</strong> Points change only when the duty role changes.',
+            notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>Duty type, appointment duration, and appointment level are descriptive only.</li><li>Out-of-period records are saved and excluded from score.</li></ul>',
+            scoringDrivers: ['Duty role'],
+            descriptiveOnlyFields: ['Duty type', 'Appointment duration', 'Appointment level', 'Duty name', 'Start/end date']
           })}
 
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 class="heading-font text-2xl font-bold mb-6">📋 Admin Duties</h2>
+            <h2 class="heading-font text-2xl font-bold mb-2">📋 Admin Duties</h2>
+            <p class="text-sm text-gray-600 mb-4">${escapeHtml(taxonomy.sectionHelpText?.administration || '')}</p>
             <form id="duty-form" onsubmit="saveAdminDuty(event)" class="space-y-6">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                ${createOtherSpecifyBlock({
-                  sectionKey: 'admin_duties',
-                  baseId: 'duty-type',
-                  labelText: 'Duty Type',
-                  optionsArray: OTHER_SPECIFY_OPTIONS.adminDutyType,
-                  valueKey: 'duty_type',
-                  otherTextKey: 'duty_type_other_text',
-                  specifyLabel: 'Specify',
-                  specifyPlaceholder: 'Enter duty type details',
-                  required: true,
-                  selectPlaceholder: 'Select'
-                })}
-                <div><label for="duty-role" class="block text-sm font-semibold text-gray-700 mb-2">Role *</label><select id="duty-role" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Chairperson">Chairperson</option><option value="Secretary">Secretary</option><option value="Member">Member</option><option value="Other">Other</option></select></div><div><label for="duty-frequency" class="block text-sm font-semibold text-gray-700 mb-2">Appointment duration *</label><select id="duty-frequency" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Full period">Full period</option><option value="Half period">Half period</option><option value="Short term">Short term</option></select></div><div><label for="duty-appointment-level" class="block text-sm font-semibold text-gray-700 mb-2">Appointment level *</label><select id="duty-appointment-level" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="University">University level</option><option value="Faculty">Faculty level</option><option value="Programme">Programme level</option></select></div>
-                <div class="md:col-span-2"><label for="duty-name" class="block text-sm font-semibold text-gray-700 mb-2">Duty Name *</label><input id="duty-name" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                ${createOtherSpecifyBlock({ sectionKey: 'admin_duties', baseId: 'duty-type', labelText: 'Duty Type (descriptive only)', optionsArray: OTHER_SPECIFY_OPTIONS.adminDutyType, valueKey: 'duty_type', otherTextKey: 'duty_type_other_text', specifyLabel: 'Specify', specifyPlaceholder: 'Enter duty type details', required: true, selectPlaceholder: 'Select' })}
+                <div><label for="duty-role" class="block text-sm font-semibold text-gray-700 mb-2">Role *</label><select id="duty-role" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option>${roleOptions.map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`).join('')}</select></div><div><label for="duty-frequency" class="block text-sm font-semibold text-gray-700 mb-2">Appointment duration (descriptive only) *</label><select id="duty-frequency" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Full period">Full period</option><option value="Half period">Half period</option><option value="Short term">Short term</option></select></div><div><label for="duty-appointment-level" class="block text-sm font-semibold text-gray-700 mb-2">Appointment level (descriptive only) *</label><select id="duty-appointment-level" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="University">University level</option><option value="Faculty">Faculty level</option><option value="Programme">Programme level</option></select></div>
+                <div class="md:col-span-2"><label for="duty-name" class="block text-sm font-semibold text-gray-700 mb-2">Duty Name (descriptive only) *</label><input id="duty-name" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="duty-start-date" class="block text-sm font-semibold text-gray-700 mb-2">Start Date *</label><input id="duty-start-date" required type="date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><label for="duty-end-date" class="block text-sm font-semibold text-gray-700 mb-2 mt-3">End Date</label><input id="duty-end-date" type="date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
               </div>
               <div class="flex justify-end"><button type="submit" id="save-duty-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add</button></div>
             </form>
           </div>
 
-          ${createSavedList({
-            title: 'Your Admin Duties Items',
-            items: duties,
-            renderItem: (item) => {
-              const b = getAdminDutyEntryBreakdown(item);
-              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Duty type: <strong>${escapeHtml(getOtherSpecifyMetadata(item, 'duty_type', 'duty_type_other_text', OTHER_SPECIFY_OPTIONS.adminDutyType).display)}</strong></p><p>Role: ${escapeHtml(item.duty_role || '-')}</p><p>Appointment duration: ${escapeHtml(item.duty_frequency || '-')}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p>${b.excluded_reason ? `<p class=\"text-amber-700 font-medium\">Excluded: ${escapeHtml(b.excluded_reason)}</p>` : ''}</div><button onclick="deleteAdminDuty('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
-            }
-          })}
+          ${createSavedList({ title: 'Your Admin Duties Items', items: duties, renderItem: (item) => { const b = getAdminDutyEntryBreakdown(item); return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Duty type: <strong>${escapeHtml(getOtherSpecifyMetadata(item, 'duty_type', 'duty_type_other_text', OTHER_SPECIFY_OPTIONS.adminDutyType).display)}</strong></p><p>Role: ${escapeHtml(item.duty_role || '-')}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p>${item.legacyRoleLabel ? `<p class="text-xs text-amber-700">Legacy role mapped from: ${escapeHtml(item.legacyRoleLabel)}</p>` : ''}${b.excluded_reason ? `<p class="text-amber-700 font-medium">Excluded: ${escapeHtml(b.excluded_reason)}</p>` : ''}</div><button onclick="deleteAdminDuty('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`; } })}
 
           ${createNavigationRow({ previous: { id: 'publications', label: 'Publications' }, next: { id: 'service', label: 'Service' } })}
         </div>
       `;
     }
+
 
     function setupAdminDutiesEventListeners() {
       renderAdminDutiesLivePreview();
@@ -4705,7 +4863,7 @@ function getSubmitToken() {
     }
 
     function getServiceDraftInputState() {
-      const serviceType = getOtherSpecifyValue({ baseId: 'service-type', optionsArray: OTHER_SPECIFY_OPTIONS.serviceType });
+      const serviceType = getOtherSpecifyValue({ baseId: 'service-type', optionsArray: getCategoryOptionLabels('serviceTypes') });
       return {
         service_type: serviceType.selected,
         service_type_other_text: serviceType.other,
@@ -4719,57 +4877,24 @@ function getSubmitToken() {
 
         function renderService() {
       const serviceItems = getRecordsBySection('service');
+      const taxonomy = getRoleTaxonomy(getStaffCategory());
       return `
         <div class="space-y-6">
-          ${createCalculationPanel({
-            sectionKey: 'service',
-            title: '🧮 Service Workload',
-            formula: 'entry_points = base_points × date_span_factor',
-            baseTableHtml: '<p><strong>Base points by service type:</strong> Committee service 4, Community engagement 5, Expert contribution 6, Event support 3, Other 3</p>',
-            factorTableHtml: '<p><strong>Date span factors:</strong> 1 day 0.5, 2 to 6 days 1.0, 7 to 15 days 1.5, over 15 days 2.0</p>',
-            workedExampleHtml: '<strong>Example:</strong> Community engagement for 8 days → 5 × 1.5 = 7.50 points.',
-            notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>Scope such as international or national does not affect points.</li><li>Date span should reflect activity dates in the reporting period.</li></ul>'
-          })}
-
+          ${createCalculationPanel({ sectionKey: 'service', title: '🧮 Service Workload', formula: 'entry_points = base_points × date_span_factor', baseTableHtml: '<p><strong>Base points by service type</strong> (category-specific labels are descriptive groups).</p>', factorTableHtml: '<p><strong>Date span factors:</strong> 1 day 0.5, 2 to 6 days 1.0, 7 to 15 days 1.5, over 15 days 2.0</p>', workedExampleHtml: '<strong>Example:</strong> Service activity for 8 days → base × 1.5.', notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>Service type picklist is staff-category specific.</li><li>Scope and organization are descriptive only.</li></ul>', scoringDrivers: ['Service type base points', 'Date span factor'], descriptiveOnlyFields: ['Scope', 'Title', 'Organization'] })}
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 class="heading-font text-2xl font-bold mb-6">🤝 Service</h2>
-            <form id="service-form" onsubmit="saveService(event)" class="space-y-6">
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                ${createOtherSpecifyBlock({
-                  sectionKey: 'service',
-                  baseId: 'service-type',
-                  labelText: 'Service Type',
-                  optionsArray: OTHER_SPECIFY_OPTIONS.serviceType,
-                  valueKey: 'service_type',
-                  otherTextKey: 'service_type_other_text',
-                  specifyLabel: 'Specify',
-                  specifyPlaceholder: 'Enter service details',
-                  required: true,
-                  selectPlaceholder: 'Select'
-                })}
-                
-                <div><label for="service-scope" class="block text-sm font-semibold text-gray-700 mb-2">Scope (descriptive only)</label><input id="service-scope" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+            <h2 class="heading-font text-2xl font-bold mb-2">🤝 Service</h2><p class="text-sm text-gray-600 mb-4">${escapeHtml(taxonomy.sectionHelpText?.service || '')}</p>
+            <form id="service-form" onsubmit="saveService(event)" class="space-y-6"><div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                ${createOtherSpecifyBlock({ sectionKey: 'service', baseId: 'service-type', labelText: 'Service Type', optionsArray: getCategoryOptionLabels('serviceTypes'), valueKey: 'service_type', otherTextKey: 'service_type_other_text', specifyLabel: 'Specify', specifyPlaceholder: `Enter ${getStaffCategory()} service details`, required: true, selectPlaceholder: 'Select' })}
+                <div><label for="service-scope" class="block text-sm font-semibold text-gray-700 mb-2">Scope (descriptive only)</label><input id="service-scope" placeholder="e.g. ${getStaffCategory()}-related scope" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="service-start-date" class="block text-sm font-semibold text-gray-700 mb-2">Start Date *</label><input id="service-start-date" type="date" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><label for="service-end-date" class="block text-sm font-semibold text-gray-700 mb-2 mt-3">End Date</label><input id="service-end-date" type="date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-                <div class="md:col-span-2"><label for="service-title" class="block text-sm font-semibold text-gray-700 mb-2">Title *</label><input id="service-title" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-                <div class="md:col-span-2"><label for="service-organization" class="block text-sm font-semibold text-gray-700 mb-2">Organization *</label><input id="service-organization" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-              </div>
-              <div class="flex justify-end"><button type="submit" id="save-service-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add</button></div>
-            </form>
+                <div class="md:col-span-2"><label for="service-title" class="block text-sm font-semibold text-gray-700 mb-2">Title (descriptive only) *</label><input id="service-title" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div><div class="md:col-span-2"><label for="service-organization" class="block text-sm font-semibold text-gray-700 mb-2">Organization (descriptive only) *</label><input id="service-organization" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+              </div><div class="flex justify-end"><button type="submit" id="save-service-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add</button></div></form>
           </div>
-
-          ${createSavedList({
-            title: 'Your Service Items',
-            items: serviceItems,
-            renderItem: (item) => {
-              const b = getServiceEntryBreakdown(item);
-              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Service type: <strong>${escapeHtml(getOtherSpecifyMetadata(item, 'service_type', 'service_type_other_text', OTHER_SPECIFY_OPTIONS.serviceType).display)}</strong></p><p>Date range: ${escapeHtml(item.service_start_date || '-')} → ${escapeHtml(item.service_end_date || item.service_start_date || '-')}</p><p>Span days: ${Number(b.span_days || 1)}</p><p>Date span factor: ${Number(b.duration_factor || 0).toFixed(2)}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p>${b.excluded_reason ? `<p class=\"text-amber-700 font-medium\">Excluded: ${escapeHtml(b.excluded_reason)}</p>` : ''}</div><button onclick="deleteService('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
-            }
-          })}
-
+          ${createSavedList({ title: 'Your Service Items', items: serviceItems, renderItem: (item) => { const b = getServiceEntryBreakdown(item); return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Service type: <strong>${escapeHtml(getOtherSpecifyMetadata(item, 'service_type', 'service_type_other_text', getCategoryOptionLabels('serviceTypes')).display)}</strong></p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p>${b.excluded_reason ? `<p class="text-amber-700 font-medium">Excluded: ${escapeHtml(b.excluded_reason)}</p>` : ''}</div><button onclick="deleteService('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`; } })}
           ${createNavigationRow({ previous: { id: 'administration', label: 'Administration' }, next: { id: 'laboratory', label: 'Laboratory' } })}
-        </div>
-      `;
+        </div>`;
     }
+
 
     function setupServiceEventListeners() {
       renderServiceLivePreview();
@@ -4975,7 +5100,7 @@ function getSubmitToken() {
     }
 
     function getProfessionalDraftInputState() {
-      const profType = getOtherSpecifyValue({ baseId: 'prof-type', optionsArray: OTHER_SPECIFY_OPTIONS.professionalType });
+      const profType = getOtherSpecifyValue({ baseId: 'prof-type', optionsArray: getCategoryOptionLabels('professionalTypes') });
       return {
         prof_type: profType.selected,
         prof_type_other_text: profType.other,
@@ -4986,65 +5111,33 @@ function getSubmitToken() {
         prof_organization: document.getElementById('prof-organization')?.value || '',
         prof_start_date: document.getElementById('prof-start-date')?.value || '',
         prof_end_date: document.getElementById('prof-end-date')?.value || '',
-        prof_description: document.getElementById('prof-description')?.value || ''
+        prof_description: document.getElementById('prof-description')?.value || '',
+        validUntilDate: document.getElementById('prof-valid-until-date')?.value || ''
       };
     }
 
     function renderProfessional() {
       const professionalItems = getRecordsBySection('professional');
+      const staffCategory = getStaffCategory();
+      const taxonomy = getRoleTaxonomy(staffCategory);
+      const isLab = staffCategory === 'lab';
       return `
         <div class="space-y-6">
-          ${createCalculationPanel({
-            sectionKey: 'professional',
-            title: '🧮 Professional Workload',
-            formula: 'entry_points = base_points × effort_factor',
-            baseTableHtml: '<p><strong>Base points by activity type:</strong> Professional Body Leadership 10, Professional Certification 8, Conference Organizer 7, Editorial Board 6, Professional Training 5, Membership 2 (or 4 with assigned role), Other 3</p>',
-            factorTableHtml: '<p><strong>Effort band factors:</strong> Low effort 0.5, Standard effort 1.0, High effort 1.5</p>',
-            workedExampleHtml: '<strong>Example:</strong> Conference organizer with high effort → 7 × 1.5 = 10.50 points.',
-            notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>Points represent workload effort in the reporting period.</li><li>Membership alone is low workload unless there is an assigned role.</li></ul>'
-          })}
-
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 class="heading-font text-2xl font-bold mb-6">💼 Professional</h2>
-            <form id="professional-form" onsubmit="saveProfessional(event)" class="space-y-6">
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                ${createOtherSpecifyBlock({
-                  sectionKey: 'professional',
-                  baseId: 'prof-type',
-                  labelText: 'Activity Type',
-                  optionsArray: OTHER_SPECIFY_OPTIONS.professionalType,
-                  valueKey: 'prof_type',
-                  otherTextKey: 'prof_type_other_text',
-                  specifyLabel: 'Specify',
-                  specifyPlaceholder: 'Enter professional activity details',
-                  required: true,
-                  selectPlaceholder: 'Select'
-                })}
-                
-                <div><label for="prof-position" class="block text-sm font-semibold text-gray-700 mb-2">Role/Position (optional)</label><input id="prof-position" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-                <div><label for="prof-scope" class="block text-sm font-semibold text-gray-700 mb-2">Scope (descriptive only)</label><input id="prof-scope" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-                <div class="md:col-span-2"><label for="prof-title" class="block text-sm font-semibold text-gray-700 mb-2">Activity Title *</label><input id="prof-title" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-                <div><label for="prof-organization" class="block text-sm font-semibold text-gray-700 mb-2">Organization *</label><input id="prof-organization" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-                <div><label for="prof-start-date" class="block text-sm font-semibold text-gray-700 mb-2">Start Date *</label><input id="prof-start-date" required type="date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><label for="prof-end-date" class="block text-sm font-semibold text-gray-700 mb-2 mt-3">End Date</label><input id="prof-end-date" type="date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-                <div class="md:col-span-2"><label for="prof-description" class="block text-sm font-semibold text-gray-700 mb-2">Description</label><textarea id="prof-description" rows="2" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></textarea></div>
-              </div>
-              <div class="flex justify-end"><button type="submit" id="save-professional-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add</button></div>
-            </form>
-          </div>
-
-          ${createSavedList({
-            title: 'Your Professional Items',
-            items: professionalItems,
-            renderItem: (item) => {
-              const b = getProfessionalEntryBreakdown(item);
-              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Activity type: <strong>${escapeHtml(getOtherSpecifyMetadata(item, 'prof_type', 'prof_type_other_text', OTHER_SPECIFY_OPTIONS.professionalType).display)}</strong></p><p>Effort band: ${escapeHtml(item.prof_effort_band || '-')}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p>${b.excluded_reason ? `<p class=\"text-amber-700 font-medium\">Excluded: ${escapeHtml(b.excluded_reason)}</p>` : ''}</div><button onclick="deleteProfessional('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
-            }
-          })}
-
+          ${createCalculationPanel({ sectionKey: 'professional', title: '🧮 Professional Workload', formula: 'entry_points = base_points × active_fraction', baseTableHtml: '<p><strong>Base points by activity type</strong> remain unchanged.</p>', factorTableHtml: '<p><strong>Active fraction:</strong> overlap_days ÷ reporting_days.</p>', workedExampleHtml: '<strong>Example:</strong> Certification active half period → base × 0.50.', notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>validUntilDate (lab) is informational only.</li><li>Effort band is not used in scoring.</li></ul>', scoringDrivers: ['Professional type base points', 'Active fraction'], descriptiveOnlyFields: ['Scope', 'Title', 'Organization', 'Description', 'validUntilDate (lab)'] })}
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"><h2 class="heading-font text-2xl font-bold mb-2">💼 Professional</h2><p class="text-sm text-gray-600 mb-4">${escapeHtml(taxonomy.sectionHelpText?.professional || '')}</p>
+            <form id="professional-form" onsubmit="saveProfessional(event)" class="space-y-6"><div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              ${createOtherSpecifyBlock({ sectionKey: 'professional', baseId: 'prof-type', labelText: 'Professional Type', optionsArray: getCategoryOptionLabels('professionalTypes'), valueKey: 'prof_type', otherTextKey: 'prof_type_other_text', specifyLabel: 'Specify', specifyPlaceholder: 'Enter professional activity details', required: true, selectPlaceholder: 'Select' })}
+              <div><label for="prof-position" class="block text-sm font-semibold text-gray-700 mb-2">Role/Position (descriptive only)</label><input id="prof-position" class="w-full px-4 py-3 border border-gray-300 rounded-lg"></div><div><label for="prof-scope" class="block text-sm font-semibold text-gray-700 mb-2">Scope (descriptive only)</label><input id="prof-scope" class="w-full px-4 py-3 border border-gray-300 rounded-lg"></div>
+              <div class="md:col-span-2"><label for="prof-title" class="block text-sm font-semibold text-gray-700 mb-2">Title (descriptive only) *</label><input id="prof-title" required class="w-full px-4 py-3 border border-gray-300 rounded-lg"></div><div class="md:col-span-2"><label for="prof-organization" class="block text-sm font-semibold text-gray-700 mb-2">Organization (descriptive only) *</label><input id="prof-organization" required class="w-full px-4 py-3 border border-gray-300 rounded-lg"></div>
+              <div><label for="prof-start-date" class="block text-sm font-semibold text-gray-700 mb-2">Start Date *</label><input id="prof-start-date" required type="date" class="w-full px-4 py-3 border border-gray-300 rounded-lg"></div><div><label for="prof-end-date" class="block text-sm font-semibold text-gray-700 mb-2">End Date</label><input id="prof-end-date" type="date" class="w-full px-4 py-3 border border-gray-300 rounded-lg"></div>
+              ${isLab ? '<div><label for="prof-valid-until-date" class="block text-sm font-semibold text-gray-700 mb-2">Valid Until Date (descriptive only)</label><input id="prof-valid-until-date" type="date" class="w-full px-4 py-3 border border-gray-300 rounded-lg"></div>' : ''}
+              <div class="md:col-span-2"><label for="prof-description" class="block text-sm font-semibold text-gray-700 mb-2">Description (descriptive only)</label><textarea id="prof-description" rows="3" class="w-full px-4 py-3 border border-gray-300 rounded-lg"></textarea></div>
+            </div><div id="professional-validity-warning" class="text-amber-700 text-sm"></div><div class="flex justify-end"><button type="submit" id="save-professional-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add</button></div></form></div>
+          ${createSavedList({ title: 'Your Professional Items', items: professionalItems, renderItem: (item) => { const b = getProfessionalEntryBreakdown(item); return `<div class="border border-gray-200 rounded-lg p-4"><p>Type: <strong>${escapeHtml(getOtherSpecifyMetadata(item, 'prof_type', 'prof_type_other_text', getCategoryOptionLabels('professionalTypes')).display)}</strong></p>${item.validUntilDate ? `<p>Valid until (descriptive only): ${escapeHtml(item.validUntilDate)}</p>` : ''}<p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p>${b.excluded_reason ? `<p class="text-amber-700 font-medium">Excluded: ${escapeHtml(b.excluded_reason)}</p>` : ''}</div>`; } })}
           ${createNavigationRow({ previous: { id: 'laboratory', label: 'Laboratory' }, next: { id: 'assistants', label: 'Assistants' } })}
-        </div>
-      `;
+        </div>`;
     }
+
 
     function setupProfessionalEventListeners() {
       renderProfessionalLivePreview();
@@ -5060,8 +5153,15 @@ function getSubmitToken() {
     function renderProfessionalLivePreview() {
       const saved = getRecordsBySection('professional');
       const savedTotal = Math.round(saved.reduce((sum, item) => sum + calculateProfessionalScore(item), 0) * 100) / 100;
-      const breakdown = getProfessionalEntryBreakdown(getProfessionalDraftInputState());
+      const draft = getProfessionalDraftInputState();
+      const breakdown = getProfessionalEntryBreakdown(draft);
       renderLivePreview({ sectionKey: 'professional', breakdown, equationText: `${breakdown.base_points} × ${breakdown.active_fraction.toFixed(2)}`, savedTotal, requiredFields: ['base_points', 'active_fraction', 'entry_points'] });
+      const warningEl = document.getElementById('professional-validity-warning');
+      if (warningEl) {
+        const { reportEnd } = getReportingWindow();
+        const isExpired = draft.validUntilDate && new Date(draft.validUntilDate) < reportEnd;
+        warningEl.textContent = isExpired ? 'Informational: valid until date is before reporting end date (does not affect scoring).' : '';
+      }
     }
 
     async function saveProfessional(event) {
@@ -5464,12 +5564,13 @@ function getSubmitToken() {
       const role = String(parseProfileState(profile, false)?.userRole || '').toLowerCase();
       const canEdit = normalized.configSnapshot.adminConfig.allowBenchmarkEditRoles.includes(role);
       if (!canEdit) return '';
-      const b = normalized.configSnapshot.sectionBenchmarks;
+      const activeCategory = getStaffCategory(profile);
+      const categoryBenchmarks = (normalized.configSnapshot.sectionBenchmarksByStaffCategory || getDefaultBenchmarksByStaffCategory())[activeCategory] || CONFIG_ROLE_TAXONOMY.academic.defaultBenchmarks;
+      const b = { ...normalized.configSnapshot.sectionBenchmarks, AdminBenchmarkUniversityAppointments: categoryBenchmarks.administration, ServiceBenchmark: categoryBenchmarks.service, ProfessionalBenchmark: categoryBenchmarks.professional };
       const locked = normalized.configSnapshot.adminConfig.isBenchmarkLocked;
-      const activeCategory = normalizeProfileCategoryKey(profile?.profile_category || '') || 'academic';
       const activeWeights = normalized.activeWeights || getActiveSectionWeights(profile, normalized.configSnapshot);
       const editableWeights = ['Teaching', 'Supervision', 'Research', 'Publications', 'Administration', 'Laboratory', 'Service', 'Professional'];
-      return `<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"><h3 class="heading-font text-xl font-bold mb-4">⚙️ Settings (SMART Benchmarks & Weights)</h3><p class="text-xs text-gray-600 mb-3">Weight editing defaults to active staff category: <strong>${escapeHtml(activeCategory)}</strong>.</p><div class="grid grid-cols-1 md:grid-cols-2 gap-4">${Object.entries(b).map(([k,v])=>`<label class="text-sm"><span class="block text-gray-600 mb-1">${k}</span><input data-benchmark-key="${k}" type="number" step="0.1" value="${v}" ${locked ? 'disabled' : ''} class="w-full px-3 py-2 border border-gray-300 rounded"></label>`).join('')}</div><div class="mt-4 border-t pt-4"><h4 class="font-semibold text-sm mb-2">Section weights (${escapeHtml(activeCategory)})</h4><div class="grid grid-cols-1 md:grid-cols-2 gap-3">${editableWeights.map((k)=>`<label class="text-sm"><span class="block text-gray-600 mb-1">${k}</span><input data-weight-key="${k}" type="number" step="0.01" min="0" max="1" value="${Number(activeWeights[k] || 0)}" class="w-full px-3 py-2 border border-gray-300 rounded"></label>`).join('')}</div></div><div class="mt-3 flex items-center gap-3"><label class="inline-flex items-center gap-2"><input type="checkbox" id="benchmark-lock-toggle" ${locked ? 'checked' : ''}><span>Lock benchmark editing</span></label><button onclick="saveSmartBenchmarks()" class="px-4 py-2 bg-sky-600 text-white rounded-lg">Save Settings</button></div><p class="text-xs text-gray-500 mt-2">Version: ${escapeHtml(normalized.configSnapshot.lastUpdatedAt || '-')} by ${escapeHtml(normalized.configSnapshot.lastUpdatedBy || '-')}</p></div>`;
+      return `<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"><h3 class="heading-font text-xl font-bold mb-4">⚙️ Settings (SMART Benchmarks & Weights)</h3><p class="text-xs text-gray-600 mb-3">Weight/benchmark editing defaults to active staff category: <strong>${escapeHtml(activeCategory)}</strong>.</p><div class="grid grid-cols-1 md:grid-cols-2 gap-4">${Object.entries(b).map(([k,v])=>`<label class="text-sm"><span class="block text-gray-600 mb-1">${k}</span><input data-benchmark-key="${k}" type="number" step="0.1" value="${v}" ${locked ? 'disabled' : ''} class="w-full px-3 py-2 border border-gray-300 rounded"></label>`).join('')}</div><div class="mt-4 border-t pt-4"><h4 class="font-semibold text-sm mb-2">Section weights (${escapeHtml(activeCategory)})</h4><div class="grid grid-cols-1 md:grid-cols-2 gap-3">${editableWeights.map((k)=>`<label class="text-sm"><span class="block text-gray-600 mb-1">${k}</span><input data-weight-key="${k}" type="number" step="0.01" min="0" max="1" value="${Number(activeWeights[k] || 0)}" class="w-full px-3 py-2 border border-gray-300 rounded"></label>`).join('')}</div></div><div class="mt-3 flex items-center gap-3"><label class="inline-flex items-center gap-2"><input type="checkbox" id="benchmark-lock-toggle" ${locked ? 'checked' : ''}><span>Lock benchmark editing</span></label><button onclick="saveSmartBenchmarks()" class="px-4 py-2 bg-sky-600 text-white rounded-lg">Save Settings</button></div><p class="text-xs text-gray-500 mt-2">Version: ${escapeHtml(normalized.configSnapshot.lastUpdatedAt || '-')} by ${escapeHtml(normalized.configSnapshot.lastUpdatedBy || '-')}</p></div>`;
     }
 
     async function saveSmartBenchmarks() {
@@ -5478,7 +5579,13 @@ function getSubmitToken() {
       const sectionBenchmarks = { ...config.sectionBenchmarks };
       inputs.forEach((el) => { sectionBenchmarks[el.dataset.benchmarkKey] = Number(el.value || 0); });
 
-      const activeCategory = normalizeProfileCategoryKey(getProfile()?.profile_category || '') || 'academic';
+      const activeCategoryRaw = getStaffCategory();
+      const activeCategory = activeCategoryRaw === 'administration' ? 'admin' : activeCategoryRaw;
+      const benchmarkByCategory = { ...(config.sectionBenchmarksByStaffCategory || getDefaultBenchmarksByStaffCategory()) };
+      benchmarkByCategory[activeCategoryRaw] = benchmarkByCategory[activeCategoryRaw] || { ...CONFIG_ROLE_TAXONOMY.academic.defaultBenchmarks };
+      benchmarkByCategory[activeCategoryRaw].administration = Number(sectionBenchmarks.AdminBenchmarkUniversityAppointments || 0);
+      benchmarkByCategory[activeCategoryRaw].service = Number(sectionBenchmarks.ServiceBenchmark || 0);
+      benchmarkByCategory[activeCategoryRaw].professional = Number(sectionBenchmarks.ProfessionalBenchmark || 0);
       const weightInputs = Array.from(document.querySelectorAll('[data-weight-key]'));
       const sectionWeightsByStaffCategory = {
         ...(config.sectionWeightsByStaffCategory || CONFIG_SMART.sectionWeightsByStaffCategory),
@@ -5491,7 +5598,7 @@ function getSubmitToken() {
       });
 
       const isLocked = Boolean(document.getElementById('benchmark-lock-toggle')?.checked);
-      writeSmartConfig({ ...config, sectionBenchmarks, sectionWeightsByStaffCategory, adminConfig: { ...config.adminConfig, isBenchmarkLocked: isLocked } }, (getProfile()?.profile_name || 'unknown'));
+      writeSmartConfig({ ...config, sectionBenchmarks, sectionBenchmarksByStaffCategory: benchmarkByCategory, sectionWeightsByStaffCategory, adminConfig: { ...config.adminConfig, isBenchmarkLocked: isLocked } }, (getProfile()?.profile_name || 'unknown'));
       saveToLocalStorage('config');
       showToast('SMART settings saved');
       renderSection('results');
