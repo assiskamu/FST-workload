@@ -737,6 +737,41 @@ const WORKLOAD_STATUS_THRESHOLDS = {
       return Math.floor((end - start) / millisecondsPerDay) + 1;
     }
 
+    const OUT_OF_REPORTING_PERIOD_REASON = 'Out of reporting period';
+
+    function getReportingWindow() {
+      const profile = getProfile();
+      const currentYear = new Date().getFullYear();
+      const reportStart = new Date(profile?.reporting_start_date || `${currentYear}-01-01`);
+      const reportEnd = new Date(profile?.reporting_end_date || `${currentYear}-12-31`);
+      if (Number.isNaN(reportStart.getTime()) || Number.isNaN(reportEnd.getTime()) || reportEnd < reportStart) {
+        return {
+          reportStart: new Date(`${currentYear}-01-01`),
+          reportEnd: new Date(`${currentYear}-12-31`)
+        };
+      }
+      return { reportStart, reportEnd };
+    }
+
+    function getOverlapDays(startDate, endDate) {
+      const { reportStart, reportEnd } = getReportingWindow();
+      const itemStart = startDate ? new Date(startDate) : reportStart;
+      const itemEnd = endDate ? new Date(endDate) : reportEnd;
+      if (Number.isNaN(itemStart.getTime()) || Number.isNaN(itemEnd.getTime()) || itemEnd < itemStart) return 0;
+      const overlapStart = new Date(Math.max(reportStart.getTime(), itemStart.getTime()));
+      const overlapEnd = new Date(Math.min(reportEnd.getTime(), itemEnd.getTime()));
+      if (overlapEnd < overlapStart) return 0;
+      return Math.floor((overlapEnd - overlapStart) / (1000 * 60 * 60 * 24)) + 1;
+    }
+
+    function isOutOfReportingPeriod(startDate, endDate) {
+      return getOverlapDays(startDate, endDate) === 0;
+    }
+
+    function getExclusionBreakdown(reason = OUT_OF_REPORTING_PERIOD_REASON) {
+      return { entry_points: 0, is_counted: false, excluded_reason: reason };
+    }
+
     function toFirstDayOfYearDate(value) {
       const year = Number(value);
       if (!Number.isFinite(year) || year < 1900) return '';
@@ -764,15 +799,15 @@ const WORKLOAD_STATUS_THRESHOLDS = {
       }
 
       if (migrated.section === 'publications') {
-        if (!migrated.pub_stage && migrated.pub_status) {
-          const statusMap = {
-            Drafting: 'drafting',
-            Submitted: 'revising',
-            Accepted: 'responding_reviewers',
-            Published: 'proofing',
-            Other: 'revising'
+        if (!migrated.pub_status && migrated.pub_stage) {
+          const stageToStatusMap = {
+            drafting: 'Submitted',
+            revising: 'Submitted',
+            responding_reviewers: 'Accepted',
+            proofing: 'Published',
+            no_activity: ''
           };
-          migrated.pub_stage = statusMap[migrated.pub_status] || 'revising';
+          migrated.pub_status = stageToStatusMap[migrated.pub_stage] || '';
         }
       }
 
@@ -1215,6 +1250,8 @@ const WORKLOAD_STATUS_THRESHOLDS = {
         profile_other_admin_position: '',
         profile_state: JSON.stringify(profileState),
         profile_json: '',
+        entry_points: breakdown.entry_points,
+        excluded_reason: breakdown.excluded_reason || '',
         created_at: new Date().toISOString()
       };
 
@@ -1638,9 +1675,9 @@ function getSubmitToken() {
         teaching: ['course_code', 'course_name', 'course_credit_hours', 'course_lecture', 'course_semester', 'course_role', 'teaching_section'],
         supervision: ['student_name', 'student_matric', 'student_level', 'student_role', 'student_current_status', 'student_title', 'student_start_semester', 'student_start_date'],
         research: ['research_title', 'research_grant_code', 'research_role', 'research_start_date'],
-        publications: ['pub_title', 'pub_type', 'pub_stage'],
+        publications: ['pub_title', 'pub_status'],
         administration: ['admin_position', 'admin_faculty', 'admin_start_date'],
-        admin_duties: ['duty_type', 'duty_name', 'duty_frequency', 'duty_start_date'],
+        admin_duties: ['duty_role', 'duty_name', 'duty_frequency', 'duty_start_date'],
         service: ['service_type', 'service_title', 'service_organization', 'service_start_date'],
         laboratory: ['lab_responsibility', 'lab_name', 'lab_frequency', 'lab_start_date'],
         professional: ['prof_type', 'prof_scope', 'prof_title', 'prof_organization', 'prof_start_date']
@@ -2288,6 +2325,15 @@ function getSubmitToken() {
         };
       }
 
+      if (isOutOfReportingPeriod(student.student_start_date, student.student_end_date)) {
+        return {
+          base_points: getSupervisionBasePoints(student.student_level, student.student_role),
+          mode_factor: getStudentRegistrationModeFactor(),
+          status_factor: getStudentCurrentStatusFactor(student.student_current_status),
+          ...getExclusionBreakdown()
+        };
+      }
+
       const basePoints = getSupervisionBasePoints(student.student_level, student.student_role);
       const modeFactor = getStudentRegistrationModeFactor();
       const statusFactor = getStudentCurrentStatusFactor(student.student_current_status);
@@ -2307,39 +2353,23 @@ function getSubmitToken() {
       return getSupervisionEntryBreakdown(student).entry_points;
     }
 
-    // ADMIN DUTIES: Base points 🧮 frequency factor
-    function getAdminDutyBasePoints(dutyType) {
-      if (dutyType === 'Accreditation Work') return 8;
-      if (dutyType === 'Curriculum Development') return 6;
-      if (dutyType === 'Committee Chair') return 5;
-      if (dutyType === 'Event Organizer') return 4;
-      if (dutyType === 'Committee Member') return 2;
-      return 2;
-    }
-
-    function getDutyFrequencyFactor(frequency) {
-      if (frequency === 'Full period') return 1.0;
-      if (frequency === 'Half period') return 0.5;
-      if (frequency === 'Short term') return 0.3;
-      return 0;
-    }
-
-    function getAdminDutyRoleFactor(role) {
-      if (role === 'Chairperson') return 1.0;
-      if (role === 'Secretary') return 0.7;
-      if (role === 'Member') return 0.5;
-      return 0.4;
+    // ADMIN DUTIES: Role points only
+    function getAdminDutyRolePoints(role) {
+      if (role === 'Chairperson') return 4;
+      if (role === 'Secretary') return 3;
+      if (role === 'Member') return 2;
+      return 1;
     }
 
     function getAdminDutyEntryBreakdown(duty) {
-      if (!duty?.duty_type || !duty?.duty_frequency || !duty?.duty_role) {
-        return { base_points: 0, frequency_factor: 0, role_factor: 0, entry_points: 0, is_counted: false };
+      if (!duty?.duty_role) {
+        return { role_points: 0, entry_points: 0, is_counted: false };
       }
-      const basePoints = getAdminDutyBasePoints(duty.duty_type);
-      const frequencyFactor = getDutyFrequencyFactor(duty.duty_frequency);
-      const roleFactor = getAdminDutyRoleFactor(duty.duty_role);
-      const entryPoints = Math.round(basePoints * frequencyFactor * roleFactor * 100) / 100;
-      return { base_points: basePoints, frequency_factor: frequencyFactor, role_factor: roleFactor, entry_points: entryPoints, is_counted: true };
+      if (isOutOfReportingPeriod(duty.duty_start_date, duty.duty_end_date)) {
+        return { role_points: getAdminDutyRolePoints(duty.duty_role), ...getExclusionBreakdown() };
+      }
+      const rolePoints = getAdminDutyRolePoints(duty.duty_role);
+      return { role_points: rolePoints, entry_points: rolePoints, is_counted: true };
     }
 
     function calculateAdminDutyScore(duty) {
@@ -2357,6 +2387,9 @@ function getSubmitToken() {
       if (!research?.research_role) {
         return { base_points: 5, role_factor: 0, entry_points: 0, is_counted: false };
       }
+      if (isOutOfReportingPeriod(research.research_start_date, research.research_end_date)) {
+        return { base_points: 5, role_factor: getResearchRoleFactor(research.research_role), ...getExclusionBreakdown() };
+      }
       const basePoints = 5;
       const roleFactor = getResearchRoleFactor(research.research_role);
       const entryPoints = Math.round(basePoints * roleFactor * 100) / 100;
@@ -2371,31 +2404,31 @@ function getSubmitToken() {
       return 1;
     }
 
-    function getPublicationStageWeight(stage) {
-      const stageWeightMap = {
-        drafting: 0.10,
-        revising: 0.50,
-        responding_reviewers: 0.50,
-        proofing: 1.00,
-        no_activity: 0.00
+    function getPublicationStatusWeight(status) {
+      const statusWeightMap = {
+        Submitted: 0.10,
+        Accepted: 0.50,
+        Published: 1.00,
+        Other: 0.00
       };
-      return stageWeightMap[stage] ?? 0;
+      return statusWeightMap[status] ?? 0.00;
     }
 
     function getPublicationEntryBreakdown(pub) {
-      if (!pub?.pub_type || !pub?.pub_stage) {
-        return { base_points: 0, stage_weight: 0, entry_points: 0, is_counted: false };
+      if (!pub?.pub_status) {
+        return { base_points: 0, status_weight: 0, entry_points: 0, is_counted: false };
       }
       const descriptive = getPublicationDescriptiveMetadata(pub);
-      const basePoints = getPublicationBasePoints(pub.pub_type);
-      const stageWeight = getPublicationStageWeight(pub.pub_stage);
-      const entryPoints = Math.round(basePoints * stageWeight * 100) / 100;
+      const statusMeta = getPublicationStatusMetadata(pub);
+      const basePoints = getPublicationBasePoints();
+      const statusWeight = getPublicationStatusWeight(statusMeta.status_label);
+      const entryPoints = Math.round(statusWeight * 100) / 100;
       return {
         base_points: basePoints,
-        stage_weight: stageWeight,
+        status_weight: statusWeight,
         indexing: descriptive.indexing_display,
         author_position: descriptive.author_position_display,
-        stage: pub.pub_stage,
+        status: statusMeta.status_label,
         entry_points: entryPoints,
         is_counted: true
       };
@@ -2416,21 +2449,18 @@ function getSubmitToken() {
     }
 
     function getActiveFractionInReportingPeriod(startDate, endDate) {
-      const profile = getProfile();
-      const reportStart = new Date(profile?.reporting_start_date || `${new Date().getFullYear()}-01-01`);
-      const reportEnd = new Date(profile?.reporting_end_date || `${new Date().getFullYear()}-12-31`);
-      const roleStart = startDate ? new Date(startDate) : reportStart;
-      const roleEnd = endDate ? new Date(endDate) : reportEnd;
-      const overlapStart = new Date(Math.max(reportStart.getTime(), roleStart.getTime()));
-      const overlapEnd = new Date(Math.min(reportEnd.getTime(), roleEnd.getTime()));
+      const { reportStart, reportEnd } = getReportingWindow();
       const reportingDays = Math.max(1, Math.floor((reportEnd - reportStart) / (1000 * 60 * 60 * 24)) + 1);
-      const overlapDays = overlapEnd >= overlapStart ? Math.floor((overlapEnd - overlapStart) / (1000 * 60 * 60 * 24)) + 1 : 0;
+      const overlapDays = getOverlapDays(startDate, endDate);
       return Math.max(0, Math.min(1, overlapDays / reportingDays));
     }
 
     function getAdministrationEntryBreakdown(admin) {
       if (!admin?.admin_position || !admin?.admin_start_date) {
         return { base_points: 0, active_fraction: 0, entry_points: 0, is_counted: false };
+      }
+      if (isOutOfReportingPeriod(admin.admin_start_date, admin.admin_end_date)) {
+        return { base_points: getAdministrationBasePoints(admin.admin_position), active_fraction: 0, ...getExclusionBreakdown() };
       }
       const basePoints = getAdministrationBasePoints(admin.admin_position);
       const activeFraction = getActiveFractionInReportingPeriod(admin.admin_start_date, admin.admin_end_date);
@@ -2464,6 +2494,9 @@ function getSubmitToken() {
       if (!service?.service_type || !service?.service_start_date) {
         return { base_points: 0, duration_factor: 0, span_days: 0, entry_points: 0, is_counted: false };
       }
+      if (isOutOfReportingPeriod(service.service_start_date, service.service_end_date || service.service_start_date)) {
+        return { base_points: getServiceBasePoints(service.service_type), duration_factor: 0, span_days: 0, ...getExclusionBreakdown() };
+      }
       const basePoints = getServiceBasePoints(service.service_type);
       const spanDays = calculateReportingDays(service.service_start_date, service.service_end_date || service.service_start_date) || 1;
       const durationFactor = spanDays <= 1 ? 0.5 : spanDays <= 6 ? 1.0 : spanDays <= 15 ? 1.5 : 2.0;
@@ -2496,6 +2529,9 @@ function getSubmitToken() {
       if (!lab?.lab_responsibility || !lab?.lab_frequency) {
         return { base_points: 0, frequency_factor: 0, course_count: 1, entry_points: 0, is_counted: false };
       }
+      if (isOutOfReportingPeriod(lab.lab_start_date, lab.lab_end_date || lab.lab_start_date)) {
+        return { base_points: getLabBasePoints(lab.lab_responsibility), frequency_factor: 0, course_count: 1, ...getExclusionBreakdown() };
+      }
       const basePoints = getLabBasePoints(lab.lab_responsibility);
       const frequencyFactor = getLabFrequencyFactor(lab.lab_frequency);
       const courseCount = lab.lab_frequency === 'Per course supported' ? Math.max(1, Number(lab.number_of_courses_supported || 1)) : 1;
@@ -2527,6 +2563,9 @@ function getSubmitToken() {
     function getProfessionalEntryBreakdown(prof) {
       if (!prof?.prof_type || !prof?.prof_start_date) {
         return { base_points: 0, active_fraction: 0, entry_points: 0, is_counted: false };
+      }
+      if (isOutOfReportingPeriod(prof.prof_start_date, prof.prof_end_date || prof.prof_start_date)) {
+        return { base_points: getProfessionalBasePoints(prof), active_fraction: 0, ...getExclusionBreakdown() };
       }
       const basePoints = getProfessionalBasePoints(prof);
       const activeFraction = getActiveFractionInReportingPeriod(prof.prof_start_date, prof.prof_end_date);
@@ -3378,7 +3417,7 @@ function getSubmitToken() {
                         </div>
                         <div class="text-xs text-gray-500 mt-1">${student.student_title}</div>
                         <div class="text-xs text-gray-500 mt-1">
-                          <span class="font-semibold text-green-700">Score: ${breakdown.base_points} × ${breakdown.mode_factor} × ${breakdown.status_factor} = ${score}</span>
+                          <span class="font-semibold text-green-700">Score: ${breakdown.base_points} × ${breakdown.mode_factor} × ${breakdown.status_factor} = ${score}</span>${breakdown.excluded_reason ? ` <span class=\"text-amber-700\">(Excluded: ${escapeHtml(breakdown.excluded_reason)})</span>` : ''}
                         </div>
                       </div>
                       <button type="button" onclick="deleteStudent('${student.__backendId}')" 
@@ -3430,7 +3469,9 @@ function getSubmitToken() {
       const draftStudent = {
         student_level: document.getElementById('student-level')?.value || '',
         student_role: document.getElementById('student-role')?.value || '',
-                student_current_status: document.getElementById('student_current_status')?.value || ''
+        student_current_status: document.getElementById('student_current_status')?.value || '',
+        student_start_date: document.getElementById('student-start-date')?.value || '',
+        student_end_date: document.getElementById('student-end-date')?.value || ''
       };
       const draftBreakdown = getSupervisionEntryBreakdown(draftStudent);
       const hasDraftSelection = Boolean(
@@ -3452,7 +3493,7 @@ function getSubmitToken() {
         <div class="space-y-1 mb-3">
           ${rows.length === 0 ? '<p>No supervision entry selected yet.</p>' : rows.map((row) => `
             <p>
-              ${row.label}: base_points=${row.base_points}, role_factor=${row.mode_factor}, status_factor=${row.status_factor}, entry_points=${row.entry_points.toFixed(2)}
+              ${row.label}: base_points=${row.base_points}, role_factor=${row.mode_factor}, status_factor=${row.status_factor}, entry_points=${row.entry_points.toFixed(2)}${row.excluded_reason ? ` (Excluded: ${row.excluded_reason})` : ''}
             </p>
           `).join('')}
         </div>
@@ -3471,6 +3512,13 @@ function getSubmitToken() {
       const form = document.getElementById('supervision-form');
       if (!form || !form.reportValidity()) return;
       const semesterMeta = getOtherSpecifyValue({ baseId: 'student-start-semester', optionsArray: SUPERVISION_SEMESTER_OPTIONS });
+      const breakdown = getSupervisionEntryBreakdown({
+        student_level: document.getElementById('student-level').value,
+        student_role: document.getElementById('student-role').value,
+        student_current_status: document.getElementById('student_current_status').value,
+        student_start_date: document.getElementById('student-start-date').value,
+        student_end_date: document.getElementById('student-end-date').value
+      });
       const studentData = {
         section: 'supervision',
         student_name: document.getElementById('student-name').value,
@@ -3490,7 +3538,11 @@ function getSubmitToken() {
       try {
         const result = await window.dataSdk.create(studentData);
         if (result.isOk) {
-          showToast('Student added successfully!');
+          if (breakdown.excluded_reason) {
+            showToast('This item is outside the reporting period and will be saved but not counted in score.', 'warning');
+          } else {
+            showToast('Student added successfully!');
+          }
           form.reset();
           renderSupervisionLivePreview();
         } else {
@@ -3560,7 +3612,7 @@ function getSubmitToken() {
       teachingSemester: ['Semester 1 2025/2026', 'Semester 2 2025/2026', 'Semester 1 2026/2027', 'Semester 2 2026/2027', 'Other'],
       publicationIndexing: ['Scopus', 'Web of Science', 'MyCite', 'ERA', 'Not indexed', 'Other'],
       publicationAuthorPosition: ['First author', 'Corresponding author', 'Co author', 'Single author', 'Editor', 'Other'],
-      publicationStatus: ['Drafting', 'Submitted', 'Accepted', 'Published', 'Other'],
+      publicationStatus: ['Submitted', 'Accepted', 'Published', 'Other'],
       administrationPosition: ['Dean', 'Deputy Dean', 'Centre Director', 'Deputy Centre Director', 'Head of Programme', 'Postgraduate Coordinator', 'Programme Coordinator'],
       adminDutyType: ['Accreditation Work', 'Curriculum Development', 'Committee Chair', 'Event Organizer', 'Committee Member', 'Other'],
       serviceType: ['Committee Service', 'Community Engagement', 'Expert Contribution', 'Event Support', 'Income Generation', 'Other'],
@@ -3660,6 +3712,7 @@ function getSubmitToken() {
       preview.innerHTML = `
         <p class="font-semibold mb-2">Live preview</p>
         <p>Draft item points: ${equationText} = <strong>${breakdown.entry_points.toFixed(2)}</strong></p>
+        ${breakdown.excluded_reason ? `<p class="text-amber-700"><strong>Excluded:</strong> ${escapeHtml(breakdown.excluded_reason)}</p>` : ''}
         <p><strong>Saved total points:</strong> ${savedTotal.toFixed(2)}</p>
         <p><strong>Saved + draft total:</strong> ${liveTotal.toFixed(2)}</p>
       `;
@@ -3698,7 +3751,7 @@ function getSubmitToken() {
                 <div class="md:col-span-2"><label for="research-title" class="block text-sm font-semibold text-gray-700 mb-2">Project Title *</label><input type="text" id="research-title" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="research-grant-code" class="block text-sm font-semibold text-gray-700 mb-2">Grant Code *</label><input type="text" id="research-grant-code" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="research-role" class="block text-sm font-semibold text-gray-700 mb-2">Your Role *</label><select id="research-role" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select Role</option><option value="lead">Lead Researcher</option><option value="member">Research Member</option></select></div>
-                <div><label for="research-status" class="block text-sm font-semibold text-gray-700 mb-2">Status (descriptive only)</label><select id="research-status" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="ongoing">Ongoing</option><option value="completed">Completed</option><option value="pending">Pending Approval</option></select></div>
+                <div><label for="research-status" class="block text-sm font-semibold text-gray-700 mb-2">Status *</label><select id="research-status" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="ongoing">Ongoing</option><option value="completed">Completed</option><option value="pending">Pending Approval</option></select></div>
                 
                 <div><label for="research-amount" class="block text-sm font-semibold text-gray-700 mb-2">Grant Amount (descriptive only)</label><input type="number" id="research-amount" min="0" step="0.01" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="research-start-date" class="block text-sm font-semibold text-gray-700 mb-2">Start Date *</label><input type="date" id="research-start-date" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div><div><label for="research-end-date" class="block text-sm font-semibold text-gray-700 mb-2">End Date</label><input type="date" id="research-end-date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
@@ -3712,7 +3765,7 @@ function getSubmitToken() {
             items: projects,
             renderItem: (item) => {
               const b = getResearchEntryBreakdown(item);
-              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p><strong>${escapeHtml(item.research_title || '-')}</strong></p><p>Role: ${escapeHtml(item.research_role || '-')}</p><p>Activity in period: ${escapeHtml(item.research_activity || '-')}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deleteResearch('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
+              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p><strong>${escapeHtml(item.research_title || '-')}</strong></p><p>Role: ${escapeHtml(item.research_role || '-')}</p><p>Activity in period: ${escapeHtml(item.research_activity || '-')}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p>${b.excluded_reason ? `<p class=\"text-amber-700 font-medium\">Excluded: ${escapeHtml(b.excluded_reason)}</p>` : ''}</div><button onclick="deleteResearch('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
             }
           })}
 
@@ -3752,7 +3805,8 @@ function getSubmitToken() {
 
       const draft = getResearchDraftInputState();
       const breakdown = getResearchEntryBreakdown(draft);
-      const researchData = { section: 'research', ...draft, entry_points: breakdown.entry_points, created_at: new Date().toISOString() };
+      const excludedReason = breakdown.excluded_reason || '';
+      const researchData = { section: 'research', ...draft, entry_points: breakdown.entry_points, excluded_reason: excludedReason, created_at: new Date().toISOString() };
 
       btn.disabled = true;
       btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
@@ -3761,7 +3815,7 @@ function getSubmitToken() {
       btn.innerHTML = 'Add';
 
       if (result.isOk) {
-        showToast('Research project added successfully!');
+        if (excludedReason) { showToast('This item is outside the reporting period and will be saved but not counted in score.', 'warning'); } else { showToast('Research project added successfully!'); }
         form.reset();
         renderSection('research');
       } else {
@@ -3861,11 +3915,11 @@ function getSubmitToken() {
           ${createCalculationPanel({
             sectionKey: 'publications',
             title: '🧮 Publication Workload Proxy',
-            formula: 'entry_points = paper_equivalent × stage_weight',
-            baseTableHtml: '<p><strong>Base points by item type:</strong> Journal manuscript 10, Conference paper 6, Book chapter 8, Proceeding 5, Other 3</p>',
-            factorTableHtml: '<p><strong>Writing stage weights:</strong> drafting 0.10, revising 0.50, responding reviewers 0.50, proofing 1.00, no activity 0.00</p>',
-            workedExampleHtml: '<strong>Example:</strong> 1 submitted paper → 1 × 0.50 = 0.50 paper equivalent.',
-            notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>Points represent writing work done in the reporting period.</li><li>Journal indexing, quartile, and acceptance do not change points.</li><li>Indexing, author position, venue, and status are descriptive only and do not affect points.</li></ul>'
+            formula: 'entry_points = status_weight',
+            baseTableHtml: '<p><strong>Base points:</strong> 1 per publication entry.</p>',
+            factorTableHtml: '<p><strong>Status weights:</strong> Submitted 0.10, Accepted 0.50, Published 1.00, Other 0.00</p>',
+            workedExampleHtml: '<strong>Example:</strong> Published paper → 1.00 points.',
+            notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>Status is the only scoring driver.</li><li>Item type, indexing, author position, venue, and year are descriptive only.</li></ul>'
           })}
 
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -3874,14 +3928,13 @@ function getSubmitToken() {
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="md:col-span-2"><label for="pub-title" class="block text-sm font-semibold text-gray-700 mb-2">Title *</label><input id="pub-title" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div>
-                  <label for="pub-type" class="block text-sm font-semibold text-gray-700 mb-2">Item Type *</label>
-                  <select id="pub-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select Type</option><option value="journal">Journal manuscript</option><option value="conference">Conference paper</option><option value="chapter">Book chapter</option><option value="proceeding">Proceeding</option><option value="other">Other</option></select>
+                  <label for="pub-type" class="block text-sm font-semibold text-gray-700 mb-2">Item Type (optional)</label>
+                  <select id="pub-type" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select Type (optional)</option><option value="journal">Journal manuscript</option><option value="conference">Conference paper</option><option value="chapter">Book chapter</option><option value="proceeding">Proceeding</option><option value="other">Other</option></select>
                   <div id="pub-type-other-wrap" class="mt-3 hidden">
                     <label for="pub-type-other" class="block text-sm font-semibold text-gray-700 mb-2">Specify</label>
                     <input id="pub-type-other" placeholder="Enter item type details" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
                   </div>
                 </div>
-                <div><label for="pub-stage" class="block text-sm font-semibold text-gray-700 mb-2">Writing Stage *</label><select id="pub-stage" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select Stage</option><option value="drafting">Drafting (1.0)</option><option value="revising">Revising (0.8)</option><option value="responding_reviewers">Responding to reviewers (0.9)</option><option value="proofing">Proofing (0.5)</option><option value="no_activity">No activity (0.0)</option></select></div>
                 ${createOtherSpecifyBlock({
                   sectionKey: 'publications',
                   baseId: 'pub-index',
@@ -3907,8 +3960,8 @@ function getSubmitToken() {
                 
                 
                 <div>
-                  <label for="pub-status-select" class="block text-sm font-semibold text-gray-700 mb-2">Status (descriptive only)</label>
-                  <select id="pub-status-select" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
+                  <label for="pub-status-select" class="block text-sm font-semibold text-gray-700 mb-2">Status *</label>
+                  <select id="pub-status-select" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
                     <option value="">Select status</option>
                     ${PUBLICATION_STATUS_OPTIONS.map((option) => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`).join('')}
                   </select>
@@ -3929,7 +3982,7 @@ function getSubmitToken() {
               const b = getPublicationEntryBreakdown(item);
               const descriptive = getPublicationDescriptiveMetadata(item);
               const statusMeta = getPublicationStatusMetadata(item);
-              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Item type: <strong>${escapeHtml(getPublicationItemTypeDisplay(item))}</strong></p><p>Writing stage: ${escapeHtml(item.pub_stage || '-')}</p><p>Indexing: ${escapeHtml(descriptive.indexing_display)}</p><p>Author position: ${escapeHtml(descriptive.author_position_display)}</p><p>Status: ${escapeHtml(statusMeta.status_display)}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deletePublication('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
+              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Item type: <strong>${escapeHtml(getPublicationItemTypeDisplay(item))}</strong></p><p>Indexing: ${escapeHtml(descriptive.indexing_display)}</p><p>Author position: ${escapeHtml(descriptive.author_position_display)}</p><p>Status: ${escapeHtml(statusMeta.status_display)}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deletePublication('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
             }
           })}
 
@@ -3978,7 +4031,7 @@ function getSubmitToken() {
       const saved = getRecordsBySection('publications');
       const savedTotal = Math.round(saved.reduce((sum, item) => sum + calculatePublicationScore(item), 0) * 100) / 100;
       const breakdown = getPublicationEntryBreakdown(getPublicationsDraftInputState());
-      renderLivePreview({ sectionKey: 'publications', breakdown, equationText: `${breakdown.base_points} × ${breakdown.stage_weight}`, savedTotal });
+      renderLivePreview({ sectionKey: 'publications', breakdown, equationText: `${breakdown.status_weight}`, savedTotal });
     }
 
     async function savePublication(event) {
@@ -4072,8 +4125,8 @@ function getSubmitToken() {
                   otherTextKey: 'admin_other_position',
                   specifyLabel: 'Specify',
                   specifyPlaceholder: 'Enter leadership position details',
-                  required: true,
-                  selectPlaceholder: 'Select'
+                  required: false,
+                  selectPlaceholder: 'Select (optional)'
                 })}
                 <div><label for="admin-faculty" class="block text-sm font-semibold text-gray-700 mb-2">Unit/Faculty *</label><input id="admin-faculty" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="admin-start-date" class="block text-sm font-semibold text-gray-700 mb-2">Start Date *</label><input id="admin-start-date" type="date" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
@@ -4088,7 +4141,7 @@ function getSubmitToken() {
             items: adminEntries,
             renderItem: (item) => {
               const b = getAdministrationEntryBreakdown(item);
-              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p><strong>${escapeHtml(getOtherSpecifyMetadata(item, 'admin_position', 'admin_other_position', OTHER_SPECIFY_OPTIONS.administrationPosition).display)}</strong></p><p>Start: ${escapeHtml(item.admin_start_date || '-')}</p><p>End: ${escapeHtml(item.admin_end_date || '-')}</p><p>Active fraction: ${b.active_fraction.toFixed(3)}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deleteAdministration('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
+              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p><strong>${escapeHtml(getOtherSpecifyMetadata(item, 'admin_position', 'admin_other_position', OTHER_SPECIFY_OPTIONS.administrationPosition).display)}</strong></p><p>Start: ${escapeHtml(item.admin_start_date || '-')}</p><p>End: ${escapeHtml(item.admin_end_date || '-')}</p><p>Active fraction: ${b.active_fraction.toFixed(3)}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p>${b.excluded_reason ? `<p class=\"text-amber-700 font-medium\">Excluded: ${escapeHtml(b.excluded_reason)}</p>` : ''}</div><button onclick="deleteAdministration('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
             }
           })}
 
@@ -4156,14 +4209,15 @@ function getSubmitToken() {
       if (!form || !form.reportValidity()) return;
       const draft = getAdministrationDraftInputState();
       const breakdown = getAdministrationEntryBreakdown(draft);
-      const administrationData = { section: 'administration', ...draft, entry_points: breakdown.entry_points, created_at: new Date().toISOString() };
+      const excludedReason = breakdown.excluded_reason || '';
+      const administrationData = { section: 'administration', ...draft, entry_points: breakdown.entry_points, excluded_reason: excludedReason, created_at: new Date().toISOString() };
       btn.disabled = true;
       btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
       const result = await window.dataSdk.create(administrationData);
       btn.disabled = false;
       btn.innerHTML = 'Add';
       if (result.isOk) {
-        showToast('Administration role added successfully!');
+        if (excludedReason) { showToast('This item is outside the reporting period and will be saved but not counted in score.', 'warning'); } else { showToast('Administration role added successfully!'); }
         form.reset();
         renderSection('administration');
       } else {
@@ -4204,10 +4258,10 @@ function getSubmitToken() {
           ${createCalculationPanel({
             sectionKey: 'admin_duties',
             title: '🧮 Admin Duties Workload',
-            formula: 'entry_points = base_points × frequency_factor',
-            baseTableHtml: '<p><strong>Base points by duty type:</strong> Accreditation Work 8, Curriculum Development 6, Committee Chair 5, Event Organizer 4, Committee Member 2, Other 2</p>',
-            factorTableHtml: '<p><strong>Frequency factors:</strong> Ongoing in reporting period 1.0, Per Semester 0.6, One-Time Event 0.3</p>',
-            workedExampleHtml: '<strong>Example:</strong> Curriculum development done per semester → 6 × 0.6 = 3.60 points.',
+            formula: 'entry_points = role_points',
+            baseTableHtml: '<p><strong>Role points:</strong> Chairperson 4, Secretary 3, Member 2, Other 1</p>',
+            factorTableHtml: '<p><strong>Scoring driver:</strong> Role only. Duty type, appointment duration, and appointment level are descriptive.</p>',
+            workedExampleHtml: '<strong>Example:</strong> Secretary role → 3.00 points.',
             notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>Claim duties performed in the reporting period.</li><li>Do not split one duty into multiple duplicates to inflate points.</li></ul>'
           })}
 
@@ -4240,7 +4294,7 @@ function getSubmitToken() {
             items: duties,
             renderItem: (item) => {
               const b = getAdminDutyEntryBreakdown(item);
-              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Duty type: <strong>${escapeHtml(getOtherSpecifyMetadata(item, 'duty_type', 'duty_type_other_text', OTHER_SPECIFY_OPTIONS.adminDutyType).display)}</strong></p><p>Frequency: ${escapeHtml(item.duty_frequency || '-')}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deleteAdminDuty('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
+              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Duty type: <strong>${escapeHtml(getOtherSpecifyMetadata(item, 'duty_type', 'duty_type_other_text', OTHER_SPECIFY_OPTIONS.adminDutyType).display)}</strong></p><p>Role: ${escapeHtml(item.duty_role || '-')}</p><p>Appointment duration: ${escapeHtml(item.duty_frequency || '-')}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p>${b.excluded_reason ? `<p class=\"text-amber-700 font-medium\">Excluded: ${escapeHtml(b.excluded_reason)}</p>` : ''}</div><button onclick="deleteAdminDuty('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
             }
           })}
 
@@ -4264,7 +4318,7 @@ function getSubmitToken() {
       const saved = getRecordsBySection('admin_duties');
       const savedTotal = Math.round(saved.reduce((sum, item) => sum + calculateAdminDutyScore(item), 0) * 100) / 100;
       const breakdown = getAdminDutyEntryBreakdown(getAdminDutiesDraftInputState());
-      renderLivePreview({ sectionKey: 'admin_duties', breakdown, equationText: `${breakdown.base_points} × ${breakdown.frequency_factor}`, savedTotal });
+      renderLivePreview({ sectionKey: 'admin_duties', breakdown, equationText: `${breakdown.role_points}`, savedTotal });
     }
 
     async function saveAdminDuty(event) {
@@ -4278,14 +4332,15 @@ function getSubmitToken() {
       if (!form || !form.reportValidity()) return;
       const draft = getAdminDutiesDraftInputState();
       const breakdown = getAdminDutyEntryBreakdown(draft);
-      const dutyData = { section: 'admin_duties', ...draft, entry_points: breakdown.entry_points, created_at: new Date().toISOString() };
+      const excludedReason = breakdown.excluded_reason || '';
+      const dutyData = { section: 'admin_duties', ...draft, entry_points: breakdown.entry_points, excluded_reason: excludedReason, created_at: new Date().toISOString() };
       btn.disabled = true;
       btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
       const result = await window.dataSdk.create(dutyData);
       btn.disabled = false;
       btn.innerHTML = 'Add';
       if (result.isOk) {
-        showToast('Duty added successfully!');
+        if (excludedReason) { showToast('This item is outside the reporting period and will be saved but not counted in score.', 'warning'); } else { showToast('Duty added successfully!'); }
         form.reset();
         renderSection('administration');
       } else {
@@ -4371,7 +4426,7 @@ function getSubmitToken() {
             items: serviceItems,
             renderItem: (item) => {
               const b = getServiceEntryBreakdown(item);
-              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Service type: <strong>${escapeHtml(getOtherSpecifyMetadata(item, 'service_type', 'service_type_other_text', OTHER_SPECIFY_OPTIONS.serviceType).display)}</strong></p><p>Duration hours: ${Number(item.service_duration || 0)}</p><p>Duration band: ${getServiceDurationBand(item.service_duration)}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deleteService('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
+              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Service type: <strong>${escapeHtml(getOtherSpecifyMetadata(item, 'service_type', 'service_type_other_text', OTHER_SPECIFY_OPTIONS.serviceType).display)}</strong></p><p>Duration hours: ${Number(item.service_duration || 0)}</p><p>Duration band: ${getServiceDurationBand(item.service_duration)}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p>${b.excluded_reason ? `<p class=\"text-amber-700 font-medium\">Excluded: ${escapeHtml(b.excluded_reason)}</p>` : ''}</div><button onclick="deleteService('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
             }
           })}
 
@@ -4409,14 +4464,15 @@ function getSubmitToken() {
       if (!form || !form.reportValidity()) return;
       const draft = getServiceDraftInputState();
       const breakdown = getServiceEntryBreakdown(draft);
-      const serviceData = { section: 'service', ...draft, entry_points: breakdown.entry_points, created_at: new Date().toISOString() };
+      const excludedReason = breakdown.excluded_reason || '';
+      const serviceData = { section: 'service', ...draft, entry_points: breakdown.entry_points, excluded_reason: excludedReason, created_at: new Date().toISOString() };
       btn.disabled = true;
       btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
       const result = await window.dataSdk.create(serviceData);
       btn.disabled = false;
       btn.innerHTML = 'Add';
       if (result.isOk) {
-        showToast('Service entry added successfully!');
+        if (excludedReason) { showToast('This item is outside the reporting period and will be saved but not counted in score.', 'warning'); } else { showToast('Service entry added successfully!'); }
         form.reset();
         renderSection('service');
       } else {
@@ -4494,7 +4550,7 @@ function getSubmitToken() {
             renderItem: (item) => {
               const b = getLabEntryBreakdown(item);
               const courseText = item.lab_frequency === 'Per course supported' ? ` | Courses supported: ${b.course_count}` : '';
-              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Responsibility: <strong>${escapeHtml(getOtherSpecifyMetadata(item, 'lab_responsibility', 'lab_responsibility_other_text', OTHER_SPECIFY_OPTIONS.laboratoryResponsibility).display)}</strong></p><p>Frequency: ${escapeHtml(item.lab_frequency || '-')} ${courseText}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deleteLaboratory('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
+              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Responsibility: <strong>${escapeHtml(getOtherSpecifyMetadata(item, 'lab_responsibility', 'lab_responsibility_other_text', OTHER_SPECIFY_OPTIONS.laboratoryResponsibility).display)}</strong></p><p>Frequency: ${escapeHtml(item.lab_frequency || '-')} ${courseText}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p>${b.excluded_reason ? `<p class=\"text-amber-700 font-medium\">Excluded: ${escapeHtml(b.excluded_reason)}</p>` : ''}</div><button onclick="deleteLaboratory('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
             }
           })}
 
@@ -4538,14 +4594,15 @@ function getSubmitToken() {
       if (!form || !form.reportValidity()) return;
       const draft = getLaboratoryDraftInputState();
       const breakdown = getLabEntryBreakdown(draft);
-      const labData = { section: 'laboratory', ...draft, entry_points: breakdown.entry_points, created_at: new Date().toISOString() };
+      const excludedReason = breakdown.excluded_reason || '';
+      const labData = { section: 'laboratory', ...draft, entry_points: breakdown.entry_points, excluded_reason: excludedReason, created_at: new Date().toISOString() };
       btn.disabled = true;
       btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
       const result = await window.dataSdk.create(labData);
       btn.disabled = false;
       btn.innerHTML = 'Add';
       if (result.isOk) {
-        showToast('Laboratory item added successfully!');
+        if (excludedReason) { showToast('This item is outside the reporting period and will be saved but not counted in score.', 'warning'); } else { showToast('Laboratory item added successfully!'); }
         form.reset();
         renderSection('laboratory');
       } else {
@@ -4628,7 +4685,7 @@ function getSubmitToken() {
             items: professionalItems,
             renderItem: (item) => {
               const b = getProfessionalEntryBreakdown(item);
-              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Activity type: <strong>${escapeHtml(getOtherSpecifyMetadata(item, 'prof_type', 'prof_type_other_text', OTHER_SPECIFY_OPTIONS.professionalType).display)}</strong></p><p>Effort band: ${escapeHtml(item.prof_effort_band || '-')}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p></div><button onclick="deleteProfessional('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
+              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Activity type: <strong>${escapeHtml(getOtherSpecifyMetadata(item, 'prof_type', 'prof_type_other_text', OTHER_SPECIFY_OPTIONS.professionalType).display)}</strong></p><p>Effort band: ${escapeHtml(item.prof_effort_band || '-')}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p>${b.excluded_reason ? `<p class=\"text-amber-700 font-medium\">Excluded: ${escapeHtml(b.excluded_reason)}</p>` : ''}</div><button onclick="deleteProfessional('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
             }
           })}
 
@@ -4666,14 +4723,15 @@ function getSubmitToken() {
       if (!form || !form.reportValidity()) return;
       const draft = getProfessionalDraftInputState();
       const breakdown = getProfessionalEntryBreakdown(draft);
-      const professionalData = { section: 'professional', ...draft, entry_points: breakdown.entry_points, created_at: new Date().toISOString() };
+      const excludedReason = breakdown.excluded_reason || '';
+      const professionalData = { section: 'professional', ...draft, entry_points: breakdown.entry_points, excluded_reason: excludedReason, created_at: new Date().toISOString() };
       btn.disabled = true;
       btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
       const result = await window.dataSdk.create(professionalData);
       btn.disabled = false;
       btn.innerHTML = 'Add';
       if (result.isOk) {
-        showToast('Professional activity added successfully!');
+        if (excludedReason) { showToast('This item is outside the reporting period and will be saved but not counted in score.', 'warning'); } else { showToast('Professional activity added successfully!'); }
         form.reset();
         renderSection('professional');
       } else {
@@ -4885,6 +4943,7 @@ function getSubmitToken() {
       const periodDays = hasValidPeriod ? Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1 : 0;
       const periodWeeks = hasValidPeriod ? (periodDays / 7).toFixed(2) : '0.00';
       const totalEntries = sections.reduce((sum, section) => sum + section.count, 0);
+      const excludedEntries = sections.reduce((sum, section) => (sum + section.records.filter((entry) => Boolean(getSectionEntryBreakdown(section.id, entry).excluded_reason)).length), 0);
       const summaryRows = [
         {
           section: 'Profile',
@@ -4917,6 +4976,11 @@ function getSubmitToken() {
           section: 'Totals',
           label: 'Total entries',
           value: escapeHtml(String(totalEntries))
+        },
+        {
+          section: 'Totals',
+          label: 'Excluded by reporting period',
+          value: escapeHtml(String(excludedEntries))
         },
         {
           section: 'Totals',
