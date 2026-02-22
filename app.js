@@ -1519,8 +1519,8 @@ const WORKLOAD_STATUS_THRESHOLDS = {
         profile_other_admin_position: '',
         profile_state: JSON.stringify(profileState),
         profile_json: '',
-        entry_points: breakdown.entry_points,
-        excluded_reason: breakdown.excluded_reason || '',
+        entry_points: 0, // Profile is descriptive context and does not contribute points
+        excluded_reason: '',
         created_at: new Date().toISOString()
       };
 
@@ -3490,18 +3490,22 @@ function getSubmitToken() {
         created_at: new Date().toISOString()
       };
       
-      const result = await window.dataSdk.create(courseData);
-      
-      btn.disabled = false;
-      btn.innerHTML = '➕ Add Course';
-      
-      if (result.isOk) {
-        saveToLocalStorage('add');
-        showToast('Course added successfully!');
-        document.getElementById('teaching-form').reset();
-        renderTeachingLivePreview();
-      } else {
+      try {
+        const result = await window.dataSdk.create(courseData);
+        if (result.isOk) {
+          saveToLocalStorage('add');
+          showToast('Course added successfully!');
+          document.getElementById('teaching-form').reset();
+          renderTeachingLivePreview();
+        } else {
+          showToast('Failed to add course', 'error');
+        }
+      } catch (error) {
+        console.error('[teaching] Failed to save course', error);
         showToast('Failed to add course', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '➕ Add Course';
       }
     }
 
@@ -3853,7 +3857,7 @@ function getSubmitToken() {
       }
     }
 
-    function createCalculationPanel({ sectionKey, title, formula, baseTableHtml, factorTableHtml, workedExampleHtml, notesHtml }) {
+    function createCalculationPanel({ sectionKey, title, formula, baseTableHtml, factorTableHtml, workedExampleHtml, notesHtml, scoringDrivers = [], descriptiveOnlyFields = [] }) {
       return `
         <div class="bg-gradient-to-r from-slate-50 to-sky-50 rounded-xl shadow-sm border-2 border-slate-200 p-6">
           <h3 class="font-bold text-lg text-slate-900 mb-3">${title}</h3>
@@ -3861,6 +3865,10 @@ function getSubmitToken() {
             <p><strong>${formula}</strong></p>
             ${baseTableHtml || ''}
             ${factorTableHtml || ''}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+              <div><p class="font-semibold">Scoring drivers</p><ul class="list-disc ml-5">${(scoringDrivers.length ? scoringDrivers : ['See formula above']).map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>
+              <div><p class="font-semibold">Descriptive only fields</p><ul class="list-disc ml-5">${(descriptiveOnlyFields.length ? descriptiveOnlyFields : ['None']).map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>
+            </div>
           </div>
           <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded text-xs text-gray-700 mt-4">${workedExampleHtml}</div>
           <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 text-xs text-blue-900 mt-4">${notesHtml}</div>
@@ -3991,9 +3999,15 @@ function getSubmitToken() {
       return { selected, otherText, display };
     }
 
-    function renderLivePreview({ sectionKey, breakdown, equationText, savedTotal }) {
+    function renderLivePreview({ sectionKey, breakdown, equationText, savedTotal, requiredFields = [] }) {
       const preview = document.getElementById(`${sectionKey}_live_preview`);
       if (!preview) return;
+      const missingFields = requiredFields.filter((key) => typeof breakdown?.[key] === 'undefined');
+      if (missingFields.length) {
+        console.error(`[${sectionKey}] Live preview breakdown mismatch. Missing: ${missingFields.join(', ')}`);
+        preview.innerHTML = `<p class="font-semibold mb-2">Live preview</p><p class="text-amber-700">Preview unavailable due to scoring mismatch. Draft item points set to 0 until form is complete.</p><p><strong>Saved total points:</strong> ${savedTotal.toFixed(2)}</p><p><strong>Saved + draft total:</strong> ${savedTotal.toFixed(2)}</p>`;
+        return;
+      }
       const liveTotal = Math.round((savedTotal + breakdown.entry_points) * 100) / 100;
       preview.innerHTML = `
         <p class="font-semibold mb-2">Live preview</p>
@@ -4075,7 +4089,7 @@ function getSubmitToken() {
       const savedTotal = Math.round(saved.reduce((sum, item) => sum + calculateResearchScore(item), 0) * 100) / 100;
       const draft = getResearchDraftInputState();
       const breakdown = getResearchEntryBreakdown(draft);
-      renderLivePreview({ sectionKey: 'research', breakdown, equationText: `${breakdown.base_points} × ${breakdown.role_factor}`, savedTotal });
+      renderLivePreview({ sectionKey: 'research', breakdown, equationText: `${breakdown.base_points} × ${breakdown.role_factor}`, savedTotal, requiredFields: ['base_points', 'role_factor', 'entry_points'] });
     }
 
     async function saveResearch(event) {
@@ -4096,17 +4110,22 @@ function getSubmitToken() {
 
       btn.disabled = true;
       btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
-      const result = await window.dataSdk.create(researchData);
-      btn.disabled = false;
-      btn.innerHTML = 'Add';
-
-      if (result.isOk) {
-        saveToLocalStorage('add');
-        if (excludedReason) { showToast('This item is outside the reporting period and will be saved but not counted in score.', 'warning'); } else { showToast('Research project added successfully!'); }
-        form.reset();
-        renderSection('research');
-      } else {
+      try {
+        const result = await window.dataSdk.create(researchData);
+        if (result.isOk) {
+          saveToLocalStorage('add');
+          if (excludedReason) { showToast('This item is outside the reporting period and will be saved but not counted in score.', 'warning'); } else { showToast('Research project added successfully!'); }
+          form.reset();
+          renderSection('research');
+        } else {
+          showToast('Failed to add research project', 'error');
+        }
+      } catch (error) {
+        console.error('[research] Failed to save item', error);
         showToast('Failed to add research project', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Add';
       }
     }
 
@@ -4318,7 +4337,7 @@ function getSubmitToken() {
       const saved = getRecordsBySection('publications');
       const savedTotal = Math.round(saved.reduce((sum, item) => sum + calculatePublicationScore(item), 0) * 100) / 100;
       const breakdown = getPublicationEntryBreakdown(getPublicationsDraftInputState());
-      renderLivePreview({ sectionKey: 'publications', breakdown, equationText: `${breakdown.status_weight}`, savedTotal });
+      renderLivePreview({ sectionKey: 'publications', breakdown, equationText: `${breakdown.status_weight}`, savedTotal, requiredFields: ['status_weight', 'entry_points'] });
     }
 
     async function savePublication(event) {
@@ -4348,16 +4367,22 @@ function getSubmitToken() {
       };
       btn.disabled = true;
       btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
-      const result = await window.dataSdk.create(publicationData);
-      btn.disabled = false;
-      btn.innerHTML = 'Add';
-      if (result.isOk) {
-        saveToLocalStorage('add');
-        showToast('Publication added successfully!');
-        form.reset();
-        renderSection('publications');
-      } else {
+      try {
+        const result = await window.dataSdk.create(publicationData);
+        if (result.isOk) {
+          saveToLocalStorage('add');
+          showToast('Publication added successfully!');
+          form.reset();
+          renderSection('publications');
+        } else {
+          showToast('Failed to add publication', 'error');
+        }
+      } catch (error) {
+        console.error('[publications] Failed to save item', error);
         showToast('Failed to add publication', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Add';
       }
     }
 
@@ -4441,13 +4466,21 @@ function getSubmitToken() {
 
 
     function renderAdministrationCombined() {
+      const leadershipSubtotal = Math.round(getRecordsBySection('administration').reduce((sum, item) => sum + calculateAdministrationScore(item), 0) * 100) / 100;
+      const dutiesSubtotal = Math.round(getRecordsBySection('admin_duties').reduce((sum, item) => sum + calculateAdminDutyScore(item), 0) * 100) / 100;
+      const administrationTotal = Math.round((leadershipSubtotal + dutiesSubtotal) * 100) / 100;
       return `
         <div class="space-y-6">
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
             <h2 class="heading-font text-2xl font-bold text-gray-900 mb-3">🏛️ Administration</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm mb-3">
+              <div class="rounded-lg border border-sky-200 bg-sky-50 p-3"><p class="text-gray-600">Administration total</p><p class="text-xl font-bold text-sky-800">${administrationTotal.toFixed(2)}</p></div>
+              <div class="rounded-lg border border-gray-200 bg-white p-3"><p class="text-gray-600">Leadership subtotal</p><p class="text-lg font-semibold">${leadershipSubtotal.toFixed(2)}</p></div>
+              <div class="rounded-lg border border-gray-200 bg-white p-3"><p class="text-gray-600">Duties subtotal</p><p class="text-lg font-semibold">${dutiesSubtotal.toFixed(2)}</p></div>
+            </div>
             <div class="flex flex-wrap gap-2">
-              <button type="button" data-admin-tab="leadership" class="px-4 py-2 bg-sky-100 text-sky-800 rounded-lg text-sm font-semibold">Admin Leadership</button>
-              <button type="button" data-admin-tab="duties" class="px-4 py-2 bg-amber-100 text-amber-800 rounded-lg text-sm font-semibold">Admin Duties</button>
+              <button type="button" data-admin-tab="leadership" class="px-4 py-2 bg-sky-100 text-sky-800 rounded-lg text-sm font-semibold">Leadership</button>
+              <button type="button" data-admin-tab="duties" class="px-4 py-2 bg-amber-100 text-amber-800 rounded-lg text-sm font-semibold">Duties</button>
             </div>
           </div>
           <div id="administration-leadership-panel">${renderAdministration()}</div>
@@ -4459,14 +4492,21 @@ function getSubmitToken() {
     function setupAdministrationCombinedEventListeners() {
       setupAdministrationEventListeners();
       setupAdminDutiesEventListeners();
-      document.querySelectorAll('[data-admin-tab]').forEach((button) => {
-        button.addEventListener('click', () => {
-          const panelId = button.getAttribute('data-admin-tab') === 'duties'
-            ? 'administration-duties-panel'
-            : 'administration-leadership-panel';
-          document.getElementById(panelId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const tabs = Array.from(document.querySelectorAll('[data-admin-tab]'));
+      const leadershipPanel = document.getElementById('administration-leadership-panel');
+      const dutiesPanel = document.getElementById('administration-duties-panel');
+      const setTab = (tab) => {
+        const showLeadership = tab !== 'duties';
+        if (leadershipPanel) leadershipPanel.style.display = showLeadership ? '' : 'none';
+        if (dutiesPanel) dutiesPanel.style.display = showLeadership ? 'none' : '';
+        tabs.forEach((btn) => {
+          const active = btn.getAttribute('data-admin-tab') === (showLeadership ? 'leadership' : 'duties');
+          btn.classList.toggle('ring-2', active);
+          btn.classList.toggle('ring-offset-1', active);
         });
-      });
+      };
+      tabs.forEach((button) => button.addEventListener('click', () => setTab(button.getAttribute('data-admin-tab'))));
+      setTab('leadership');
     }
 
     function setupAdministrationEventListeners() {
@@ -4484,7 +4524,7 @@ function getSubmitToken() {
       const saved = getRecordsBySection('administration');
       const savedTotal = Math.round(saved.reduce((sum, item) => sum + calculateAdministrationScore(item), 0) * 100) / 100;
       const breakdown = getAdministrationEntryBreakdown(getAdministrationDraftInputState());
-      renderLivePreview({ sectionKey: 'administration', breakdown, equationText: `${breakdown.base_points} × ${breakdown.active_fraction.toFixed(3)}`, savedTotal });
+      renderLivePreview({ sectionKey: 'administration', breakdown, equationText: `${breakdown.base_points} × ${breakdown.active_fraction.toFixed(3)}`, savedTotal, requiredFields: ['base_points', 'active_fraction', 'entry_points'] });
     }
 
     async function saveAdministration(event) {
@@ -4502,16 +4542,22 @@ function getSubmitToken() {
       const administrationData = { section: 'administration', ...draft, entry_points: breakdown.entry_points, excluded_reason: excludedReason, created_at: new Date().toISOString() };
       btn.disabled = true;
       btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
-      const result = await window.dataSdk.create(administrationData);
-      btn.disabled = false;
-      btn.innerHTML = 'Add';
-      if (result.isOk) {
-        saveToLocalStorage('add');
-        if (excludedReason) { showToast('This item is outside the reporting period and will be saved but not counted in score.', 'warning'); } else { showToast('Administration role added successfully!'); }
-        form.reset();
-        renderSection('administration');
-      } else {
+      try {
+        const result = await window.dataSdk.create(administrationData);
+        if (result.isOk) {
+          saveToLocalStorage('add');
+          if (excludedReason) { showToast('This item is outside the reporting period and will be saved but not counted in score.', 'warning'); } else { showToast('Administration role added successfully!'); }
+          form.reset();
+          renderSection('administration');
+        } else {
+          showToast('Failed to add administration role', 'error');
+        }
+      } catch (error) {
+        console.error('[administration] Failed to save leadership item', error);
         showToast('Failed to add administration role', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Add';
       }
     }
 
@@ -4608,7 +4654,7 @@ function getSubmitToken() {
       const saved = getRecordsBySection('admin_duties');
       const savedTotal = Math.round(saved.reduce((sum, item) => sum + calculateAdminDutyScore(item), 0) * 100) / 100;
       const breakdown = getAdminDutyEntryBreakdown(getAdminDutiesDraftInputState());
-      renderLivePreview({ sectionKey: 'admin_duties', breakdown, equationText: `${breakdown.role_points}`, savedTotal });
+      renderLivePreview({ sectionKey: 'admin_duties', breakdown, equationText: `${breakdown.role_points}`, savedTotal, requiredFields: ['role_points', 'entry_points'] });
     }
 
     async function saveAdminDuty(event) {
@@ -4623,19 +4669,25 @@ function getSubmitToken() {
       const draft = getAdminDutiesDraftInputState();
       const breakdown = getAdminDutyEntryBreakdown(draft);
       const excludedReason = breakdown.excluded_reason || '';
-      const dutyData = { section: 'admin_duties', ...draft, entry_points: breakdown.entry_points, excluded_reason: excludedReason, created_at: new Date().toISOString() };
+      const dutyData = { section: 'admin_duties', ...draft, entry_points: breakdown.entry_points, excluded_reason: excludedReason, created_at: new Date().toISOString() }; // Critical fix: spread the draft object with ...draft
       btn.disabled = true;
       btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
-      const result = await window.dataSdk.create(dutyData);
-      btn.disabled = false;
-      btn.innerHTML = 'Add';
-      if (result.isOk) {
-        saveToLocalStorage('add');
-        if (excludedReason) { showToast('This item is outside the reporting period and will be saved but not counted in score.', 'warning'); } else { showToast('Duty added successfully!'); }
-        form.reset();
-        renderSection('administration');
-      } else {
+      try {
+        const result = await window.dataSdk.create(dutyData);
+        if (result.isOk) {
+          saveToLocalStorage('add');
+          if (excludedReason) { showToast('This item is outside the reporting period and will be saved but not counted in score.', 'warning'); } else { showToast('Duty added successfully!'); }
+          form.reset();
+          renderSection('administration');
+        } else {
+          showToast('Failed to add duty', 'error');
+        }
+      } catch (error) {
+        console.error('[admin_duties] Failed to save duty item', error);
         showToast('Failed to add duty', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Add';
       }
     }
 
@@ -4665,26 +4717,18 @@ function getSubmitToken() {
       };
     }
 
-    function getServiceDurationBand(durationHours) {
-      const hours = Number(durationHours || 0);
-      if (hours < 2) return 'Under 2 hours';
-      if (hours <= 6) return '2 to 6 hours';
-      if (hours <= 15) return '6 to 15 hours';
-      return 'Over 15 hours';
-    }
-
-    function renderService() {
+        function renderService() {
       const serviceItems = getRecordsBySection('service');
       return `
         <div class="space-y-6">
           ${createCalculationPanel({
             sectionKey: 'service',
             title: '🧮 Service Workload',
-            formula: 'entry_points = base_points × duration_factor',
+            formula: 'entry_points = base_points × date_span_factor',
             baseTableHtml: '<p><strong>Base points by service type:</strong> Committee service 4, Community engagement 5, Expert contribution 6, Event support 3, Other 3</p>',
-            factorTableHtml: '<p><strong>Duration band factors:</strong> Under 2 hours 0.5, 2 to 6 hours 1.0, 6 to 15 hours 1.5, Over 15 hours 2.0</p>',
-            workedExampleHtml: '<strong>Example:</strong> Community engagement for 8 hours → 5 × 1.5 = 7.50 points.',
-            notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>Scope such as international or national does not affect points.</li><li>Duration should reflect actual time spent in the reporting period.</li></ul>'
+            factorTableHtml: '<p><strong>Date span factors:</strong> 1 day 0.5, 2 to 6 days 1.0, 7 to 15 days 1.5, over 15 days 2.0</p>',
+            workedExampleHtml: '<strong>Example:</strong> Community engagement for 8 days → 5 × 1.5 = 7.50 points.',
+            notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>Scope such as international or national does not affect points.</li><li>Date span should reflect activity dates in the reporting period.</li></ul>'
           })}
 
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -4718,7 +4762,7 @@ function getSubmitToken() {
             items: serviceItems,
             renderItem: (item) => {
               const b = getServiceEntryBreakdown(item);
-              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Service type: <strong>${escapeHtml(getOtherSpecifyMetadata(item, 'service_type', 'service_type_other_text', OTHER_SPECIFY_OPTIONS.serviceType).display)}</strong></p><p>Duration hours: ${Number(item.service_duration || 0)}</p><p>Duration band: ${getServiceDurationBand(item.service_duration)}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p>${b.excluded_reason ? `<p class=\"text-amber-700 font-medium\">Excluded: ${escapeHtml(b.excluded_reason)}</p>` : ''}</div><button onclick="deleteService('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
+              return `<div class="border border-gray-200 rounded-lg p-4 flex items-start justify-between gap-4"><div class="text-sm text-gray-700"><p>Service type: <strong>${escapeHtml(getOtherSpecifyMetadata(item, 'service_type', 'service_type_other_text', OTHER_SPECIFY_OPTIONS.serviceType).display)}</strong></p><p>Date range: ${escapeHtml(item.service_start_date || '-')} → ${escapeHtml(item.service_end_date || item.service_start_date || '-')}</p><p>Span days: ${Number(b.span_days || 1)}</p><p>Date span factor: ${Number(b.duration_factor || 0).toFixed(2)}</p><p>Entry points: <strong>${b.entry_points.toFixed(2)}</strong></p>${b.excluded_reason ? `<p class=\"text-amber-700 font-medium\">Excluded: ${escapeHtml(b.excluded_reason)}</p>` : ''}</div><button onclick="deleteService('${item.__backendId}')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">Delete</button></div>`;
             }
           })}
 
@@ -4742,7 +4786,7 @@ function getSubmitToken() {
       const saved = getRecordsBySection('service');
       const savedTotal = Math.round(saved.reduce((sum, item) => sum + calculateServiceScore(item), 0) * 100) / 100;
       const breakdown = getServiceEntryBreakdown(getServiceDraftInputState());
-      renderLivePreview({ sectionKey: 'service', breakdown, equationText: `${breakdown.base_points} × ${breakdown.duration_factor}`, savedTotal });
+      renderLivePreview({ sectionKey: 'service', breakdown, equationText: `${breakdown.base_points} × ${breakdown.duration_factor}`, savedTotal, requiredFields: ['base_points', 'duration_factor', 'entry_points'] });
     }
 
     async function saveService(event) {
@@ -4760,16 +4804,22 @@ function getSubmitToken() {
       const serviceData = { section: 'service', ...draft, entry_points: breakdown.entry_points, excluded_reason: excludedReason, created_at: new Date().toISOString() };
       btn.disabled = true;
       btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
-      const result = await window.dataSdk.create(serviceData);
-      btn.disabled = false;
-      btn.innerHTML = 'Add';
-      if (result.isOk) {
-        saveToLocalStorage('add');
-        if (excludedReason) { showToast('This item is outside the reporting period and will be saved but not counted in score.', 'warning'); } else { showToast('Service entry added successfully!'); }
-        form.reset();
-        renderSection('service');
-      } else {
+      try {
+        const result = await window.dataSdk.create(serviceData);
+        if (result.isOk) {
+          saveToLocalStorage('add');
+          if (excludedReason) { showToast('This item is outside the reporting period and will be saved but not counted in score.', 'warning'); } else { showToast('Service entry added successfully!'); }
+          form.reset();
+          renderSection('service');
+        } else {
+          showToast('Failed to add service entry', 'error');
+        }
+      } catch (error) {
+        console.error('[service] Failed to save service item', error);
         showToast('Failed to add service entry', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Add';
       }
     }
 
@@ -4874,7 +4924,7 @@ function getSubmitToken() {
       const saved = getRecordsBySection('laboratory');
       const savedTotal = Math.round(saved.reduce((sum, item) => sum + calculateLabScore(item), 0) * 100) / 100;
       const breakdown = getLabEntryBreakdown(getLaboratoryDraftInputState());
-      renderLivePreview({ sectionKey: 'laboratory', breakdown, equationText: `${breakdown.base_points} × ${breakdown.frequency_factor} × ${breakdown.course_count}`, savedTotal });
+      renderLivePreview({ sectionKey: 'laboratory', breakdown, equationText: `${breakdown.base_points} × ${breakdown.frequency_factor} × ${breakdown.course_count}`, savedTotal, requiredFields: ['base_points', 'frequency_factor', 'course_count', 'entry_points'] });
     }
 
     async function saveLaboratory(event) {
@@ -4892,16 +4942,22 @@ function getSubmitToken() {
       const labData = { section: 'laboratory', ...draft, entry_points: breakdown.entry_points, excluded_reason: excludedReason, created_at: new Date().toISOString() };
       btn.disabled = true;
       btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
-      const result = await window.dataSdk.create(labData);
-      btn.disabled = false;
-      btn.innerHTML = 'Add';
-      if (result.isOk) {
-        saveToLocalStorage('add');
-        if (excludedReason) { showToast('This item is outside the reporting period and will be saved but not counted in score.', 'warning'); } else { showToast('Laboratory item added successfully!'); }
-        form.reset();
-        renderSection('laboratory');
-      } else {
+      try {
+        const result = await window.dataSdk.create(labData);
+        if (result.isOk) {
+          saveToLocalStorage('add');
+          if (excludedReason) { showToast('This item is outside the reporting period and will be saved but not counted in score.', 'warning'); } else { showToast('Laboratory item added successfully!'); }
+          form.reset();
+          renderSection('laboratory');
+        } else {
+          showToast('Failed to add laboratory item', 'error');
+        }
+      } catch (error) {
+        console.error('[laboratory] Failed to save laboratory item', error);
         showToast('Failed to add laboratory item', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Add';
       }
     }
 
@@ -5005,7 +5061,7 @@ function getSubmitToken() {
       const saved = getRecordsBySection('professional');
       const savedTotal = Math.round(saved.reduce((sum, item) => sum + calculateProfessionalScore(item), 0) * 100) / 100;
       const breakdown = getProfessionalEntryBreakdown(getProfessionalDraftInputState());
-      renderLivePreview({ sectionKey: 'professional', breakdown, equationText: `${breakdown.base_points} × ${breakdown.active_fraction.toFixed(2)}`, savedTotal });
+      renderLivePreview({ sectionKey: 'professional', breakdown, equationText: `${breakdown.base_points} × ${breakdown.active_fraction.toFixed(2)}`, savedTotal, requiredFields: ['base_points', 'active_fraction', 'entry_points'] });
     }
 
     async function saveProfessional(event) {
@@ -5023,16 +5079,22 @@ function getSubmitToken() {
       const professionalData = { section: 'professional', ...draft, entry_points: breakdown.entry_points, excluded_reason: excludedReason, created_at: new Date().toISOString() };
       btn.disabled = true;
       btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
-      const result = await window.dataSdk.create(professionalData);
-      btn.disabled = false;
-      btn.innerHTML = 'Add';
-      if (result.isOk) {
-        saveToLocalStorage('add');
-        if (excludedReason) { showToast('This item is outside the reporting period and will be saved but not counted in score.', 'warning'); } else { showToast('Professional activity added successfully!'); }
-        form.reset();
-        renderSection('professional');
-      } else {
+      try {
+        const result = await window.dataSdk.create(professionalData);
+        if (result.isOk) {
+          saveToLocalStorage('add');
+          if (excludedReason) { showToast('This item is outside the reporting period and will be saved but not counted in score.', 'warning'); } else { showToast('Professional activity added successfully!'); }
+          form.reset();
+          renderSection('professional');
+        } else {
+          showToast('Failed to add professional activity', 'error');
+        }
+      } catch (error) {
+        console.error('[professional] Failed to save professional item', error);
         showToast('Failed to add professional activity', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Add';
       }
     }
 
@@ -6139,8 +6201,7 @@ function getSubmitToken() {
                 { key: 'service_scope', label: 'Scope', type: 'text' },
                 { key: 'service_organization', label: 'Organization', type: 'text' },
                 { key: 'service_date', label: 'Date', type: 'date' },
-                { key: 'service_duration', label: 'Duration (Hours)', type: 'number' },
-                { key: 'service_description', label: 'Notes', type: 'text' },
+                                { key: 'service_description', label: 'Notes', type: 'text' },
                 { key: 'rowScore', label: 'Score', type: 'score' }
               ],
               mapRow: (service) => ({
@@ -6148,9 +6209,8 @@ function getSubmitToken() {
                 service_type: service.service_type,
                 service_scope: service.service_scope,
                 service_organization: service.service_organization,
-                service_date: service.service_date,
-                service_duration: service.service_duration,
-                service_description: service.service_description
+                service_date: `${service.service_start_date || '-'} → ${service.service_end_date || service.service_start_date || '-'}`,
+                                service_description: service.service_description
               })
             }),
             buildSection({
