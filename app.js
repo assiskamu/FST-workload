@@ -59,8 +59,35 @@ const WORKLOAD_STATUS_THRESHOLDS = {
       accent_color: '#10b981',
       font_family: 'Inter',
       font_size: 16,
-      app_title: 'FST UMS Workload Calculator',
-      app_subtitle: 'Faculty of Science and Technology, Universiti Malaysia Sabah'
+      app_title: 'FST SMART Calculator',
+      app_subtitle: 'Faculty of Science and Technology, Universiti Malaysia Sabah — SMART: Staff Monitoring and Assessment for Roles and Tasks'
+    };
+
+    const CONFIG_SMART = {
+      systemNameShort: 'SMART',
+      systemNameFull: 'FST SMART Calculator',
+      sectionWeights: {
+        Teaching: 0.25,
+        Supervision: 0.25,
+        Research: 0.05,
+        Publications: 0.05,
+        AdminCombined: 0.30,
+        Service: 0.05,
+        Professional: 0.05
+      },
+      sectionBenchmarks: {
+        TeachingWeeklyHoursBenchmark: 5,
+        SupervisionBenchmarkMastersMain: 2,
+        PublicationsBenchmarkPapers: 2,
+        AdminBenchmarkUniversityAppointments: 1,
+        ResearchBenchmark: 1,
+        ServiceBenchmark: 1,
+        ProfessionalBenchmark: 1
+      },
+      adminConfig: {
+        allowBenchmarkEditRoles: ['management', 'system_admin'],
+        isBenchmarkLocked: false
+      }
     };
 
     // =========================
@@ -437,6 +464,7 @@ const WORKLOAD_STATUS_THRESHOLDS = {
 
     function updateLiveScore() {
       const scores = calculateScores();
+      const normalized = calculateNormalizedScores();
       const status = getWorkloadStatus(scores.total);
       const profile = getProfile();
       
@@ -1309,6 +1337,60 @@ const WORKLOAD_STATUS_THRESHOLDS = {
       }
     }
 
+    function readSmartConfig() {
+      if (typeof localStorage === 'undefined') return { ...CONFIG_SMART };
+      try {
+        const raw = localStorage.getItem(DATA_STORE_STORAGE_KEY);
+        if (!raw) return { ...CONFIG_SMART };
+        const parsed = JSON.parse(raw);
+        const savedConfig = parsed?.elementConfig?.smartConfig;
+        if (!savedConfig || typeof savedConfig !== 'object') {
+          return { ...CONFIG_SMART };
+        }
+        return {
+          ...CONFIG_SMART,
+          ...savedConfig,
+          sectionWeights: { ...CONFIG_SMART.sectionWeights, ...(savedConfig.sectionWeights || {}) },
+          sectionBenchmarks: { ...CONFIG_SMART.sectionBenchmarks, ...(savedConfig.sectionBenchmarks || {}) },
+          adminConfig: { ...CONFIG_SMART.adminConfig, ...(savedConfig.adminConfig || {}) }
+        };
+      } catch (error) {
+        return { ...CONFIG_SMART };
+      }
+    }
+
+    function writeSmartConfig(nextConfig, actor = 'unknown') {
+      if (typeof localStorage === 'undefined') return;
+      try {
+        const raw = localStorage.getItem(DATA_STORE_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : { records: [], elementConfig: {} };
+        const previous = parsed?.elementConfig?.smartConfig || {};
+        const merged = {
+          ...CONFIG_SMART,
+          ...nextConfig,
+          sectionWeights: { ...CONFIG_SMART.sectionWeights, ...(nextConfig.sectionWeights || {}) },
+          sectionBenchmarks: { ...CONFIG_SMART.sectionBenchmarks, ...(nextConfig.sectionBenchmarks || {}) },
+          adminConfig: { ...CONFIG_SMART.adminConfig, ...(nextConfig.adminConfig || {}) },
+          lastUpdatedAt: new Date().toISOString(),
+          lastUpdatedBy: actor
+        };
+        parsed.elementConfig = parsed.elementConfig || {};
+        parsed.elementConfig.smartConfig = merged;
+        localStorage.setItem(DATA_STORE_STORAGE_KEY, JSON.stringify(parsed));
+
+        const changedFields = [];
+        Object.keys(merged.sectionBenchmarks || {}).forEach((k) => {
+          if ((previous.sectionBenchmarks || {})[k] !== merged.sectionBenchmarks[k]) changedFields.push(`sectionBenchmarks.${k}`);
+        });
+        if ((previous.adminConfig || {}).isBenchmarkLocked !== (merged.adminConfig || {}).isBenchmarkLocked) changedFields.push('adminConfig.isBenchmarkLocked');
+        const audit = readLocalJson('smartConfigAudit', []);
+        audit.unshift({ timestamp: new Date().toISOString(), user: actor, changedFields });
+        writeLocalJson('smartConfigAudit', audit.slice(0, 100));
+      } catch (error) {
+        // ignore
+      }
+    }
+
     function getSubmissionHistory() {
       const history = readLocalJson(SUBMISSION_HISTORY_KEY, []);
       return Array.isArray(history) ? history : [];
@@ -1463,10 +1545,10 @@ function getSubmitToken() {
       }
 
       const requiredBySection = {
-        teaching: ['course_code', 'course_name', 'course_credit_hours', 'course_class_size', 'course_lecture', 'course_semester', 'course_role'],
-        supervision: ['student_name', 'student_matric', 'student_level', 'student_role', 'student_registration_mode', 'student_current_status', 'student_title', 'student_year'],
+        teaching: ['course_code', 'course_name', 'course_credit_hours', 'course_lecture', 'course_semester', 'course_role', 'teaching_section'],
+        supervision: ['student_name', 'student_matric', 'student_level', 'student_role', 'student_current_status', 'student_title', 'student_year', 'student_start_date'],
         research: ['research_title', 'research_grant_code', 'research_role', 'research_activity', 'research_year'],
-        publications: ['pub_title', 'pub_type', 'pub_stage', 'pub_venue', 'pub_year'],
+        publications: ['pub_title', 'pub_type', 'pub_venue', 'pub_year', 'pub_status'],
         administration: ['admin_position', 'admin_faculty', 'admin_start_date'],
         admin_duties: ['duty_type', 'duty_name', 'duty_frequency', 'duty_year'],
         service: ['service_type', 'service_title', 'service_organization', 'service_date', 'service_duration'],
@@ -1475,7 +1557,7 @@ function getSubmitToken() {
       };
 
       const numericBySection = {
-        teaching: ['course_credit_hours', 'course_class_size', 'course_lecture', 'course_tutorial', 'course_lab', 'course_fieldwork'],
+        teaching: ['course_credit_hours', 'course_lecture', 'course_tutorial', 'course_lab', 'course_fieldwork'],
         supervision: ['student_year'],
         research: ['research_amount', 'research_year'],
         publications: ['pub_year'],
@@ -1503,13 +1585,6 @@ function getSubmitToken() {
             errors.push({
               section: 'teaching',
               message: `Specify the semester for teaching entry #${index + 1}.`
-            });
-          }
-
-          if (sectionKey === 'administration' && record.admin_position === 'Other' && !record.admin_other_position) {
-            errors.push({
-              section: 'administration',
-              message: `Specify the leadership position for admin entry #${index + 1}.`
             });
           }
 
@@ -1581,13 +1656,7 @@ function getSubmitToken() {
             }
           });
 
-          if (sectionKey === 'teaching' && Number(record.course_class_size) <= 0) {
-            errors.push({
-              section: sectionKey,
-              message: `Class size must be greater than 0 in teaching entry #${index + 1}.`
-            });
-          }
-        });
+                  });
       });
 
       return {
@@ -1649,6 +1718,7 @@ function getSubmitToken() {
       };
 
       const scores = calculateScores();
+      const normalized = calculateNormalizedScores();
       const status = getWorkloadStatus(scores.total);
       const totalHours = calculateTotalHours({
         teaching: getRecordsBySection('teaching'),
@@ -1983,14 +2053,78 @@ function getSubmitToken() {
       return scores;
     }
 
-    function getTeachingClassSizeBand(classSize) {
-      if (classSize > 100) {
-        return { label: 'More than 100 students', factor: 1.5 };
-      }
-      if (classSize > 50) {
-        return { label: '51 to 100 students', factor: 1.3 };
-      }
-      return { label: '1 to 50 students', factor: 1.0 };
+
+    function calculateNormalizedScores() {
+      const rawScores = calculateScores();
+      const smartConfig = readSmartConfig();
+      const benchmarks = smartConfig.sectionBenchmarks || {};
+      const weights = smartConfig.sectionWeights || {};
+      const rawAdminCombined = rawScores.adminLeadership + rawScores.adminDuties;
+
+      const rawByCategory = {
+        Teaching: rawScores.teaching,
+        Supervision: calculateRawSupervisionEquivalentMastersMain(),
+        Research: rawScores.research,
+        Publications: rawScores.publications,
+        AdminCombined: rawAdminCombined,
+        Service: rawScores.service,
+        Professional: rawScores.professional
+      };
+
+      const benchmarkByCategory = {
+        Teaching: Number(benchmarks.TeachingWeeklyHoursBenchmark || 0),
+        Supervision: Number(benchmarks.SupervisionBenchmarkMastersMain || 0),
+        Research: Number(benchmarks.ResearchBenchmark || 0),
+        Publications: Number(benchmarks.PublicationsBenchmarkPapers || 0),
+        AdminCombined: Number(benchmarks.AdminBenchmarkUniversityAppointments || 0),
+        Service: Number(benchmarks.ServiceBenchmark || 0),
+        Professional: Number(benchmarks.ProfessionalBenchmark || 0)
+      };
+
+      const achievements = {};
+      const weightedContributions = {};
+      const overloadFlags = {};
+
+      Object.keys(weights).forEach((category) => {
+        const rawValue = Number(rawByCategory[category] || 0);
+        const benchmarkValue = Number(benchmarkByCategory[category] || 0);
+        const achievement = benchmarkValue > 0 ? Math.min(rawValue / benchmarkValue, 1) : 0;
+        achievements[category] = achievement;
+        weightedContributions[category] = achievement * Number(weights[category] || 0);
+        overloadFlags[category] = {
+          overload: benchmarkValue > 0 ? rawValue > benchmarkValue : false,
+          overloadAmount: benchmarkValue > 0 ? Math.max(rawValue - benchmarkValue, 0) : 0,
+          overloadPercent: benchmarkValue > 0 ? (rawValue / benchmarkValue) * 100 : 0,
+          rawValue,
+          benchmarkValue
+        };
+      });
+
+      const finalScore = Math.round(Object.values(weightedContributions).reduce((sum, value) => sum + value, 0) * 10000) / 100;
+
+      return {
+        rawScores,
+        rawAdminCombined,
+        achievements,
+        weightedContributions,
+        finalScore,
+        overloadFlags,
+        configSnapshot: smartConfig,
+        rawByCategory
+      };
+    }
+
+    function calculateRawSupervisionEquivalentMastersMain() {
+      return getRecordsBySection('supervision').reduce((sum, student) => {
+        const level = student.student_level;
+        const role = student.student_role;
+        const statusFactor = getStudentCurrentStatusFactor(student.student_current_status);
+        let base = 0;
+        if (level === 'masters') base = role === 'main' || role === 'leader' ? 1.0 : 0.2;
+        if (level === 'phd') base = role === 'main' || role === 'leader' ? 1.6 : 0.32;
+        if (level === 'undergraduate') base = 0.2;
+        return sum + (base * statusFactor);
+      }, 0);
     }
 
     function getTeachingCourseBreakdown(course) {
@@ -1998,40 +2132,33 @@ function getSubmitToken() {
                                  (course.course_lab || 0) + (course.course_fieldwork || 0);
       const weeklyHoursDivisor = 14;
       const weeklyHours = totalSemesterHours / weeklyHoursDivisor;
-      const classSize = course.course_class_size || 0;
-      const classSizeBand = getTeachingClassSizeBand(classSize);
-      const coursePoints = Math.round(weeklyHours * classSizeBand.factor * 10) / 10;
+      const coursePoints = Math.round(weeklyHours * 10) / 10;
 
       return {
         total_semester_hours: totalSemesterHours,
         weekly_hours_divisor: weeklyHoursDivisor,
         weekly_hours: weeklyHours,
-        class_size: classSize,
-        class_size_band_label: classSizeBand.label,
-        class_size_factor: classSizeBand.factor,
-        course_points: coursePoints
+        course_points: coursePoints,
+        teaching_section: course.teaching_section || 'A'
       };
     }
 
-    // TEACHING: Weekly hours × class size factor
+    // TEACHING: Weekly hours only
     function calculateCourseScore(course) {
       return getTeachingCourseBreakdown(course).course_points;
     }
 
     function getSupervisionBasePoints(studentLevel, supervisorRole) {
       if (studentLevel === 'phd') {
-        return supervisorRole === 'main' ? 8 : 4;
+        return supervisorRole === 'main' || supervisorRole === 'leader' ? 8 : 1.6;
       }
       if (studentLevel === 'masters') {
-        return supervisorRole === 'main' ? 5 : 2.5;
+        return supervisorRole === 'main' || supervisorRole === 'leader' ? 5 : 1;
       }
       return 1;
     }
 
-    function getStudentRegistrationModeFactor(studentRegistrationMode) {
-      if (studentRegistrationMode === 'part_time') {
-        return 0.5;
-      }
+    function getStudentRegistrationModeFactor() {
       return 1.0;
     }
 
@@ -2040,7 +2167,7 @@ function getSubmitToken() {
         active: 1.0,
         on_leave: 0.2,
         deferred: 0.2,
-        completed: 0.3,
+        completed: 0.5,
         terminated: 0.0,
         not_active: 0.0
       };
@@ -2052,7 +2179,6 @@ function getSubmitToken() {
       const hasRequiredFields = Boolean(
         student?.student_level &&
         student?.student_role &&
-        student?.student_registration_mode &&
         student?.student_current_status
       );
 
@@ -2067,7 +2193,7 @@ function getSubmitToken() {
       }
 
       const basePoints = getSupervisionBasePoints(student.student_level, student.student_role);
-      const modeFactor = getStudentRegistrationModeFactor(student.student_registration_mode);
+      const modeFactor = getStudentRegistrationModeFactor();
       const statusFactor = getStudentCurrentStatusFactor(student.student_current_status);
       const entryPoints = Math.round(basePoints * modeFactor * statusFactor * 100) / 100;
 
@@ -2091,26 +2217,33 @@ function getSubmitToken() {
       if (dutyType === 'Curriculum Development') return 6;
       if (dutyType === 'Committee Chair') return 5;
       if (dutyType === 'Event Organizer') return 4;
-      if (dutyType === 'Exam Coordinator') return 3;
       if (dutyType === 'Committee Member') return 2;
       return 2;
     }
 
     function getDutyFrequencyFactor(frequency) {
-      if (frequency === 'Ongoing in Reporting Period') return 1.0;
-      if (frequency === 'Per Semester') return 0.6;
-      if (frequency === 'One-Time Event') return 0.3;
+      if (frequency === 'Full period') return 1.0;
+      if (frequency === 'Half period') return 0.5;
+      if (frequency === 'Short term') return 0.3;
       return 0;
     }
 
+    function getAdminDutyRoleFactor(role) {
+      if (role === 'Chairperson') return 1.0;
+      if (role === 'Secretary') return 0.7;
+      if (role === 'Member') return 0.5;
+      return 0.4;
+    }
+
     function getAdminDutyEntryBreakdown(duty) {
-      if (!duty?.duty_type || !duty?.duty_frequency) {
-        return { base_points: 0, frequency_factor: 0, entry_points: 0, is_counted: false };
+      if (!duty?.duty_type || !duty?.duty_frequency || !duty?.duty_role) {
+        return { base_points: 0, frequency_factor: 0, role_factor: 0, entry_points: 0, is_counted: false };
       }
       const basePoints = getAdminDutyBasePoints(duty.duty_type);
       const frequencyFactor = getDutyFrequencyFactor(duty.duty_frequency);
-      const entryPoints = Math.round(basePoints * frequencyFactor * 100) / 100;
-      return { base_points: basePoints, frequency_factor: frequencyFactor, entry_points: entryPoints, is_counted: true };
+      const roleFactor = getAdminDutyRoleFactor(duty.duty_role);
+      const entryPoints = Math.round(basePoints * frequencyFactor * roleFactor * 100) / 100;
+      return { base_points: basePoints, frequency_factor: frequencyFactor, role_factor: roleFactor, entry_points: entryPoints, is_counted: true };
     }
 
     function calculateAdminDutyScore(duty) {
@@ -2146,35 +2279,30 @@ function getSubmitToken() {
       return getResearchEntryBreakdown(research).entry_points;
     }
 
-    function getPublicationBasePoints(type) {
-      if (type === 'journal') return 10;
-      if (type === 'conference') return 6;
-      if (type === 'chapter') return 8;
-      if (type === 'proceeding') return 5;
-      return 3;
+    function getPublicationBasePoints() {
+      return 1;
     }
 
-    function getWritingStageFactor(stage) {
-      if (stage === 'drafting') return 1.0;
-      if (stage === 'revising') return 0.8;
-      if (stage === 'responding_reviewers') return 0.9;
-      if (stage === 'proofing') return 0.5;
-      if (stage === 'no_activity') return 0.0;
+    function getPublicationStatusWeight(status) {
+      if (status === 'Drafting') return 0.10;
+      if (status === 'Submitted') return 0.50;
+      if (status === 'Accepted') return 0.50;
+      if (status === 'Published') return 1.00;
       return 0;
     }
 
     function getPublicationEntryBreakdown(pub) {
-      if (!pub?.pub_type || !pub?.pub_stage) {
-        return { base_points: 0, stage_factor: 0, entry_points: 0, is_counted: false };
+      if (!pub?.pub_type || !pub?.pub_status) {
+        return { base_points: 0, status_weight: 0, entry_points: 0, is_counted: false };
       }
       const descriptive = getPublicationDescriptiveMetadata(pub);
       const statusMeta = getPublicationStatusMetadata(pub);
       const basePoints = getPublicationBasePoints(pub.pub_type);
-      const stageFactor = getWritingStageFactor(pub.pub_stage);
-      const entryPoints = Math.round(basePoints * stageFactor * 100) / 100;
+      const statusWeight = getPublicationStatusWeight(pub.pub_status);
+      const entryPoints = Math.round(basePoints * statusWeight * 100) / 100;
       return {
         base_points: basePoints,
-        stage_factor: stageFactor,
+        status_weight: statusWeight,
         indexing: descriptive.indexing_display,
         author_position: descriptive.author_position_display,
         venue: pub.pub_venue || '-',
@@ -2231,6 +2359,7 @@ function getSubmitToken() {
       if (type === 'Public Lecture') return 6;
       if (type === 'Consulting') return 5;
       if (type === 'Mentorship') return 4;
+      if (type === 'Income Generation') return 6;
       return 3;
     }
 
@@ -2601,7 +2730,7 @@ function getSubmitToken() {
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div class="space-y-2">
-                <h2 class="heading-font text-3xl font-bold text-gray-900">FST UMS Workload Calculator</h2>
+                <h2 class="heading-font text-3xl font-bold text-gray-900">FST SMART Calculator</h2>
                 <p class="text-gray-600">Record workload activities for the reporting period and view a consolidated workload summary used for staffing decisions.</p>
                 <p class="text-sm text-gray-700">How to use: Complete Staff Profile first, then record activities in the relevant sections, then review Results to check your consolidated workload summary.</p>
                 <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900">
@@ -2716,31 +2845,12 @@ function getSubmitToken() {
             
             <div class="bg-white rounded-lg p-4 mb-4">
               <p class="text-sm text-gray-700 mb-3">
-                <strong>Course points equals weekly_hours × class_size_factor</strong>
+                <strong>Course points equals weekly_hours (no class size factor)</strong>
               </p>
               <div class="text-xs text-gray-600 space-y-2 mb-4">
                 <p><strong>Step 1:</strong> total_semester_hours = lecture_hours_semester + tutorial_hours_semester + lab_hours_semester + fieldwork_hours_semester</p>
                 <p><strong>Step 2:</strong> weekly_hours = total_semester_hours ÷ 14</p>
-                <p><strong>Step 3:</strong> class_size_factor is selected by class size band</p>
-                <p><strong>Step 4:</strong> course_points = round(weekly_hours × class_size_factor, 1 decimal)</p>
-              </div>
-              <div class="overflow-x-auto">
-                <table class="w-full text-xs text-gray-700 border border-gray-200 rounded-lg">
-                  <thead class="bg-blue-100 text-blue-900">
-                    <tr>
-                      <th class="text-left px-3 py-2 border-b border-gray-200">Class size band</th>
-                      <th class="text-left px-3 py-2 border-b border-gray-200">Factor</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${classSizeFactorRows.map(row => `
-                      <tr class="bg-white">
-                        <td class="px-3 py-2 border-b border-gray-100">${row.band}</td>
-                        <td class="px-3 py-2 border-b border-gray-100">${row.factor}</td>
-                      </tr>
-                    `).join('')}
-                  </tbody>
-                </table>
+                <p><strong>Step 3:</strong> course_points = round(weekly_hours, 1 decimal)</p>
               </div>
             </div>
             
@@ -2749,8 +2859,7 @@ function getSubmitToken() {
               <p class="text-xs text-gray-700">
                 Course with 22L + 6T + 0Lab + 0F = 28 hours total<br>
                 Weekly = 28 ÷ 14 = 2.0 hours/week<br>
-                Class size 45 students → factor 1.0<br>
-                <strong class="text-green-700">Score = 2.0 × 1.0 = 2.0 points</strong>
+                <strong class="text-green-700">Score = 2.0 points</strong>
               </p>
             </div>
 
@@ -2784,12 +2893,7 @@ function getSubmitToken() {
                          placeholder="2">
                 </div>
                 
-                <div>
-                  <label for="course-class-size" class="block text-sm font-semibold text-gray-700 mb-2">Class Size *</label>
-                  <input type="number" id="course-class-size" required min="1"
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="45">
-                </div>
+                <div><label for="teaching-section" class="block text-sm font-semibold text-gray-700 mb-2">Teaching Section *</label><select id="teaching-section" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="A" selected>Section A — Normal Teaching Subjects</option><option value="B">Section B — Flexible Learning</option></select></div>
                 
                 <div>
                   <label for="course-lecture" class="block text-sm font-semibold text-gray-700 mb-2">Lecture Hours (per semester) *</label>
@@ -2868,7 +2972,7 @@ function getSubmitToken() {
                       <div class="flex-1">
                         <div class="font-semibold text-gray-900">${course.course_code} - ${course.course_name}</div>
                         <div class="text-sm text-gray-600 mt-1">
-                          ${course.course_credit_hours} credits • ${course.course_class_size} students • ${course.course_role}
+                          ${course.course_credit_hours} credits • Section ${course.teaching_section || 'A'} • ${course.course_role}
                         </div>
                         <div class="text-sm text-gray-600 mt-1">
                           Total: ${breakdown.total_semester_hours}h (L:${course.course_lecture || 0}, T:${course.course_tutorial || 0}, Lab:${course.course_lab || 0}, F:${course.course_fieldwork || 0}) • 
@@ -2918,22 +3022,23 @@ function getSubmitToken() {
 
       const courses = getRecordsBySection('teaching');
       const savedTotal = Math.round(courses.reduce((sum, course) => sum + calculateCourseScore(course), 0) * 10) / 10;
+      const teachingBenchmark = Number(readSmartConfig().sectionBenchmarks.TeachingWeeklyHoursBenchmark || 5);
 
       const lectureRaw = document.getElementById('course-lecture')?.value ?? '';
       const tutorialRaw = document.getElementById('course-tutorial')?.value ?? '';
       const labRaw = document.getElementById('course-lab')?.value ?? '';
       const fieldworkRaw = document.getElementById('course-fieldwork')?.value ?? '';
-      const classSizeRaw = document.getElementById('course-class-size')?.value ?? '';
+      const teachingSection = document.getElementById('teaching-section')?.value || 'A';
 
       const draftCourse = {
         course_lecture: parseFloat(lectureRaw) || 0,
         course_tutorial: parseFloat(tutorialRaw) || 0,
         course_lab: parseFloat(labRaw) || 0,
         course_fieldwork: parseFloat(fieldworkRaw) || 0,
-        course_class_size: parseInt(classSizeRaw, 10) || 0
+        teaching_section: teachingSection
       };
 
-      const hasRequiredInputs = lectureRaw !== '' && classSizeRaw !== '';
+      const hasRequiredInputs = lectureRaw !== '';
       const draftBreakdown = getTeachingCourseBreakdown(draftCourse);
       const liveTotal = Math.round((savedTotal + (hasRequiredInputs ? draftBreakdown.course_points : 0)) * 10) / 10;
 
@@ -2941,16 +3046,16 @@ function getSubmitToken() {
         <p class="font-semibold text-gray-900 mb-2">Live preview</p>
         ${hasRequiredInputs ? `
           <div class="space-y-1 mb-3">
-            <p><strong>Current draft input:</strong> lecture_hours_semester=${draftCourse.course_lecture}, tutorial_hours_semester=${draftCourse.course_tutorial}, lab_hours_semester=${draftCourse.course_lab}, fieldwork_hours_semester=${draftCourse.course_fieldwork}, class_size=${draftCourse.course_class_size}</p>
+            <p><strong>Current draft input:</strong> lecture_hours_semester=${draftCourse.course_lecture}, tutorial_hours_semester=${draftCourse.course_tutorial}, lab_hours_semester=${draftCourse.course_lab}, fieldwork_hours_semester=${draftCourse.course_fieldwork}, teaching_section=${draftCourse.teaching_section}</p>
             <p><strong>Step-by-step:</strong> total_semester_hours = ${draftCourse.course_lecture} + ${draftCourse.course_tutorial} + ${draftCourse.course_lab} + ${draftCourse.course_fieldwork} = ${draftBreakdown.total_semester_hours}</p>
             <p>weekly_hours = ${draftBreakdown.total_semester_hours} ÷ ${draftBreakdown.weekly_hours_divisor} = ${draftBreakdown.weekly_hours.toFixed(4)}</p>
-            <p>class_size_band = ${draftBreakdown.class_size_band_label}, class_size_factor = ${draftBreakdown.class_size_factor}</p>
-            <p><strong>course_points = round(${draftBreakdown.weekly_hours.toFixed(4)} × ${draftBreakdown.class_size_factor}, 1) = ${draftBreakdown.course_points.toFixed(1)}</strong></p>
+            <p><strong>course_points = round(${draftBreakdown.weekly_hours.toFixed(4)}, 1) = ${draftBreakdown.course_points.toFixed(1)}</strong></p>
           </div>
         ` : '<p class="mb-3">No teaching inputs selected yet.</p>'}
         <p><strong>Saved teaching total:</strong> ${savedTotal.toFixed(1)}</p>
         <p><strong>Live teaching total (saved + draft):</strong> ${liveTotal.toFixed(1)}</p>
         <p><strong>Number of courses saved:</strong> ${courses.length}</p>
+        ${savedTotal > teachingBenchmark ? `<p class='text-amber-700 font-semibold'>⚠️ Teaching overload warning: ${savedTotal.toFixed(1)} weekly hours > benchmark ${teachingBenchmark.toFixed(1)}. This does not reduce final score.</p>` : ''}
       `;
     }
 
@@ -2977,7 +3082,7 @@ function getSubmitToken() {
         course_tutorial: parseFloat(document.getElementById('course-tutorial').value) || 0,
         course_lab: parseFloat(document.getElementById('course-lab').value) || 0,
         course_fieldwork: parseFloat(document.getElementById('course-fieldwork').value) || 0,
-        course_class_size: parseInt(document.getElementById('course-class-size').value),
+        teaching_section: document.getElementById('teaching-section').value || 'A',
         course_semester: semesterMeta.selected,
         course_semester_other: semesterMeta.other,
         course_role: document.getElementById('course-role').value,
@@ -3054,8 +3159,10 @@ function getSubmitToken() {
             <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
               <p class="text-sm font-semibold text-yellow-900 mb-2">Example:</p>
               <p class="text-xs text-gray-700">
-                • PhD (Main), Full time, Active: 8 × 1.0 × 1.0 = 8.0<br>
-                • PhD (Main), Part time, Active: 8 × 0.5 × 1.0 = 4.0
+                • Masters Leader Active = 1.0 equivalent<br>
+                • Masters Member Active = 0.2 equivalent<br>
+                • Completed applies status factor 0.5<br>
+                • PhD Leader = 1.6, PhD Member = 0.32, Undergraduate = 0.2 (all × status factor)
               </p>
             </div>
 
@@ -3096,20 +3203,12 @@ function getSubmitToken() {
                   <label for="student-role" class="block text-sm font-semibold text-gray-700 mb-2">Supervision Role *</label>
                   <select id="student-role" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
                     <option value="">Select Role</option>
-                    <option value="main">Main Supervisor</option>
-                    <option value="co">Co-Supervisor</option>
+                    <option value="leader">Leader</option>
+                    <option value="member">Member</option>
                   </select>
                 </div>
 
-                <div>
-                  <label for="student_registration_mode" class="block text-sm font-semibold text-gray-700 mb-2">Student Registration Mode *</label>
-                  <select id="student_registration_mode" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
-                    <option value="">Select Mode</option>
-                    <option value="full_time">Full time (factor 1.0)</option>
-                    <option value="part_time">Part time (factor 0.5)</option>
-                  </select>
-                </div>
-
+                
                 <div>
                   <label for="student_current_status" class="block text-sm font-semibold text-gray-700 mb-2">Student Current Status *</label>
                   <select id="student_current_status" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
@@ -3117,7 +3216,7 @@ function getSubmitToken() {
                     <option value="active">Active (factor 1.0)</option>
                     <option value="on_leave">On leave (factor 0.2)</option>
                     <option value="deferred">Deferred (factor 0.2)</option>
-                    <option value="completed">Completed (factor 0.3)</option>
+                    <option value="completed">Completed (factor 0.5)</option>
                     <option value="terminated">Terminated (factor 0.0)</option>
                     <option value="not_active">Not active (factor 0.0)</option>
                   </select>
@@ -3163,7 +3262,7 @@ function getSubmitToken() {
                   const breakdown = getSupervisionEntryBreakdown(student);
                   const score = breakdown.entry_points;
                   const roleLabel = student.student_role === 'main' ? 'Main Supervisor' : 'Co-Supervisor';
-                  const modeLabel = student.student_registration_mode === 'part_time' ? 'Part time' : 'Full time';
+                  const modeLabel = 'Standard';
                   const statusLabelMap = {
                     active: 'Active',
                     on_leave: 'On leave',
@@ -3237,15 +3336,13 @@ function getSubmitToken() {
       const draftStudent = {
         student_level: document.getElementById('student-level')?.value || '',
         student_role: document.getElementById('student-role')?.value || '',
-        student_registration_mode: document.getElementById('student_registration_mode')?.value || '',
-        student_current_status: document.getElementById('student_current_status')?.value || ''
+                student_current_status: document.getElementById('student_current_status')?.value || ''
       };
       const draftBreakdown = getSupervisionEntryBreakdown(draftStudent);
       const hasDraftSelection = Boolean(
         draftStudent.student_level ||
         draftStudent.student_role ||
-        draftStudent.student_registration_mode ||
-        draftStudent.student_current_status
+                draftStudent.student_current_status
       );
 
       const rows = [
@@ -3261,7 +3358,7 @@ function getSubmitToken() {
         <div class="space-y-1 mb-3">
           ${rows.length === 0 ? '<p>No supervision entry selected yet.</p>' : rows.map((row) => `
             <p>
-              ${row.label}: base_points=${row.base_points}, mode_factor=${row.mode_factor}, status_factor=${row.status_factor}, entry_points=${row.entry_points.toFixed(2)}
+              ${row.label}: base_points=${row.base_points}, role_factor=${row.mode_factor}, status_factor=${row.status_factor}, entry_points=${row.entry_points.toFixed(2)}
             </p>
           `).join('')}
         </div>
@@ -3288,10 +3385,11 @@ function getSubmitToken() {
         student_matric: document.getElementById('student-matric').value,
         student_level: document.getElementById('student-level').value,
         student_role: document.getElementById('student-role').value,
-        student_registration_mode: document.getElementById('student_registration_mode').value,
-        student_current_status: document.getElementById('student_current_status').value,
+                student_current_status: document.getElementById('student_current_status').value,
         student_title: document.getElementById('student-title').value,
         student_year: parseInt(document.getElementById('student-year').value),
+        student_start_date: document.getElementById('student-start-date').value,
+        student_end_date: document.getElementById('student-end-date').value,
         created_at: new Date().toISOString()
       };
       
@@ -3365,10 +3463,10 @@ function getSubmitToken() {
       teachingSemester: ['Semester 1 2025/2026', 'Semester 2 2025/2026', 'Semester 1 2026/2027', 'Semester 2 2026/2027', 'Other'],
       publicationIndexing: ['Scopus', 'Web of Science', 'MyCite', 'ERA', 'Not indexed', 'Other'],
       publicationAuthorPosition: ['First author', 'Corresponding author', 'Co author', 'Single author', 'Editor', 'Other'],
-      publicationStatus: ['Drafting', 'Submitted', 'Under review', 'Revision requested', 'Accepted', 'Published', 'Rejected', 'Withdrawn', 'Other'],
-      administrationPosition: ['Dean', 'Deputy Dean', 'Centre Director', 'Head of Programme', 'Postgraduate Coordinator', 'Programme Coordinator', 'Other'],
-      adminDutyType: ['Accreditation Work', 'Curriculum Development', 'Committee Chair', 'Event Organizer', 'Exam Coordinator', 'Committee Member', 'Other'],
-      serviceType: ['Committee Service', 'Community Engagement', 'Expert Contribution', 'Event Support', 'Other'],
+      publicationStatus: ['Drafting', 'Submitted', 'Accepted', 'Published', 'Other'],
+      administrationPosition: ['Dean', 'Deputy Dean', 'Centre Director', 'Deputy Centre Director', 'Head of Programme', 'Postgraduate Coordinator', 'Programme Coordinator'],
+      adminDutyType: ['Accreditation Work', 'Curriculum Development', 'Committee Chair', 'Event Organizer', 'Committee Member', 'Other'],
+      serviceType: ['Committee Service', 'Community Engagement', 'Expert Contribution', 'Event Support', 'Income Generation', 'Other'],
       laboratoryResponsibility: ['Lab Coordinator', 'Safety Officer', 'Equipment Manager', 'Inventory Manager', 'SOP Development', 'Lab Supervisor', 'Other'],
       professionalType: ['Professional Body Leadership', 'Professional Certification', 'Conference Organizer', 'Editorial Board', 'Professional Training', 'Membership', 'Other']
     };
@@ -3648,8 +3746,7 @@ function getSubmitToken() {
         pub_title: document.getElementById('pub-title')?.value || '',
         pub_type: itemType,
         pub_type_other_text: itemType === 'other' ? (document.getElementById('pub-type-other')?.value || '') : '',
-        pub_stage: document.getElementById('pub-stage')?.value || '',
-        indexing_label: indexingLabel,
+                indexing_label: indexingLabel,
         author_position_label: authorPositionLabel,
         indexing_other_text: indexingLabel === 'Other' ? (document.getElementById('pub-index-other')?.value || '') : '',
         author_position_other_text: authorPositionLabel === 'Other' ? (document.getElementById('pub-position-other')?.value || '') : '',
@@ -3667,10 +3764,10 @@ function getSubmitToken() {
           ${createCalculationPanel({
             sectionKey: 'publications',
             title: '🧮 Publication Workload Proxy',
-            formula: 'entry_points = base_points × stage_factor',
+            formula: 'entry_points = paper_equivalent × status_weight',
             baseTableHtml: '<p><strong>Base points by item type:</strong> Journal manuscript 10, Conference paper 6, Book chapter 8, Proceeding 5, Other 3</p>',
-            factorTableHtml: '<p><strong>Writing stage factors:</strong> Drafting 1.0, Revising 0.8, Responding to reviewers 0.9, Proofing 0.5, No activity 0.0</p>',
-            workedExampleHtml: '<strong>Example:</strong> Journal manuscript under revision → 10 × 0.8 = 8.00 points.',
+            factorTableHtml: '<p><strong>Status weights:</strong> Drafting 0.10, Submitted 0.50, Accepted 0.50, Published 1.00</p>',
+            workedExampleHtml: '<strong>Example:</strong> 1 submitted paper → 1 × 0.50 = 0.50 paper equivalent.',
             notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>Points represent writing work done in the reporting period.</li><li>Journal indexing, quartile, and acceptance do not change points.</li><li>Indexing, author position, venue, and status are descriptive only and do not affect points.</li></ul>'
           })}
 
@@ -3784,7 +3881,7 @@ function getSubmitToken() {
       const saved = getRecordsBySection('publications');
       const savedTotal = Math.round(saved.reduce((sum, item) => sum + calculatePublicationScore(item), 0) * 100) / 100;
       const breakdown = getPublicationEntryBreakdown(getPublicationsDraftInputState());
-      renderLivePreview({ sectionKey: 'publications', breakdown, equationText: `${breakdown.base_points} × ${breakdown.stage_factor}`, savedTotal });
+      renderLivePreview({ sectionKey: 'publications', breakdown, equationText: `${breakdown.base_points} × ${breakdown.status_weight}`, savedTotal });
     }
 
     async function savePublication(event) {
@@ -3846,6 +3943,8 @@ function getSubmitToken() {
         admin_faculty: document.getElementById('admin-faculty')?.value || '',
         admin_start_date: document.getElementById('admin-start-date')?.value || '',
         admin_end_date: document.getElementById('admin-end-date')?.value || '',
+        admin_has_allowance: document.getElementById('admin-has-allowance')?.checked || false,
+        admin_allowance_amount: Number(document.getElementById('admin-allowance-amount')?.value || 0) || 0
       };
     }
 
@@ -3881,7 +3980,7 @@ function getSubmitToken() {
                 })}
                 <div><label for="admin-faculty" class="block text-sm font-semibold text-gray-700 mb-2">Unit/Faculty *</label><input id="admin-faculty" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="admin-start-date" class="block text-sm font-semibold text-gray-700 mb-2">Start Date *</label><input id="admin-start-date" type="date" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-                <div><label for="admin-end-date" class="block text-sm font-semibold text-gray-700 mb-2">End Date</label><input id="admin-end-date" type="date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="admin-end-date" class="block text-sm font-semibold text-gray-700 mb-2">End Date</label><input id="admin-end-date" type="date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div><div><label class="block text-sm font-semibold text-gray-700 mb-2">Receives allowance?</label><label class="inline-flex items-center gap-2"><input type="checkbox" id="admin-has-allowance"><span>Yes</span></label></div><div><label for="admin-allowance-amount" class="block text-sm font-semibold text-gray-700 mb-2">Allowance amount</label><input id="admin-allowance-amount" type="number" min="0" step="0.01" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
               </div>
               <div class="flex justify-end"><button type="submit" id="save-administration-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add</button></div>
             </form>
@@ -3964,6 +4063,8 @@ function getSubmitToken() {
         duty_type_other_text: dutyType.other,
         duty_name: document.getElementById('duty-name')?.value || '',
         duty_frequency: document.getElementById('duty-frequency')?.value || '',
+        duty_role: document.getElementById('duty-role')?.value || '',
+        duty_appointment_level: document.getElementById('duty-appointment-level')?.value || '',
         duty_year: document.getElementById('duty-year')?.value || ''
       };
     }
@@ -3976,7 +4077,7 @@ function getSubmitToken() {
             sectionKey: 'admin_duties',
             title: '🧮 Admin Duties Workload',
             formula: 'entry_points = base_points × frequency_factor',
-            baseTableHtml: '<p><strong>Base points by duty type:</strong> Accreditation Work 8, Curriculum Development 6, Committee Chair 5, Event Organizer 4, Exam Coordinator 3, Committee Member 2, Other 2</p>',
+            baseTableHtml: '<p><strong>Base points by duty type:</strong> Accreditation Work 8, Curriculum Development 6, Committee Chair 5, Event Organizer 4, Committee Member 2, Other 2</p>',
             factorTableHtml: '<p><strong>Frequency factors:</strong> Ongoing in reporting period 1.0, Per Semester 0.6, One-Time Event 0.3</p>',
             workedExampleHtml: '<strong>Example:</strong> Curriculum development done per semester → 6 × 0.6 = 3.60 points.',
             notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>Claim duties performed in the reporting period.</li><li>Do not split one duty into multiple duplicates to inflate points.</li></ul>'
@@ -3998,7 +4099,7 @@ function getSubmitToken() {
                   required: true,
                   selectPlaceholder: 'Select'
                 })}
-                <div><label for="duty-frequency" class="block text-sm font-semibold text-gray-700 mb-2">Frequency *</label><select id="duty-frequency" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Ongoing in Reporting Period">Ongoing in reporting period</option><option value="Per Semester">Per semester</option><option value="One-Time Event">One-time event</option></select></div>
+                <div><label for="duty-role" class="block text-sm font-semibold text-gray-700 mb-2">Role *</label><select id="duty-role" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Chairperson">Chairperson</option><option value="Secretary">Secretary</option><option value="Member">Member</option><option value="Other">Other</option></select></div><div><label for="duty-frequency" class="block text-sm font-semibold text-gray-700 mb-2">Appointment duration *</label><select id="duty-frequency" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Full period">Full period</option><option value="Half period">Half period</option><option value="Short term">Short term</option></select></div><div><label for="duty-appointment-level" class="block text-sm font-semibold text-gray-700 mb-2">Appointment level *</label><select id="duty-appointment-level" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="University">University level</option><option value="Faculty">Faculty level</option><option value="Programme">Programme level</option></select></div>
                 <div class="md:col-span-2"><label for="duty-name" class="block text-sm font-semibold text-gray-700 mb-2">Duty Name *</label><input id="duty-name" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="duty-year" class="block text-sm font-semibold text-gray-700 mb-2">Year *</label><input id="duty-year" required type="number" min="2000" max="2035" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
               </div>
@@ -4642,7 +4743,7 @@ function getSubmitToken() {
       return titleBySection[sectionId] || fallback;
     }
 
-    function renderResultsSummary(profile, scores, status, sections) {
+    function renderResultsSummary(profile, scores, normalized, status, sections) {
       const indexMetrics = getWorkloadIndexMetrics(scores.total);
       const categoryKey = normalizeProfileCategoryKey(profile?.profile_category || '');
       const isAcademic = categoryKey === 'academic';
@@ -4695,7 +4796,7 @@ function getSubmitToken() {
         {
           section: 'Totals',
           label: 'Total score',
-          value: scores.total.toFixed(2)
+          value: `${normalized.finalScore.toFixed(2)} <span class="text-xs text-gray-500">(normalized)</span>`
         },
         {
           section: 'Totals',
@@ -4779,6 +4880,50 @@ function getSubmitToken() {
           </div>
         </div>
       `;
+    }
+
+    function renderSmartRadarPanel(normalized) {
+      const chart = renderRadarChart([{ label: 'Individual', achievements: normalized.achievements }]);
+      const warnings = Object.entries(normalized.overloadFlags || {}).filter(([,v]) => v.overload);
+      return `<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"><h3 class="heading-font text-2xl font-bold mb-3 text-gray-900">📡 SMART Radar (Achievements)</h3><div class="text-xs text-gray-600 mb-3">Axes: Teaching, Supervision, Research, Publications, AdminCombined, Service, Professional.</div>${chart}${warnings.length ? `<div class=\"mt-3 p-3 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800\"><strong>Overload warnings (no score penalty):</strong><ul class=\"list-disc ml-5 mt-1\">${warnings.map(([k,v])=>`<li>${k}: raw ${v.rawValue.toFixed(2)} > benchmark ${v.benchmarkValue.toFixed(2)} (${v.overloadPercent.toFixed(1)}%)</li>`).join('')}</ul></div>` : ''}</div>`;
+    }
+
+    function renderRadarChart(dataset = []) {
+      const axes = ['Teaching', 'Supervision', 'Research', 'Publications', 'AdminCombined', 'Service', 'Professional'];
+      const cx = 180; const cy = 180; const radius = 130;
+      const points = axes.map((axis, idx) => {
+        const angle = ((Math.PI * 2) / axes.length) * idx - (Math.PI / 2);
+        const value = Math.max(0, Math.min(100, Number((dataset[0]?.achievements?.[axis] || 0) * 100)));
+        const r = (value / 100) * radius;
+        return { axis, value, x: cx + (Math.cos(angle) * r), y: cy + (Math.sin(angle) * r), lx: cx + Math.cos(angle) * (radius + 20), ly: cy + Math.sin(angle) * (radius + 20) };
+      });
+      const polygon = points.map((p) => `${p.x},${p.y}`).join(' ');
+      return `<div class="w-full overflow-x-auto"><svg viewBox="0 0 360 360" class="w-full max-w-xl mx-auto">
+        <circle cx="${cx}" cy="${cy}" r="${radius}" fill="none" stroke="#cbd5e1" />
+        ${points.map((p) => `<line x1="${cx}" y1="${cy}" x2="${p.lx}" y2="${p.ly}" stroke="#e2e8f0"/>`).join('')}
+        <polygon points="${polygon}" fill="rgba(14,165,233,0.25)" stroke="#0284c7" stroke-width="2"/>
+        ${points.map((p)=>`<text x="${p.lx}" y="${p.ly}" font-size="9" text-anchor="middle" fill="#334155">${p.axis} ${p.value.toFixed(0)}%</text>`).join('')}
+      </svg></div>`;
+    }
+
+    function renderSmartSettingsPanel(normalized, profile) {
+      const role = String(parseProfileState(profile, false)?.userRole || '').toLowerCase();
+      const canEdit = normalized.configSnapshot.adminConfig.allowBenchmarkEditRoles.includes(role);
+      if (!canEdit) return '';
+      const b = normalized.configSnapshot.sectionBenchmarks;
+      const locked = normalized.configSnapshot.adminConfig.isBenchmarkLocked;
+      return `<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"><h3 class="heading-font text-xl font-bold mb-4">⚙️ Settings (SMART Benchmarks)</h3><div class="grid grid-cols-1 md:grid-cols-2 gap-4">${Object.entries(b).map(([k,v])=>`<label class="text-sm"><span class="block text-gray-600 mb-1">${k}</span><input data-benchmark-key="${k}" type="number" step="0.1" value="${v}" ${locked ? 'disabled' : ''} class="w-full px-3 py-2 border border-gray-300 rounded"></label>`).join('')}</div><div class="mt-3 flex items-center gap-3"><label class="inline-flex items-center gap-2"><input type="checkbox" id="benchmark-lock-toggle" ${locked ? 'checked' : ''}><span>Lock benchmark editing</span></label><button onclick="saveSmartBenchmarks()" class="px-4 py-2 bg-sky-600 text-white rounded-lg">Save Settings</button></div><p class="text-xs text-gray-500 mt-2">Version: ${escapeHtml(normalized.configSnapshot.lastUpdatedAt || '-')} by ${escapeHtml(normalized.configSnapshot.lastUpdatedBy || '-')}</p></div>`;
+    }
+
+    async function saveSmartBenchmarks() {
+      const config = readSmartConfig();
+      const inputs = Array.from(document.querySelectorAll('[data-benchmark-key]'));
+      const sectionBenchmarks = { ...config.sectionBenchmarks };
+      inputs.forEach((el) => { sectionBenchmarks[el.dataset.benchmarkKey] = Number(el.value || 0); });
+      const isLocked = Boolean(document.getElementById('benchmark-lock-toggle')?.checked);
+      writeSmartConfig({ ...config, sectionBenchmarks, adminConfig: { ...config.adminConfig, isBenchmarkLocked: isLocked } }, (getProfile()?.profile_name || 'unknown'));
+      showToast('SMART benchmark settings saved');
+      renderSection('results');
     }
 
     function renderSectionDrilldownModal() {
@@ -5015,6 +5160,7 @@ function getSubmitToken() {
 
     function renderResults() {
       const scores = calculateScores();
+      const normalized = calculateNormalizedScores();
       const status = getWorkloadStatus(scores.total);
       const profile = getProfile();
       const sections = getResultsSectionDefinitions(scores);
@@ -5044,7 +5190,9 @@ function getSubmitToken() {
           </div>
 
           <div id="submission-status" class="hidden"></div>
-          ${renderResultsSummary(profile, scores, status, sections)}
+          ${renderResultsSummary(profile, scores, normalized, status, sections)}
+          ${renderSmartRadarPanel(normalized)}
+          ${renderSmartSettingsPanel(normalized, profile)}
           ${renderSectionBreakdownTiles(sections)}
           ${renderCompositionBlock(sections, scores.total)}
           ${renderDataChecks(profile, sections, scores.total)}
@@ -5344,20 +5492,20 @@ function getSubmitToken() {
                 { key: 'course_code', label: 'Course Code', type: 'text' },
                 { key: 'course_name', label: 'Course Name', type: 'text' },
                 { key: 'course_credit_hours', label: 'Credit Hours', type: 'number' },
-                { key: 'course_class_size', label: 'Class Size', type: 'number' },
                 { key: 'course_lecture', label: 'Lecture Hrs', type: 'number' },
                 { key: 'course_tutorial', label: 'Tutorial Hrs', type: 'number' },
                 { key: 'course_lab', label: 'Lab Hrs', type: 'number' },
                 { key: 'course_fieldwork', label: 'Fieldwork Hrs', type: 'number' },
                 { key: 'course_semester', label: 'Semester', type: 'text' },
                 { key: 'course_role', label: 'Role', type: 'text' },
+                { key: 'teaching_section', label: 'Section', type: 'text' },
                 { key: 'rowScore', label: 'Score', type: 'score' }
               ],
               mapRow: (course) => ({
                 course_code: course.course_code,
                 course_name: course.course_name,
                 course_credit_hours: course.course_credit_hours,
-                course_class_size: course.course_class_size,
+                teaching_section: course.teaching_section || 'A',
                 course_lecture: course.course_lecture,
                 course_tutorial: course.course_tutorial,
                 course_lab: course.course_lab,
