@@ -887,7 +887,7 @@ const CONFIG_SMART = {
         avatar.textContent = initials;
         nameDisplay.textContent = profile.profile_name;
         rankDisplay.textContent = profile.profile_rank || getProfileCategoryLabel(profile.profile_category) || 'Staff';
-        
+
         const scores = calculateScores();
         const status = getWorkloadStatus(scores.total);
         
@@ -3066,10 +3066,10 @@ function getSubmitToken() {
         id: 'publications',
         icon: '📄',
         name: 'Publications',
-        measures: 'Publication writing workload from manuscript development and revision effort in the period.',
-        recordHere: ['Manuscript drafting', 'Revision and resubmission work', 'Reviewer response preparation'],
+        measures: 'Publication points based on manuscript status during the reporting period.',
+        recordHere: ['Submitted status: 0.10 points', 'Accepted status: 0.50 points', 'Published status: 1.00 points'],
         doNotRecordHere: ['Journal ranking or prestige', 'Internal committee tasks (Administration)', 'Professional certifications (Professional)'],
-        notes: 'Track writing effort, not publication impact or performance outcomes.'
+        notes: 'Scoring depends only on Status. Item Type is descriptive only.'
       },
       {
         id: 'administration',
@@ -3129,6 +3129,7 @@ function getSubmitToken() {
 
     let homeGuideExpandedSections = new Set();
     let homeRecordHelperSelection = '';
+    let homeGuideSearchQuery = '';
 
     const HOME_RECORD_HELPERS = {
       internal_committee: {
@@ -3153,6 +3154,34 @@ function getSubmitToken() {
       const startDate = profile?.reporting_start_date || state.reporting_start_date;
       const endDate = profile?.reporting_end_date || state.reporting_end_date;
       return Boolean(startDate && endDate);
+    }
+
+    // Home modifications: keep Home score values aligned with Results weighting logic.
+    function getActiveWeights(profile = getProfile()) {
+      return getActiveSectionWeights(profile, readSmartConfig());
+    }
+
+    // Home modifications: weighted snapshot + excluded count based on existing score/breakdown helpers.
+    function getHomeSnapshot() {
+      const normalized = calculateNormalizedScores();
+      const excludedCount = allRecords.reduce((sum, record) => {
+        const sectionKey = record.section === 'admin_duties' ? 'administration' : record.section;
+        const breakdown = getSectionEntryBreakdown(sectionKey, record);
+        return sum + Number(Boolean(breakdown.excluded_reason));
+      }, 0);
+      return {
+        weightedScore: Number(normalized.finalScore || 0),
+        achievements: normalized.achievements || {},
+        rawByCategory: normalized.rawByCategory || {},
+        excludedCount
+      };
+    }
+
+    function setHomeGuideSearchQuery(value) {
+      homeGuideSearchQuery = String(value || '');
+      if (currentSection === 'home') {
+        renderSection('home');
+      }
     }
 
     function toggleHomeGuideSection(sectionId) {
@@ -3226,8 +3255,34 @@ function getSubmitToken() {
       }
     }
 
-    function renderHomeSectionAccordion(staffCategoryKey) {
-      return HOME_SECTION_GUIDE.map((section) => {
+    function getHomeGuideFilteredSections() {
+      const query = homeGuideSearchQuery.trim().toLowerCase();
+      if (!query) return HOME_SECTION_GUIDE;
+      const keywordsBySection = {
+        teaching: ['teaching', 'lecture', 'tutorial', 'course'],
+        supervision: ['supervision', 'student', 'postgraduate', 'undergraduate'],
+        research: ['research', 'project', 'income'],
+        publications: ['publications', 'submitted', 'accepted', 'published'],
+        administration: ['administration', 'committee', 'chair', 'governance'],
+        laboratory: ['laboratory', 'lab', 'safety', 'equipment'],
+        service: ['service', 'community', 'engagement', 'reviewer'],
+        professional: ['professional', 'training', 'certification', 'membership']
+      };
+      return HOME_SECTION_GUIDE.filter((section) => {
+        const searchable = [
+          section.name,
+          section.measures,
+          ...(section.recordHere || []),
+          ...(section.doNotRecordHere || []),
+          section.notes,
+          ...(keywordsBySection[section.id] || [])
+        ].join(' ').toLowerCase();
+        return searchable.includes(query);
+      });
+    }
+
+    function renderHomeSectionAccordion(staffCategoryKey, sections = HOME_SECTION_GUIDE) {
+      return sections.map((section) => {
         const isExpanded = homeGuideExpandedSections.has(section.id);
         const notApplicableNote = getSectionNotApplicableNote(section.id, staffCategoryKey);
         return `
@@ -3267,11 +3322,20 @@ function getSubmitToken() {
 
     function renderHome() {
       const profile = getProfile();
-      const scores = calculateScores();
-      const indexMetrics = getWorkloadIndexMetrics(scores.total);
+      const snapshot = getHomeSnapshot();
       const reportingPeriodSet = hasReportingPeriod(profile);
       const staffCategory = getHomeStaffCategoryDetails(profile);
       const helperAnswer = HOME_RECORD_HELPERS[homeRecordHelperSelection] || null;
+      const profileState = parseProfileState(profile);
+      const reportStart = profile?.reporting_start_date || profileState.reporting_start_date;
+      const reportEnd = profile?.reporting_end_date || profileState.reporting_end_date;
+      const activeWeights = getActiveWeights(profile);
+      const guideSections = getHomeGuideFilteredSections();
+      const guideQuery = homeGuideSearchQuery.trim();
+      const achievementOrder = ['Teaching', 'Supervision', 'Research', 'Publications', 'Administration', 'Laboratory', 'Service', 'Professional'];
+
+      // Home modifications: weighted score KPI and progress now reflect weighted final score only.
+      const weightedScoreDisplay = Math.max(0, Math.min(100, Number(snapshot.weightedScore || 0)));
 
       return `
         <div class="space-y-5">
@@ -3281,20 +3345,11 @@ function getSubmitToken() {
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div class="space-y-2">
                 <h2 class="heading-font text-3xl font-bold text-gray-900">FST SMART Calculator</h2>
-                <p class="text-gray-600">Record workload activities for the reporting period and view a consolidated workload summary used for staffing decisions.</p>
-                <p class="text-sm text-gray-700">How to use: Complete Staff Profile first, then record activities in the relevant sections, then review Results to check your consolidated workload summary.</p>
+                <p class="text-gray-600">Record workload activities, then review the weighted final score used in Results.</p>
+                <p class="text-sm text-gray-700">Complete Staff Profile first. Save activities in each section once only.</p>
                 <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900">
                   <span class="font-semibold">Important rule:</span> Record each activity once only in the most appropriate section, and do not double count across sections.
                 </div>
-                ${reportingPeriodSet ? `
-                  <div class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200">
-                    Reporting period set
-                  </div>
-                ` : `
-                  <div class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-300">
-                    Reporting period not set
-                  </div>
-                `}
               </div>
               <button onclick="navigateToSection('profile')" class="px-4 py-2 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700 transition whitespace-nowrap">
                 Start with Staff Profile
@@ -3302,15 +3357,56 @@ function getSubmitToken() {
             </div>
           </div>
 
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div>
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h3 class="heading-font text-xl font-bold text-gray-900 mb-3">Start here: reporting period and staff category</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="rounded-lg border border-gray-200 p-4">
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Reporting period</p>
+                <p class="text-sm font-semibold text-gray-900 mt-1">${reportStart || '-'} to ${reportEnd || '-'}</p>
+                <p class="mt-2 text-xs text-gray-600">Only activities within the reporting period are counted for score. Entries outside the period will be saved but excluded and scored as zero.</p>
+                ${reportingPeriodSet ? '' : `
+                  <div class="mt-2 text-xs bg-amber-100 border border-amber-300 text-amber-900 rounded-lg p-2 font-semibold">
+                    Set reporting period in Profile to enable accurate scoring.
+                  </div>
+                `}
+              </div>
+              <div class="rounded-lg border border-gray-200 p-4">
                 <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Your staff category</p>
                 <p class="text-base font-semibold text-gray-900 mt-1">${staffCategory.label}</p>
+                ${staffCategory.key ? '' : '<p class="mt-2 text-xs text-amber-700">Set staff category in Profile to load the correct weightage.</p>'}
+                ${staffCategory.key ? '' : `
+                  <button onclick="navigateToSection('profile')" class="mt-3 px-3 py-2 text-sm font-semibold bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition">Go to Profile</button>
+                `}
               </div>
-              ${staffCategory.key ? '' : `
-                <button onclick="navigateToSection('profile')" class="px-3 py-2 text-sm font-semibold bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition">Set in Staff Profile</button>
-              `}
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+              <div>
+                <h3 class="heading-font text-xl font-bold text-gray-900">Weighted score snapshot</h3>
+                <p class="text-sm text-gray-600">Weighted score uses staff category weights. Raw totals are unweighted and for reference only.</p>
+              </div>
+              <div class="text-right">
+                <div class="text-3xl font-bold text-gray-900">${weightedScoreDisplay.toFixed(2)} / 100</div>
+                <div class="text-xs text-gray-500">Weighted final score (used for Results)</div>
+              </div>
+            </div>
+            <div class="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+              <div class="h-full bg-sky-600" style="width: ${weightedScoreDisplay.toFixed(2)}%"></div>
+            </div>
+            <div class="mt-3 text-xs text-gray-600">Excluded items this period, <span class="font-semibold">${snapshot.excludedCount}</span> <span title="Items saved outside reporting window overlap zero days and contribute zero score." class="text-gray-500">(outside reporting window overlap is zero days)</span></div>
+            <div class="mt-3 text-xs text-gray-600">Achievement breakdown: ${achievementOrder.map((axis) => `${axis} ${((snapshot.achievements?.[axis] || 0) * 100).toFixed(1)}%`).join(' • ')}</div>
+            <div class="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-700">
+              ${achievementOrder.map((axis) => `<div class="rounded border border-gray-200 px-2 py-1"><span class="font-semibold">${axis}:</span> ${(snapshot.rawByCategory?.[axis] || 0).toFixed(2)}</div>`).join('')}
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h3 class="heading-font text-xl font-bold text-gray-900 mb-2">Your weightage based on staff category</h3>
+            <p class="text-xs text-gray-600 mb-3">Some sections may have zero weight depending on staff category.</p>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+              ${achievementOrder.map((axis) => `<div class="rounded-lg border border-gray-200 px-3 py-2"><span class="font-semibold text-gray-900">${axis}</span><div class="text-xs text-gray-600">${Number(activeWeights[axis] || 0).toFixed(2)}</div></div>`).join('')}
             </div>
           </div>
 
@@ -3331,32 +3427,6 @@ function getSubmitToken() {
           </div>
 
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-              <div>
-                <h3 class="heading-font text-xl font-bold text-gray-900">Workload snapshot</h3>
-                <p class="text-sm text-gray-600">Current workload index based on saved entries.</p>
-              </div>
-              <div class="text-right">
-                <div class="text-3xl font-bold text-gray-900">${indexMetrics.displayIndexValue.toFixed(1)} / ${WORKLOAD_INDEX_MAX}</div>
-                <div class="text-xs text-gray-500">Total score: ${scores.total.toFixed(1)}</div>
-              </div>
-            </div>
-            <div class="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
-              <div class="h-full bg-sky-600" style="width: ${indexMetrics.fillPercent.toFixed(2)}%"></div>
-            </div>
-            <div class="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-4">
-              <h4 class="font-semibold text-gray-900 mb-1">Provisional index bands</h4>
-              <p class="text-xs text-gray-600 mb-3">Bands are provisional until calibrated with faculty data. Use for rough triage only.</p>
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-gray-700">
-                <div>Light: 0 to 19</div>
-                <div>Moderate: 20 to 34</div>
-                <div>Balanced: 35 to 49</div>
-                <div>Overloaded: 50 plus</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h3 class="heading-font text-xl font-bold text-gray-900 mb-3">Where do I record this?</h3>
             <div class="flex flex-wrap gap-2">
               ${Object.entries(HOME_RECORD_HELPERS).map(([id, helper]) => `
@@ -3372,14 +3442,18 @@ function getSubmitToken() {
 
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-              <h3 class="heading-font text-xl font-bold text-gray-900">Section guide</h3>
+              <div>
+                <h3 class="heading-font text-xl font-bold text-gray-900">Section guide</h3>
+                <p class="text-xs text-gray-600">Guide is collapsed by default. Matches: ${guideSections.length} of ${HOME_SECTION_GUIDE.length}</p>
+              </div>
               <div class="flex gap-2">
                 <button onclick="expandAllHomeGuide()" class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition">Expand all</button>
                 <button onclick="collapseAllHomeGuide()" class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition">Collapse all</button>
               </div>
             </div>
+            <input type="text" value="${escapeHtml(guideQuery)}" oninput="setHomeGuideSearchQuery(this.value)" placeholder="Search sections or keywords (committee, chair, lab, safety, income, training, certification...)" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none text-sm mb-4">
             <div class="space-y-3">
-              ${renderHomeSectionAccordion(staffCategory.key)}
+              ${guideSections.length ? renderHomeSectionAccordion(staffCategory.key, guideSections) : '<p class="text-sm text-gray-500">No guide items match your search.</p>'}
             </div>
           </div>
 
@@ -5213,7 +5287,6 @@ function getSubmitToken() {
 
     function renderAssistants() {
       const profile = getProfile();
-      const scores = calculateScores();
       const combinedScore = scores.teaching + scores.supervision;
 
       if (!profile) {
@@ -5624,7 +5697,6 @@ function getSubmitToken() {
       const body = document.getElementById('results-drilldown-body');
       if (!modal || !title || !body) return;
 
-      const scores = calculateScores();
       const sections = getResultsSectionDefinitions(scores);
       const section = sections.find((item) => item.id === sectionId);
       if (!section) return;
@@ -6718,8 +6790,7 @@ function getSubmitToken() {
       };
 
       function buildState() {
-        const scores = calculateScores();
-        return {
+          return {
           profile: getProfile(),
           scores,
           status: getWorkloadStatus(scores.total),
