@@ -1391,6 +1391,152 @@ const WORKLOAD_STATUS_THRESHOLDS = {
       }
     }
 
+
+    function normalizeProfileCategoryKey(raw) {
+      const value = String(raw || '').trim().toLowerCase();
+      if (!value) return '';
+
+      if (value.includes('academic staff') || value === 'academic') {
+        return 'academic';
+      }
+
+      if (value.includes('administration staff') || value === 'admin' || value === 'administration') {
+        return 'administration';
+      }
+
+      if (value.includes('lab staff') || value === 'lab' || value === 'laboratory') {
+        return 'laboratory';
+      }
+
+      return '';
+    }
+
+    function getProfileCategoryLabel(raw) {
+      const categoryKey = normalizeProfileCategoryKey(raw);
+      if (categoryKey === 'academic') return 'Academic Staff';
+      if (categoryKey === 'administration') return 'Administration Staff';
+      if (categoryKey === 'laboratory') return 'Lab Staff';
+      return raw || '';
+    }
+
+    function renderProfile() {
+      const profile = parseProfileState(getProfile());
+      const categoryKey = normalizeProfileCategoryKey(profile.profile_category || '');
+      const today = new Date().toISOString().split('T')[0];
+      const currentYear = new Date().getFullYear();
+
+      return `
+        <div class="space-y-6">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h3 class="heading-font text-2xl font-bold mb-4 text-gray-900">👤 Staff Profile</h3>
+            <form id="profile-form" class="space-y-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label for="profile-name" class="block text-sm font-semibold text-gray-700 mb-2">Staff Name</label>
+                  <input id="profile-name" type="text" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none" value="${escapeHtml(profile.profile_name || '')}">
+                </div>
+                <div>
+                  <label for="profile-staff-id" class="block text-sm font-semibold text-gray-700 mb-2">Staff ID</label>
+                  <input id="profile-staff-id" type="text" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none" value="${escapeHtml(profile.profile_staff_id || '')}">
+                </div>
+                <div>
+                  <label for="profile-category" class="block text-sm font-semibold text-gray-700 mb-2">Staff Category</label>
+                  <select id="profile-category" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
+                    <option value="">Select category</option>
+                    <option value="Academic Staff" ${categoryKey === 'academic' ? 'selected' : ''}>Academic Staff</option>
+                    <option value="Administration Staff" ${categoryKey === 'administration' ? 'selected' : ''}>Administration Staff</option>
+                    <option value="Lab Staff" ${categoryKey === 'laboratory' ? 'selected' : ''}>Lab Staff</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="profile-programme" class="block text-sm font-semibold text-gray-700 mb-2">Programme</label>
+                  <input id="profile-programme" type="text" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none" value="${escapeHtml(profile.profile_programme || '')}">
+                </div>
+                <div>
+                  <label for="profile-rank" class="block text-sm font-semibold text-gray-700 mb-2">Rank</label>
+                  <input id="profile-rank" type="text" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none" value="${escapeHtml(profile.profile_rank || '')}">
+                </div>
+                <div>
+                  <label for="profile-admin-status" class="block text-sm font-semibold text-gray-700 mb-2">Admin Status</label>
+                  <select id="profile-admin-status" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
+                    <option value="">Select status</option>
+                    <option value="admin" ${(profile.admin_status || '').toLowerCase() === 'admin' ? 'selected' : ''}>Admin</option>
+                    <option value="non_admin" ${(profile.admin_status || '').toLowerCase() === 'non_admin' ? 'selected' : ''}>Non-Admin</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="profile-admin-position" class="block text-sm font-semibold text-gray-700 mb-2">Administrative Position</label>
+                  <input id="profile-admin-position" type="text" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none" value="${escapeHtml(profile.profile_admin_position || '')}">
+                </div>
+                <div>
+                  <label for="profile-other-admin-position" class="block text-sm font-semibold text-gray-700 mb-2">Other Administrative Position</label>
+                  <input id="profile-other-admin-position" type="text" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none" value="${escapeHtml(profile.profile_other_admin_position || '')}">
+                </div>
+                <div>
+                  <label for="reporting-start-date" class="block text-sm font-semibold text-gray-700 mb-2">Reporting Start Date</label>
+                  <input id="reporting-start-date" type="date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none" value="${escapeHtml(profile.reporting_start_date || `${currentYear}-01-01`)}" max="${today}">
+                </div>
+                <div>
+                  <label for="reporting-end-date" class="block text-sm font-semibold text-gray-700 mb-2">Reporting End Date</label>
+                  <input id="reporting-end-date" type="date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none" value="${escapeHtml(profile.reporting_end_date || `${currentYear}-12-31`)}" max="${today}">
+                </div>
+              </div>
+              <div class="flex justify-end">
+                <button id="save-profile-btn" type="submit" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Save Profile</button>
+              </div>
+            </form>
+          </div>
+          ${createNavigationRow({ previous: { id: 'home', label: 'Home' }, next: { id: 'teaching', label: 'Teaching' } })}
+        </div>
+      `;
+    }
+
+    function setupProfileEventListeners() {
+      const form = document.getElementById('profile-form');
+      if (!form) return;
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+
+        if (!form.reportValidity()) return;
+
+        const existingProfile = getProfile();
+        const rawCategory = document.getElementById('profile-category')?.value || '';
+        const normalizedCategory = normalizeProfileCategoryKey(rawCategory);
+        const profileData = {
+          section: 'profile',
+          profile_name: document.getElementById('profile-name')?.value?.trim() || '',
+          profile_staff_id: document.getElementById('profile-staff-id')?.value?.trim() || '',
+          profile_category: getProfileCategoryLabel(normalizedCategory || rawCategory),
+          profile_programme: document.getElementById('profile-programme')?.value?.trim() || '',
+          profile_rank: document.getElementById('profile-rank')?.value?.trim() || '',
+          admin_status: document.getElementById('profile-admin-status')?.value || '',
+          profile_admin_position: document.getElementById('profile-admin-position')?.value?.trim() || '',
+          profile_other_admin_position: document.getElementById('profile-other-admin-position')?.value?.trim() || '',
+          reporting_start_date: document.getElementById('reporting-start-date')?.value || '',
+          reporting_end_date: document.getElementById('reporting-end-date')?.value || ''
+        };
+
+        if (existingProfile?.__backendId) {
+          profileData.__backendId = existingProfile.__backendId;
+        }
+
+        const result = existingProfile
+          ? await window.dataSdk.update(profileData)
+          : await window.dataSdk.create({ ...profileData, created_at: new Date().toISOString() });
+
+        if (!result?.isOk) {
+          showToast('Failed to save profile', 'error');
+          return;
+        }
+
+        writeLocalJson(PROFILE_STATE_STORAGE_KEY, profileData);
+        updateProfileDisplay();
+        renderNavigation();
+        showToast('Profile saved successfully!');
+      });
+    }
+
     function getSubmissionHistory() {
       const history = readLocalJson(SUBMISSION_HISTORY_KEY, []);
       return Array.isArray(history) ? history : [];
@@ -1539,7 +1685,7 @@ function getSubmitToken() {
           }
         }
 
-        if (normalizeProfileCategoryKey(profile.profile_category) === 'admin' && !profile.profile_admin_position) {
+        if (normalizeProfileCategoryKey(profile.profile_category) === 'administration' && !profile.profile_admin_position) {
           errors.push({ section: 'profile', message: 'Administrative position is required for admin staff.' });
         }
       }
@@ -5165,6 +5311,23 @@ function getSubmitToken() {
       const profile = getProfile();
       const sections = getResultsSectionDefinitions(scores);
 
+      if (!profile) {
+        return `
+          <div class="space-y-6">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <div class="text-center py-12">
+                <div class="text-6xl mb-4">👤</div>
+                <h3 class="text-xl font-bold text-gray-900 mb-2">Profile Required</h3>
+                <p class="text-gray-600 mb-6">Please create your staff profile first to view results.</p>
+                <button onclick="navigateToSection('profile')" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
+                  Go to Profile →
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
       return `
         <div class="space-y-6">
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
@@ -6156,3 +6319,8 @@ function getSubmitToken() {
     function copyToClipboard() {
       ExportReportingModule.copySummaryText();
     }
+
+
+    window.addEventListener('error', (e) => {
+      console.error('App error', e.error || e.message);
+    });
