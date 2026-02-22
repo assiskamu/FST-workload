@@ -859,7 +859,7 @@ const CONFIG_SMART = {
     function updateLiveScore() {
       const scores = calculateScores();
       const normalized = calculateNormalizedScores();
-      const status = getWorkloadStatus(scores.total);
+      const status = getWorkloadStatusWeighted(normalized.finalScore);
       const profile = getProfile();
       
       const badge = document.getElementById('live-score-badge');
@@ -868,7 +868,7 @@ const CONFIG_SMART = {
       
       if (profile && allRecords.length > 1) {
         badge.classList.remove('hidden');
-        scoreValue.textContent = Math.round(scores.total);
+        scoreValue.textContent = Math.round(normalized.finalScore);
         scoreIcon.textContent = status.icon;
       } else {
         badge.classList.add('hidden');
@@ -888,8 +888,8 @@ const CONFIG_SMART = {
         nameDisplay.textContent = profile.profile_name;
         rankDisplay.textContent = profile.profile_rank || getProfileCategoryLabel(profile.profile_category) || 'Staff';
 
-        const scores = calculateScores();
-        const status = getWorkloadStatus(scores.total);
+        const normalized = calculateNormalizedScores();
+        const status = getWorkloadStatusWeighted(normalized.finalScore);
         
         menuContent.innerHTML = `
           <div class="bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg p-4 mb-4">
@@ -908,7 +908,7 @@ const CONFIG_SMART = {
           <div class="space-y-2 mb-4">
             <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
               <span class="text-sm text-gray-600">Total Score</span>
-              <span class="font-bold text-lg text-gray-900">${scores.total.toFixed(1)}</span>
+              <span class="font-bold text-lg text-gray-900">${normalized.finalScore.toFixed(1)} / 100</span>
             </div>
             <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
               <span class="text-sm text-gray-600">Status</span>
@@ -2270,7 +2270,7 @@ function getSubmitToken() {
 
       const scores = calculateScores();
       const normalized = calculateNormalizedScores();
-      const status = getWorkloadStatus(scores.total);
+      const status = getWorkloadStatusWeighted(normalized.finalScore);
       const totalHours = calculateTotalHours({
         teaching: getRecordsBySection('teaching'),
         service: getRecordsBySection('service')
@@ -2911,14 +2911,6 @@ function getSubmitToken() {
       return 3;
     }
 
-    function getServiceDurationFactor(hours) {
-      const durationHours = Number(hours || 0);
-      if (durationHours < 2) return 0.5;
-      if (durationHours <= 6) return 1.0;
-      if (durationHours <= 15) return 1.5;
-      return 2.0;
-    }
-
     function getServiceEntryBreakdown(service) {
       if (!service?.service_type || !service?.service_start_date) {
         return { base_points: 0, duration_factor: 0, span_days: 0, entry_points: 0, is_counted: false };
@@ -3486,12 +3478,12 @@ function getSubmitToken() {
             
             <div class="bg-white rounded-lg p-4 mb-4">
               <p class="text-sm text-gray-700 mb-3">
-                <strong>Course points equals weekly_hours (no class size factor)</strong>
+                <strong>Course points equals Weekly hours, no class size factor</strong>
               </p>
               <div class="text-xs text-gray-600 space-y-2 mb-4">
-                <p><strong>Step 1:</strong> total_semester_hours = lecture_hours_semester + tutorial_hours_semester + lab_hours_semester + fieldwork_hours_semester</p>
-                <p><strong>Step 2:</strong> weekly_hours = total_semester_hours ÷ 14</p>
-                <p><strong>Step 3:</strong> course_points = round(weekly_hours, 1 decimal)</p>
+                <p><strong>Step 1:</strong> Total semester hours, Lecture hours per semester + Tutorial hours per semester + Lab hours per semester + Fieldwork hours per semester</p>
+                <p><strong>Step 2:</strong> Weekly hours, Total semester hours ÷ 14</p>
+                <p><strong>Step 3:</strong> Course points, Round Weekly hours to 1 decimal</p>
               </div>
             </div>
             
@@ -3687,10 +3679,10 @@ function getSubmitToken() {
         <p class="font-semibold text-gray-900 mb-2">Live preview</p>
         ${hasRequiredInputs ? `
           <div class="space-y-1 mb-3">
-            <p><strong>Current draft input:</strong> lecture_hours_semester=${draftCourse.course_lecture}, tutorial_hours_semester=${draftCourse.course_tutorial}, lab_hours_semester=${draftCourse.course_lab}, fieldwork_hours_semester=${draftCourse.course_fieldwork}, teaching_section=${draftCourse.teaching_section}</p>
-            <p><strong>Step-by-step:</strong> total_semester_hours = ${draftCourse.course_lecture} + ${draftCourse.course_tutorial} + ${draftCourse.course_lab} + ${draftCourse.course_fieldwork} = ${draftBreakdown.total_semester_hours}</p>
-            <p>weekly_hours = ${draftBreakdown.total_semester_hours} ÷ ${draftBreakdown.weekly_hours_divisor} = ${draftBreakdown.weekly_hours.toFixed(4)}</p>
-            <p><strong>course_points = round(${draftBreakdown.weekly_hours.toFixed(4)}, 1) = ${draftBreakdown.course_points.toFixed(1)}</strong></p>
+            <p><strong>Current draft input:</strong> Lecture hours per semester ${draftCourse.course_lecture}, Tutorial hours per semester ${draftCourse.course_tutorial}, Lab hours per semester ${draftCourse.course_lab}, Fieldwork hours per semester ${draftCourse.course_fieldwork}, Teaching section ${draftCourse.teaching_section}</p>
+            <p><strong>Step-by-step:</strong> Total semester hours, ${draftCourse.course_lecture} + ${draftCourse.course_tutorial} + ${draftCourse.course_lab} + ${draftCourse.course_fieldwork} = ${draftBreakdown.total_semester_hours}</p>
+            <p>Weekly hours, ${draftBreakdown.total_semester_hours} ÷ ${draftBreakdown.weekly_hours_divisor} = ${draftBreakdown.weekly_hours.toFixed(4)}</p>
+            <p><strong>Course points, rounded ${draftBreakdown.weekly_hours.toFixed(4)} to 1 decimal = ${draftBreakdown.course_points.toFixed(1)}</strong></p>
           </div>
         ` : '<p class="mb-3">No teaching inputs selected yet.</p>'}
         <p><strong>Saved teaching total:</strong> ${savedTotal.toFixed(1)}</p>
@@ -3779,7 +3771,7 @@ function getSubmitToken() {
             
             <div class="bg-white rounded-lg p-4 mb-4">
               <p class="text-sm text-gray-700 mb-3">
-                <strong>Entry points = base_points × registration_mode_factor × status_factor</strong>
+                <strong>Entry points, Base points x Role factor x Status factor</strong>
               </p>
               <div class="overflow-x-auto">
                 <table class="w-full text-xs text-gray-700 border border-gray-200 rounded-lg">
@@ -3847,7 +3839,7 @@ function getSubmitToken() {
                 </div>
                 
                 <div>
-                  <label for="student-role" class="block text-sm font-semibold text-gray-700 mb-2">Main Supervisor Type *</label>
+                  <label for="student-role" class="block text-sm font-semibold text-gray-700 mb-2">Supervision Role *</label>
                   <select id="student-role" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
                     <option value="">Select Role</option>
                     <option value="main">Main Supervisor</option>
@@ -3945,7 +3937,7 @@ function getSubmitToken() {
                         </div>
                         <div class="text-xs text-gray-500 mt-1">${student.student_title}</div>
                         <div class="text-xs text-gray-500 mt-1">
-                          <span class="font-semibold text-green-700">Score: ${breakdown.base_points} × ${breakdown.mode_factor} × ${breakdown.status_factor} = ${score}</span>${breakdown.excluded_reason ? ` <span class=\"text-amber-700\">(Excluded: ${escapeHtml(breakdown.excluded_reason)})</span>` : ''}
+                          <span class="font-semibold text-green-700">Score: Base points ${breakdown.base_points} x Role factor ${breakdown.mode_factor} x Status factor ${breakdown.status_factor} = ${score}</span>${breakdown.excluded_reason ? ` <span class=\"text-amber-700\">(Excluded: ${escapeHtml(breakdown.excluded_reason)})</span>` : ''}
                         </div>
                       </div>
                       <button type="button" onclick="deleteStudent('${student.__backendId}')" 
@@ -4021,7 +4013,7 @@ function getSubmitToken() {
         <div class="space-y-1 mb-3">
           ${rows.length === 0 ? '<p>No supervision entry selected yet.</p>' : rows.map((row) => `
             <p>
-              ${row.label}: base_points=${row.base_points}, role_factor=${row.mode_factor}, status_factor=${row.status_factor}, entry_points=${row.entry_points.toFixed(2)}${row.excluded_reason ? ` (Excluded: ${row.excluded_reason})` : ''}
+              ${row.label}: Base points ${row.base_points}, Role factor ${row.mode_factor}, Status factor ${row.status_factor}, Entry points ${row.entry_points.toFixed(2)}${row.excluded_reason ? ` (Excluded: ${row.excluded_reason})` : ''}
             </p>
           `).join('')}
         </div>
@@ -4284,7 +4276,7 @@ function getSubmitToken() {
           ${createCalculationPanel({
             sectionKey: 'research',
             title: '🧮 Research Workload Proxy',
-            formula: 'entry_points = base_points × role_factor',
+            formula: 'Entry points, Base points x Role factor',
             baseTableHtml: '<p><strong>Base points:</strong> Research project item = 5</p>',
             factorTableHtml: '<p><strong>Role factors:</strong> Lead 1.0, Member 0.5</p>',
             workedExampleHtml: '<strong>Example:</strong> Lead researcher → 5 × 1.0 = 5.00 points.',
@@ -4468,7 +4460,7 @@ function getSubmitToken() {
           ${createCalculationPanel({
             sectionKey: 'publications',
             title: '🧮 Publication Workload Proxy',
-            formula: 'entry_points = status_weight',
+            formula: 'Entry points, Status weight',
             baseTableHtml: '<p><strong>Base points:</strong> 1 per publication entry.</p>',
             factorTableHtml: '<p><strong>Status weights:</strong> Submitted 0.10, Accepted 0.50, Published 1.00, Other 0.00</p>',
             workedExampleHtml: '<strong>Example:</strong> Published paper → 1.00 points.',
@@ -4666,9 +4658,9 @@ function getSubmitToken() {
           ${createCalculationPanel({
             sectionKey: 'administration',
             title: '🧮 Admin Leadership Workload',
-            formula: 'entry_points = base_points × active_fraction',
+            formula: 'Entry points, Base points x Active fraction',
             baseTableHtml: '<p><strong>Base points by position:</strong> Dean 20, Deputy Dean 15, Centre Director 12, Head of Programme 10, Postgraduate Coordinator 8, Programme Coordinator 6, Other 5</p>',
-            factorTableHtml: '<p><strong>Active fraction:</strong> overlap_days ÷ reporting_days (clamped 0 to 1).</p>',
+            factorTableHtml: '<p><strong>Active fraction:</strong> Overlap days divided by Reporting days, capped between 0 and 1.</p>',
             workedExampleHtml: '<strong>Example:</strong> Head of Programme with 183 active days in a 366-day reporting period → 10 × (183/366) = 5.00 points.',
             notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>Points are prorated by active days within reporting period.</li><li>Allowance and unit/faculty are descriptive only.</li></ul>',
             scoringDrivers: ['Leadership position', 'Active fraction from overlap dates'],
@@ -4848,7 +4840,7 @@ function getSubmitToken() {
           ${createCalculationPanel({
             sectionKey: 'admin_duties',
             title: '🧮 Admin Duties Workload',
-            formula: 'entry_points = role_points',
+            formula: 'Entry points, Role points',
             baseTableHtml: `<p><strong>Role points (${escapeHtml(staffCategory)}):</strong> ${escapeHtml(rolePointsText)}</p>`,
             factorTableHtml: '<p><strong>Scoring driver:</strong> Role only.</p>',
             workedExampleHtml: '<strong>Example:</strong> Points change only when the duty role changes.',
@@ -4962,7 +4954,7 @@ function getSubmitToken() {
       const taxonomy = getRoleTaxonomy(getStaffCategory());
       return `
         <div class="space-y-6">
-          ${createCalculationPanel({ sectionKey: 'service', title: '🧮 Service Workload', formula: 'entry_points = base_points × date_span_factor', baseTableHtml: '<p><strong>Base points by service type</strong> (category-specific labels are descriptive groups).</p>', factorTableHtml: '<p><strong>Date span factors:</strong> 1 day 0.5, 2 to 6 days 1.0, 7 to 15 days 1.5, over 15 days 2.0</p>', workedExampleHtml: '<strong>Example:</strong> Service activity for 8 days → base × 1.5.', notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>Service type picklist is staff-category specific.</li><li>Scope and organization are descriptive only.</li></ul>', scoringDrivers: ['Service type base points', 'Date span factor'], descriptiveOnlyFields: ['Scope', 'Title', 'Organization'] })}
+          ${createCalculationPanel({ sectionKey: 'service', title: '🧮 Service Workload', formula: 'Entry points, Base points x Date span factor', baseTableHtml: '<p><strong>Base points by service type</strong> (category-specific labels are descriptive groups).</p>', factorTableHtml: '<p><strong>Date span factors:</strong> 1 day 0.5, 2 to 6 days 1.0, 7 to 15 days 1.5, over 15 days 2.0</p>', workedExampleHtml: '<strong>Example:</strong> Service activity for 8 days → base × 1.5.', notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>Service type picklist is staff-category specific.</li><li>Scope and organization are descriptive only.</li></ul>', scoringDrivers: ['Service type base points', 'Date span factor'], descriptiveOnlyFields: ['Scope', 'Title', 'Organization'] })}
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 class="heading-font text-2xl font-bold mb-2">🤝 Service</h2><p class="text-sm text-gray-600 mb-4">${escapeHtml(taxonomy.sectionHelpText?.service || '')}</p>
             <form id="service-form" onsubmit="saveService(event)" class="space-y-6"><div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -5063,7 +5055,7 @@ function getSubmitToken() {
           ${createCalculationPanel({
             sectionKey: 'laboratory',
             title: '🧮 Laboratory Workload',
-            formula: 'entry_points = base_points × frequency_factor × course_multiplier',
+            formula: 'Entry points, Base points x Frequency factor x Course multiplier',
             baseTableHtml: '<p><strong>Base points by responsibility:</strong> Lab Coordinator 10, Safety Officer 8, Equipment Manager 7, Inventory Manager 6, SOP Development 5, Lab Supervisor 4, Other 3</p>',
             factorTableHtml: '<p><strong>Frequency factors:</strong> Ongoing within reporting period 1.0, Per semester occurrence 0.6, Per course supported 0.3</p>',
             workedExampleHtml: '<strong>Example:</strong> Equipment Manager per course for 3 courses → 7 × 0.3 × 3 = 6.30 points.',
@@ -5205,7 +5197,7 @@ function getSubmitToken() {
       const isLab = staffCategory === 'lab';
       return `
         <div class="space-y-6">
-          ${createCalculationPanel({ sectionKey: 'professional', title: '🧮 Professional Workload', formula: 'entry_points = base_points × active_fraction', baseTableHtml: '<p><strong>Base points by activity type</strong> remain unchanged.</p>', factorTableHtml: '<p><strong>Active fraction:</strong> overlap_days ÷ reporting_days.</p>', workedExampleHtml: '<strong>Example:</strong> Certification active half period → base × 0.50.', notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>validUntilDate (lab) is informational only.</li><li>Effort band is not used in scoring.</li></ul>', scoringDrivers: ['Professional type base points', 'Active fraction'], descriptiveOnlyFields: ['Scope', 'Title', 'Organization', 'Description', 'validUntilDate (lab)'] })}
+          ${createCalculationPanel({ sectionKey: 'professional', title: '🧮 Professional Workload', formula: 'Entry points, Base points x Active fraction', baseTableHtml: '<p><strong>Base points by activity type</strong> remain unchanged.</p>', factorTableHtml: '<p><strong>Active fraction:</strong> Overlap days divided by Reporting days.</p>', workedExampleHtml: '<strong>Example:</strong> Certification active half period → base × 0.50.', notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>validUntilDate (lab) is informational only.</li><li>Effort band is not used in scoring.</li></ul>', scoringDrivers: ['Professional type base points', 'Active fraction'], descriptiveOnlyFields: ['Scope', 'Title', 'Organization', 'Description', 'validUntilDate (lab)'] })}
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"><h2 class="heading-font text-2xl font-bold mb-2">💼 Professional</h2><p class="text-sm text-gray-600 mb-4">${escapeHtml(taxonomy.sectionHelpText?.professional || '')}</p>
             <form id="professional-form" onsubmit="saveProfessional(event)" class="space-y-6"><div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               ${createOtherSpecifyBlock({ sectionKey: 'professional', baseId: 'prof-type', labelText: 'Professional Type', optionsArray: getCategoryOptionLabels('professionalTypes'), valueKey: 'prof_type', otherTextKey: 'prof_type_other_text', specifyLabel: 'Specify', specifyPlaceholder: 'Enter professional activity details', required: true, selectPlaceholder: 'Select' })}
@@ -6746,7 +6738,7 @@ function getSubmitToken() {
           return {
           profile: getProfile(),
           scores,
-          status: getWorkloadStatus(scores.total),
+          status: getWorkloadStatusWeighted(normalized.finalScore),
           generatedAt: new Date(),
           recordsBySection: {
             teaching: getRecordsBySection('teaching'),
