@@ -3013,6 +3013,14 @@ function getSubmitToken() {
       return { label: 'Light', color: 'blue', icon: '💡' };
     }
 
+    function getWorkloadStatusWeighted(finalScore0To100) {
+      const weighted = Number(finalScore0To100 || 0);
+      if (weighted > 90) return { label: 'Overloaded', color: 'red', icon: '⚠️' };
+      if (weighted >= 70) return { label: 'High', color: 'orange', icon: '🔥' };
+      if (weighted >= 40) return { label: 'Balanced', color: 'green', icon: '✅' };
+      return { label: 'Underutilized', color: 'blue', icon: '💡' };
+    }
+
     function getWorkloadIndexMetrics(rawTotalPoints) {
       const safeTotal = Number.isFinite(Number(rawTotalPoints)) ? Number(rawTotalPoints) : 0;
       const displayIndexValue = Math.min(safeTotal, WORKLOAD_INDEX_MAX);
@@ -5417,19 +5425,50 @@ function getSubmitToken() {
       if (Number.isNaN(parsed.getTime())) return 'Invalid date';
       return parsed.toLocaleDateString();
     }
+    function getResultsSectionDefinitions(scores, normalized) {
+      // Syntax fix: rebuild clean section definitions and avoid malformed spread/object tokens.
+      const leadershipRecords = getRecordsBySection('administration').map((record) => ({ ...record, _admin_subtype: 'leadership' }));
+      const dutiesRecords = getRecordsBySection('admin_duties').map((record) => ({ ...record, _admin_subtype: 'duties' }));
+      // Administration flatten fix: leadership + duties in one flat array for Results and drilldown.
+      const administration_records_flat = [...leadershipRecords, ...dutiesRecords];
+      const order = [
+        { id: 'teaching', category: 'Teaching', icon: '📚', color: 'blue', records: getRecordsBySection('teaching') },
+        { id: 'supervision', category: 'Supervision', icon: '🧑‍🏫', color: 'purple', records: getRecordsBySection('supervision') },
+        { id: 'research', category: 'Research', icon: '🔬', color: 'green', records: getRecordsBySection('research') },
+        { id: 'publications', category: 'Publications', icon: '📝', color: 'indigo', records: getRecordsBySection('publications') },
+        { id: 'administration', category: 'Administration', icon: '🏛️', color: 'rose', records: administration_records_flat },
+        { id: 'laboratory', category: 'Laboratory', icon: '🧪', color: 'teal', records: getRecordsBySection('laboratory') },
+        { id: 'service', category: 'Service', icon: '🤝', color: 'cyan', records: getRecordsBySection('service') },
+        { id: 'professional', category: 'Professional', icon: '💼', color: 'violet', records: getRecordsBySection('professional') }
+      ];
 
-    function getResultsSectionDefinitions(scores) {
-      const administrationRecords = [...getRecordsBySection('administration'), ...getRecordsBySection('admin_duties')];
-      return [
-        { id: 'teaching', label: 'Teaching', icon: '📚', score: scores.teaching, color: 'blue', unitLabel: 'entries', records: getRecordsBySection('teaching') },
-        { id: 'supervision', label: 'Supervision', icon: '🧑‍🏫', score: scores.supervision, color: 'purple', unitLabel: 'entries', records: getRecordsBySection('supervision') },
-        { id: 'research', label: 'Research', icon: '🔬', score: scores.research, color: 'green', unitLabel: 'entries', records: getRecordsBySection('research') },
-        { id: 'publications', label: 'Publications', icon: '📝', score: scores.publications, color: 'indigo', unitLabel: 'entries', records: getRecordsBySection('publications') },
-        { id: 'administration', label: 'Administration', icon: '🏛️', score: (scores.adminLeadership + scores.adminDuties), color: 'rose', unitLabel: 'entries', records: administrationRecords },
-        { id: 'service', label: 'Service', icon: '🤝', score: scores.service, color: 'cyan', unitLabel: 'entries', records: getRecordsBySection('service') },
-        { id: 'laboratory', label: 'Laboratory', icon: '🧪', score: scores.laboratory, color: 'teal', unitLabel: 'entries', records: getRecordsBySection('laboratory') },
-        { id: 'professional', label: 'Professional', icon: '💼', score: scores.professional, color: 'violet', unitLabel: 'entries', records: getRecordsBySection('professional') }
-      ].map((section) => ({ ...section, count: section.records.length }));
+      return order.map((section) => {
+        const records = Array.isArray(section.records) ? section.records.flat() : [];
+        const raw_value = Number(normalized?.rawByCategory?.[section.category] || 0);
+        const benchmark_value = Number(normalized?.benchmarkByCategory?.[section.category] || 0);
+        const achievement = Number(normalized?.achievements?.[section.category] || 0);
+        const weight = Number(normalized?.activeWeights?.[section.category] || 0);
+        const contribution = Number(normalized?.weightedContributions?.[section.category] || 0);
+        const overload = Boolean(normalized?.overloadFlags?.[section.category]?.overload);
+        const excluded_count = records.reduce((sum, entry) => sum + Number(Boolean(getSectionEntryBreakdown(section.id, entry).excluded_reason)), 0);
+        return {
+          id: section.id,
+          label: section.category,
+          icon: section.icon,
+          color: section.color,
+          unitLabel: 'entries',
+          records,
+          raw_value,
+          benchmark_value,
+          achievement,
+          weight,
+          contribution,
+          overload,
+          excluded_count,
+          count: records.length,
+          score: raw_value
+        };
+      });
     }
 
     function getSectionEntryBreakdown(sectionId, entry) {
@@ -5463,126 +5502,31 @@ function getSubmitToken() {
       };
       return titleBySection[sectionId] || fallback;
     }
-
     function renderResultsSummary(profile, scores, normalized, status, sections) {
-      const indexMetrics = getWorkloadIndexMetrics(scores.total);
-      const categoryKey = normalizeProfileCategoryKey(profile?.profile_category || '');
-      const isAcademic = categoryKey === 'academic';
+      const weightedScore = Math.max(0, Math.min(100, Number(normalized.finalScore || 0)));
       const startDate = profile?.reporting_start_date;
       const endDate = profile?.reporting_end_date;
-      const start = startDate ? new Date(startDate) : null;
-      const end = endDate ? new Date(endDate) : null;
-      const hasValidPeriod = start && end && !Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && end >= start;
-      const periodDays = hasValidPeriod ? Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1 : 0;
-      const periodWeeks = hasValidPeriod ? (periodDays / 7).toFixed(2) : '0.00';
-      const totalEntries = sections.reduce((sum, section) => sum + section.count, 0);
-      const excludedEntries = sections.reduce((sum, section) => (sum + section.records.filter((entry) => Boolean(getSectionEntryBreakdown(section.id, entry).excluded_reason)).length), 0);
-      const summaryRows = [
-        {
-          section: 'Profile',
-          label: 'Staff name',
-          value: escapeHtml(profile?.profile_name || 'Not provided')
-        },
-        {
-          section: 'Profile',
-          label: 'Staff category',
-          value: escapeHtml(getProfileCategoryLabel(profile?.profile_category || '') || 'Not provided')
-        },
-        {
-          section: 'Profile',
-          label: 'Admin status',
-          value: escapeHtml(isAcademic ? (profile?.admin_status || 'Not provided') : 'Not applicable')
-        },
-        {
-          section: 'Reporting period',
-          label: 'Reporting period',
-          value: `${formatResultDate(startDate)} to ${formatResultDate(endDate)}${hasValidPeriod ? ` <span class="text-xs text-gray-500">(${periodDays} days / ${periodWeeks} weeks)</span>` : ''}`,
-          isPeriodRow: true,
-          hasWarning: !hasValidPeriod
-        },
-        {
-          section: 'Reporting period',
-          label: 'Generated on',
-          value: escapeHtml(new Date().toLocaleString())
-        },
-        {
-          section: 'Totals',
-          label: 'Total entries',
-          value: escapeHtml(String(totalEntries))
-        },
-        {
-          section: 'Totals',
-          label: 'Excluded by reporting period',
-          value: escapeHtml(String(excludedEntries))
-        },
-        {
-          section: 'Totals',
-          label: 'Workload Index',
-          value: `${indexMetrics.displayIndexValue.toFixed(2)} / ${WORKLOAD_INDEX_MAX}`
-        },
-        {
-          section: 'Totals',
-          label: 'Total score',
-          value: `${normalized.finalScore.toFixed(2)} <span class="text-xs text-gray-500">(normalized)</span>`
-        },
-        {
-          section: 'Totals',
-          label: 'Status',
-          value: `${escapeHtml(status.label)} ${status.icon}`
-        }
-      ];
-
-      if (!hasValidPeriod) {
-        summaryRows.sort((a, b) => Number(Boolean(b.isPeriodRow)) - Number(Boolean(a.isPeriodRow)));
-      }
-
-      const groupedRows = summaryRows.reduce((acc, row) => {
-        if (!acc[row.section]) acc[row.section] = [];
-        acc[row.section].push(row);
-        return acc;
-      }, {});
-      const sectionOrder = hasValidPeriod ? ['Profile', 'Reporting period', 'Totals'] : ['Reporting period', 'Profile', 'Totals'];
-
+      const excluded_items_total = sections.reduce((sum, section) => sum + Number(section.excluded_count || 0), 0);
       return `
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 class="heading-font text-2xl font-bold mb-5 text-gray-900">📋 Executive Summary</h3>
-          <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 text-sm">
-            ${sectionOrder.map((sectionName) => `
-              <div class="border border-gray-200 rounded-lg overflow-hidden">
-                <div class="px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-xs font-semibold tracking-wide uppercase text-gray-600">${escapeHtml(sectionName)}</div>
-                <div class="divide-y divide-gray-100">
-                  ${(groupedRows[sectionName] || []).map((row) => `
-                    <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] gap-3 px-4 py-2.5 items-start">
-                      <div class="text-gray-600 font-medium flex items-center gap-2">
-                        <span>${escapeHtml(row.label)}</span>
-                        ${row.hasWarning ? '<span class="inline-flex items-center rounded-full bg-amber-100 text-amber-800 text-[10px] font-semibold px-2 py-0.5">Check</span>' : ''}
-                      </div>
-                      <div class="text-gray-900 font-semibold text-right break-words">${row.value}</div>
-                    </div>
-                  `).join('')}
-                </div>
-              </div>
-            `).join('')}
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-5">
+          <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h3 class="heading-font text-2xl font-bold text-gray-900">📋 Results Summary</h3>
+              <p class="text-sm text-gray-600">Weighted normalized final score with category-based contributions.</p>
+            </div>
+            <div class="text-right">
+              <div class="text-xs text-gray-500">Weighted final score</div>
+              <div class="text-4xl font-bold text-sky-700">${weightedScore.toFixed(2)} / 100</div>
+              <div class="text-sm font-semibold text-${status.color}-700">${escapeHtml(status.icon)} ${escapeHtml(status.label)}</div>
+            </div>
           </div>
-          <div class="mt-5 border border-gray-200 rounded-lg p-4">
-            <div class="flex items-center justify-between mb-2">
-              <p class="text-xs font-semibold uppercase tracking-wide text-gray-600">Workload Index scale</p>
-              <p class="text-sm font-semibold text-gray-900">${indexMetrics.displayIndexValue.toFixed(2)} / ${WORKLOAD_INDEX_MAX}</p>
-            </div>
-            <div class="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-              <div class="h-full bg-sky-600" style="width: ${indexMetrics.fillPercent.toFixed(2)}%"></div>
-            </div>
-            <div class="mt-2 flex justify-between text-[11px] text-gray-500"><span>0</span><span>20</span><span>35</span><span>50</span></div>
-            <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-700">
-              <p><strong>Light:</strong> 0 to 19</p>
-              <p><strong>Moderate:</strong> 20 to 34</p>
-              <p><strong>Balanced:</strong> 35 to 49</p>
-              <p><strong>Overloaded:</strong> 50 plus</p>
-            </div>
-            <div class="mt-3 bg-slate-50 border border-slate-200 rounded-md p-3 text-xs text-gray-700">
-              <p class="font-semibold text-gray-900 mb-1">Recommendation</p>
-              <p>${status.label === 'Overloaded' ? 'Review commitments and rebalance duties to reduce current load.' : status.label === 'Balanced' ? 'Maintain your current distribution and monitor upcoming additions.' : status.label === 'Moderate' ? 'Monitor trend and rebalance if additional duties are expected.' : 'Capacity appears available; plan upcoming assignments carefully.'}</p>
-            </div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+            <div class="rounded-lg border border-gray-200 p-3"><div class="text-gray-500">Staff</div><div class="font-semibold text-gray-900">${escapeHtml(profile?.profile_name || 'Not provided')}</div></div>
+            <div class="rounded-lg border border-gray-200 p-3"><div class="text-gray-500">Category</div><div class="font-semibold text-gray-900">${escapeHtml(getProfileCategoryLabel(profile?.profile_category || '') || 'Not provided')}</div></div>
+            <div class="rounded-lg border border-gray-200 p-3"><div class="text-gray-500">Reporting period</div><div class="font-semibold text-gray-900">${formatResultDate(startDate)} → ${formatResultDate(endDate)}</div></div>
+          </div>
+          <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            <strong>Excluded items:</strong> ${excluded_items_total}. Items outside the reporting period are listed in drilldown and counts, but score as 0.
           </div>
         </div>
       `;
@@ -5592,18 +5536,31 @@ function getSubmitToken() {
       return `
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h3 class="heading-font text-2xl font-bold mb-2">Score Breakdown by Category</h3>
-          <p class="text-sm text-gray-600 mb-5">Select a category to review saved entries and points details.</p>
+          <p class="text-sm text-gray-600 mb-5">Each tile shows raw value, benchmark, achievement, weight, weighted contribution, and excluded count.</p>
           <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            ${sections.map((section) => `
-              <button onclick="openSectionDrilldown('${section.id}')" class="text-left bg-white rounded-lg p-4 border border-gray-200 border-l-4 border-l-${section.color}-500 hover:shadow-md transition min-h-[132px] flex flex-col justify-between">
-                <div>
-                  <div class="text-sm font-semibold text-gray-700 mb-1">${section.icon} ${section.label}</div>
-                  <div class="text-2xl font-bold text-${section.color}-600 leading-tight">${section.score.toFixed(2)}</div>
-                  <div class="text-xs text-gray-500 mt-2">${section.count} ${section.unitLabel}</div>
-                </div>
-                <div class="text-xs text-gray-400 mt-3">View details →</div>
-              </button>
-            `).join('')}
+            ${sections.map((section) => {
+              const achievementPct = Math.min(100, Math.max(0, section.achievement * 100));
+              const contributionPoints = Math.max(0, section.contribution * 100);
+              const weightPct = section.weight * 100;
+              return `
+                <button onclick="openSectionDrilldown('${section.id}')" class="text-left bg-white rounded-lg p-4 border border-gray-200 border-l-4 border-l-${section.color}-500 hover:shadow-md transition min-h-[170px] flex flex-col justify-between">
+                  <div>
+                    <div class="text-sm font-semibold text-gray-700 mb-2">${section.icon} ${section.label}</div>
+                    <div class="grid grid-cols-2 gap-2 text-xs text-gray-700">
+                      <div>Raw: <strong>${section.raw_value.toFixed(2)}</strong></div>
+                      <div>Benchmark: <strong>${section.benchmark_value.toFixed(2)}</strong></div>
+                      <div>Achievement: <strong>${achievementPct.toFixed(1)}%</strong></div>
+                      <div>Weight: <strong>${weightPct.toFixed(1)}%</strong></div>
+                      <div>Contribution: <strong>${contributionPoints.toFixed(2)}</strong></div>
+                      <div>Excluded: <strong>${section.excluded_count}</strong></div>
+                    </div>
+                    ${section.weight === 0 ? '<div class="mt-2 text-xs font-semibold text-amber-700">Weight is 0% for this staff category (contribution fixed at 0).</div>' : ''}
+                    ${section.overload ? '<div class="mt-2 text-xs font-semibold text-rose-700">Over benchmark (no penalty applied).</div>' : ''}
+                  </div>
+                  <div class="text-xs text-gray-400 mt-3">View details →</div>
+                </button>
+              `;
+            }).join('')}
           </div>
         </div>
       `;
@@ -5690,14 +5647,13 @@ function getSubmitToken() {
         </div>
       `;
     }
-
     function openSectionDrilldown(sectionId) {
       const modal = document.getElementById('results-drilldown-modal');
       const title = document.getElementById('results-drilldown-title');
       const body = document.getElementById('results-drilldown-body');
       if (!modal || !title || !body) return;
 
-      const sections = getResultsSectionDefinitions(scores);
+      const sections = getResultsSectionDefinitions(calculateScores(), calculateNormalizedScores());
       const section = sections.find((item) => item.id === sectionId);
       if (!section) return;
 
@@ -5707,25 +5663,21 @@ function getSubmitToken() {
       } else {
         body.innerHTML = section.records.map((entry, index) => {
           const breakdown = getSectionEntryBreakdown(section.id, entry);
-          const points = Number(breakdown.entry_points);
-          const breakdownRows = Object.entries(breakdown)
-            .filter(([key]) => key !== 'entry_points')
-            .map(([key, value]) => `<li><span class="font-medium">${escapeHtml(key.replace(/_/g, ' '))}:</span> ${escapeHtml(String(value))}</li>`)
-            .join('');
+          const excluded = Boolean(breakdown.excluded_reason);
+          const points = excluded ? 0 : Number(breakdown.entry_points || 0);
+          const startDate = entry.admin_start_date || entry.duty_start_date || entry.research_start_date || entry.service_start_date || entry.lab_start_date || entry.prof_start_date || entry.student_start_date;
+          const endDate = entry.admin_end_date || entry.duty_end_date || entry.research_end_date || entry.service_end_date || entry.lab_end_date || entry.prof_end_date || entry.student_end_date;
+          const adminBadge = section.id === 'administration' ? `<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${entry._admin_subtype === 'duties' ? 'bg-fuchsia-100 text-fuchsia-700' : 'bg-rose-100 text-rose-700'}">${escapeHtml(entry._admin_subtype || 'leadership')}</span>` : '';
           return `
             <div class="border border-gray-200 rounded-lg p-4 mb-3">
               <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                 <div>
-                  <p class="font-semibold text-gray-900">${escapeHtml(getSectionEntryTitle(section.id, entry, index))}</p>
-                  <p class="text-sm text-gray-600">Computed points: <strong>${Number.isFinite(points) ? points.toFixed(2) : 'Missing'}</strong></p>
+                  <p class="font-semibold text-gray-900">${escapeHtml(getSectionEntryTitle(section.id, entry, index))} ${adminBadge}</p>
+                  <p class="text-xs text-gray-600">Dates: ${escapeHtml(formatResultDate(startDate))} → ${escapeHtml(formatResultDate(endDate || startDate))}</p>
+                  <p class="text-sm text-gray-600">Points: <strong>${Number(points).toFixed(2)}</strong> ${excluded ? '<span class="ml-1 inline-flex items-center rounded-full bg-amber-100 text-amber-800 text-[11px] px-2 py-0.5">Excluded</span>' : ''}</p>
+                  ${excluded ? `<p class="text-xs text-amber-700 mt-1">Reason: ${escapeHtml(String(breakdown.excluded_reason || 'Outside reporting period'))}</p>` : ''}
                 </div>
-                <div class="flex gap-2">
-                  <button onclick="toggleDrilldownDetails('${section.id}-${index}')" class="px-3 py-2 bg-gray-100 rounded-lg text-sm font-semibold hover:bg-gray-200">View details</button>
-                  <button onclick="jumpToSectionFromResults('${section.id}')" class="px-3 py-2 bg-sky-600 text-white rounded-lg text-sm font-semibold hover:bg-sky-700">Jump to section</button>
-                </div>
-              </div>
-              <div id="drilldown-detail-${section.id}-${index}" class="hidden mt-3 text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-lg p-3">
-                <ul class="space-y-1">${breakdownRows}</ul>
+                <button onclick="jumpToSectionFromResults('${section.id}')" class="px-3 py-2 bg-sky-600 text-white rounded-lg text-sm font-semibold hover:bg-sky-700">Jump to section</button>
               </div>
             </div>
           `;
@@ -5750,30 +5702,28 @@ function getSubmitToken() {
       closeSectionDrilldown();
       navigateToSection(sectionId);
     }
-
     function renderCompositionBlock(sections, totalScore) {
-      const normalizedTotal = totalScore > 0 ? totalScore : 0;
       return `
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 class="heading-font text-xl font-bold mb-4">Workload Composition</h3>
-          <div class="w-full h-3 rounded-full overflow-hidden bg-slate-100 flex mb-4 border border-slate-200">
-            ${sections.map((section) => {
-              const pct = normalizedTotal > 0 ? (section.score / normalizedTotal) * 100 : 0;
-              return `<div class="h-full bg-${section.color}-400/80" style="width:${pct.toFixed(2)}%" title="${escapeHtml(section.label)} ${pct.toFixed(2)}%"></div>`;
-            }).join('')}
-          </div>
+          <h3 class="heading-font text-xl font-bold mb-4">Section Table</h3>
           <div class="overflow-x-auto">
             <table class="min-w-full text-sm">
               <thead>
                 <tr class="text-left border-b border-gray-200 text-gray-600">
-                  <th class="py-2 pr-3">Section</th><th class="py-2 pr-3 text-right">Total points</th><th class="py-2 pr-3 text-right">Entries</th><th class="py-2 pr-3 text-right">Avg/entry</th><th class="py-2 text-right">% of total</th>
+                  <th class="py-2 pr-3">Section</th>
+                  <th class="py-2 pr-3 text-right">Raw</th>
+                  <th class="py-2 pr-3 text-right">Benchmark</th>
+                  <th class="py-2 pr-3 text-right">Achievement</th>
+                  <th class="py-2 pr-3 text-right">Weight</th>
+                  <th class="py-2 pr-3 text-right">Contribution</th>
+                  <th class="py-2 text-right">Excluded</th>
                 </tr>
               </thead>
               <tbody>
                 ${sections.map((section) => {
-                  const pct = normalizedTotal > 0 ? (section.score / normalizedTotal) * 100 : 0;
-                  const avg = section.count > 0 ? section.score / section.count : 0;
-                  return `<tr class="border-b border-gray-100 even:bg-gray-50/70"><td class="py-1.5 pr-3">${section.icon} ${escapeHtml(section.label)}</td><td class="py-1.5 pr-3 text-right tabular-nums">${section.score.toFixed(2)}</td><td class="py-1.5 pr-3 text-right tabular-nums">${Number(section.count).toFixed(2)}</td><td class="py-1.5 pr-3 text-right tabular-nums">${avg.toFixed(2)}</td><td class="py-1.5 text-right tabular-nums">${pct.toFixed(2)}%</td></tr>`;
+                  const achievementPct = Math.min(100, Math.max(0, section.achievement * 100));
+                  const contributionPoints = Math.max(0, section.contribution * 100);
+                  return `<tr class="border-b border-gray-100 even:bg-gray-50/70"><td class="py-1.5 pr-3">${section.icon} ${escapeHtml(section.label)}</td><td class="py-1.5 pr-3 text-right tabular-nums">${section.raw_value.toFixed(2)}</td><td class="py-1.5 pr-3 text-right tabular-nums">${section.benchmark_value.toFixed(2)}</td><td class="py-1.5 pr-3 text-right tabular-nums">${achievementPct.toFixed(1)}%</td><td class="py-1.5 pr-3 text-right tabular-nums">${(section.weight * 100).toFixed(1)}%</td><td class="py-1.5 pr-3 text-right tabular-nums">${contributionPoints.toFixed(2)}</td><td class="py-1.5 text-right tabular-nums">${section.excluded_count}</td></tr>`;
                 }).join('')}
               </tbody>
             </table>
@@ -5907,13 +5857,13 @@ function getSubmitToken() {
       if (!menu) return;
       menu.classList.toggle('hidden');
     }
-
     function renderResults() {
       const scores = calculateScores();
       const normalized = calculateNormalizedScores();
-      const status = getWorkloadStatus(scores.total);
+      // Weighted status switch: Results status now follows weighted final score (0-100).
+      const status = getWorkloadStatusWeighted(normalized.finalScore);
       const profile = getProfile();
-      const sections = getResultsSectionDefinitions(scores);
+      const sections = getResultsSectionDefinitions(scores, normalized);
 
       return `
         <div class="space-y-6">
@@ -5947,8 +5897,8 @@ function getSubmitToken() {
           ${renderSmartRadarPanel(normalized)}
           ${renderSmartSettingsPanel(normalized, profile)}
           ${renderSectionBreakdownTiles(sections)}
-          ${renderCompositionBlock(sections, scores.total)}
-          ${renderDataChecks(profile, sections, scores.total)}
+          ${renderCompositionBlock(sections, normalized.finalScore)}
+          ${renderDataChecks(profile, sections, normalized.finalScore)}
           ${renderSectionDrilldownModal()}
 
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -5994,14 +5944,17 @@ function getSubmitToken() {
                 </p>
                 <div id="reset-all-confirm" class="hidden mb-3">
                   <div class="bg-white border-2 border-red-400 rounded-lg p-4">
-                    <p class="text-sm font-bold text-red-900 mb-3">🚨 FINAL WARNING: This will delete EVERYTHING:</p>
+                    <p class="text-sm font-bold text-red-900 mb-3">⚠️ FINAL WARNING! This will delete EVERYTHING:</p>
                     <ul class="text-xs text-red-800 ml-4 list-disc space-y-1 mb-3">
-                      <li><strong>Your staff profile</strong></li>
-                      <li>All teaching, supervision, research records</li>
-                      <li>All publications and administrative data</li>
-                      <li>All service, laboratory, and professional activities</li>
+                      <li>Your complete staff profile</li>
+                      <li>All teaching courses and hours</li>
+                      <li>All supervision records</li>
+                      <li>All research and publications</li>
+                      <li>All administration and service records</li>
+                      <li>All laboratory and professional activities</li>
+                      <li>All saved settings and configurations</li>
                     </ul>
-                    <p class="text-xs text-red-700 font-bold">⚠️ Consider exporting your data first using the export menu above.</p>
+                    <p class="text-xs text-red-700 font-bold">This cannot be undone!</p>
                   </div>
                 </div>
                 <div class="flex gap-3">
@@ -6009,7 +5962,7 @@ function getSubmitToken() {
                     Reset All Data
                   </button>
                   <button id="confirm-reset-all-btn" onclick="confirmResetAll()" class="hidden px-5 py-2 bg-red-700 text-white rounded-lg font-bold hover:bg-red-800 transition text-sm">
-                    ✓ Yes, Delete Everything
+                    ⚠️ Yes, Delete Everything
                   </button>
                   <button id="cancel-reset-all-btn" onclick="cancelResetAll()" class="hidden px-5 py-2 bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 transition text-sm">
                     Cancel
