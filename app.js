@@ -137,7 +137,7 @@ const WORKLOAD_STATUS_THRESHOLDS = {
         }
       };
 
-      const readRecords = () => readStore().records;
+      const readRecords = () => readStore().records.map(migrateRecord);
 
       const writeRecords = (records) => {
         if (typeof localStorage === 'undefined') return;
@@ -234,7 +234,7 @@ const WORKLOAD_STATUS_THRESHOLDS = {
     async function initializeApp() {
       const dataHandler = {
         onDataChanged(data) {
-          allRecords = data;
+          allRecords = (Array.isArray(data) ? data : []).map(migrateRecord);
           updateTotalEntries();
           renderNavigation();
           renderSection(currentSection);
@@ -737,6 +737,61 @@ const WORKLOAD_STATUS_THRESHOLDS = {
       return Math.floor((end - start) / millisecondsPerDay) + 1;
     }
 
+    function toFirstDayOfYearDate(value) {
+      const year = Number(value);
+      if (!Number.isFinite(year) || year < 1900) return '';
+      return `${Math.trunc(year)}-01-01`;
+    }
+
+    function migrateRecord(record) {
+      if (!record || typeof record !== 'object') return record;
+      const migrated = { ...record };
+
+      if (migrated.section === 'supervision') {
+        if (migrated.student_role === 'leader') migrated.student_role = 'main';
+        if (migrated.student_role === 'member') migrated.student_role = 'co';
+        if (migrated.student_year && !migrated.student_start_semester) {
+          migrated.student_start_semester = 'Other';
+          migrated.student_start_semester_other = `Legacy year ${migrated.student_year}`;
+        }
+      }
+
+      if (migrated.section === 'research') {
+        if (migrated.research_role === 'co-lead') migrated.research_role = 'member';
+        if (migrated.research_year && !migrated.research_start_date) {
+          migrated.research_start_date = toFirstDayOfYearDate(migrated.research_year);
+        }
+      }
+
+      if (migrated.section === 'publications') {
+        if (!migrated.pub_stage && migrated.pub_status) {
+          const statusMap = {
+            Drafting: 'drafting',
+            Submitted: 'revising',
+            Accepted: 'responding_reviewers',
+            Published: 'proofing',
+            Other: 'revising'
+          };
+          migrated.pub_stage = statusMap[migrated.pub_status] || 'revising';
+        }
+      }
+
+      if (migrated.section === 'admin_duties' && migrated.duty_year && !migrated.duty_start_date) {
+        migrated.duty_start_date = toFirstDayOfYearDate(migrated.duty_year);
+      }
+      if (migrated.section === 'service' && migrated.service_date && !migrated.service_start_date) {
+        migrated.service_start_date = migrated.service_date;
+      }
+      if (migrated.section === 'laboratory' && migrated.lab_year && !migrated.lab_start_date) {
+        migrated.lab_start_date = toFirstDayOfYearDate(migrated.lab_year);
+      }
+      if (migrated.section === 'professional' && migrated.prof_year && !migrated.prof_start_date) {
+        migrated.prof_start_date = toFirstDayOfYearDate(migrated.prof_year);
+      }
+
+      return migrated;
+    }
+
     function parseProfileState(profile, options = {}) {
       const { includeLocalState = true } = options;
       const defaults = {
@@ -751,8 +806,7 @@ const WORKLOAD_STATUS_THRESHOLDS = {
         programme: '',
         academic_rank: '',
         administrative_position: '',
-        laboratory_position: '',
-        reporting_tags: ''
+        laboratory_position: ''
       };
 
       const legacyExtras = (() => {
@@ -838,8 +892,7 @@ const WORKLOAD_STATUS_THRESHOLDS = {
         ['Programme', savedState.programme],
         ['Academic Rank', savedState.academic_rank],
         ['Administrative Position', savedState.administrative_position],
-        ['Laboratory Position', savedState.laboratory_position],
-        ['Reporting Tags', savedState.reporting_tags]
+        ['Laboratory Position', savedState.laboratory_position]
       ].filter(([, value]) => String(value || '').trim() !== '');
 
       return `
@@ -984,14 +1037,6 @@ const WORKLOAD_STATUS_THRESHOLDS = {
                          placeholder="e.g., Laboratory Coordinator">
                 </div>
 
-                <div class="md:col-span-2">
-                  <label for="reporting_tags" class="block text-sm font-semibold text-gray-700 mb-2">Reporting Tags</label>
-                  <input type="text" id="reporting_tags"
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         value="${escapeHtml(profileState.reporting_tags)}"
-                         placeholder="Optional: specialty or reporting tags">
-                </div>
-
               </div>
 
               <button type="submit" id="save_profile_btn" class="w-full px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">
@@ -1014,7 +1059,7 @@ const WORKLOAD_STATUS_THRESHOLDS = {
       [
         'staff_name', 'staff_id', 'staff_category', 'staff_grade',
         'reporting_period_type', 'reporting_start_date', 'reporting_end_date',
-        'programme', 'academic_rank', 'administrative_position', 'laboratory_position', 'reporting_tags', 'admin_status'
+        'programme', 'academic_rank', 'administrative_position', 'laboratory_position', 'admin_status'
       ].forEach((id) => {
         const element = document.getElementById(id);
         if (!element) return;
@@ -1135,8 +1180,7 @@ const WORKLOAD_STATUS_THRESHOLDS = {
         programme: (document.getElementById('programme')?.value || '').trim(),
         academic_rank: (document.getElementById('academic_rank')?.value || '').trim(),
         administrative_position: (document.getElementById('administrative_position')?.value || '').trim(),
-        laboratory_position: (document.getElementById('laboratory_position')?.value || '').trim(),
-        reporting_tags: (document.getElementById('reporting_tags')?.value || '').trim()
+        laboratory_position: (document.getElementById('laboratory_position')?.value || '').trim()
       };
       const categoryKey = normalizeProfileCategoryKey(profileState.staff_category);
       profileState.admin_status = categoryKey === 'academic' ? (document.getElementById('admin_status')?.value || '').trim() : null;
@@ -1337,7 +1381,7 @@ const WORKLOAD_STATUS_THRESHOLDS = {
     }
 
     function getRecordsBySection(section) {
-      return allRecords.filter(r => r.section === section);
+      return allRecords.filter(r => r.section === section).map(migrateRecord);
     }
 
     function escapeHtml(value) {
@@ -1592,24 +1636,24 @@ function getSubmitToken() {
 
       const requiredBySection = {
         teaching: ['course_code', 'course_name', 'course_credit_hours', 'course_lecture', 'course_semester', 'course_role', 'teaching_section'],
-        supervision: ['student_name', 'student_matric', 'student_level', 'student_role', 'student_current_status', 'student_title', 'student_year', 'student_start_date'],
-        research: ['research_title', 'research_grant_code', 'research_role', 'research_activity', 'research_year'],
-        publications: ['pub_title', 'pub_type', 'pub_venue', 'pub_year', 'pub_status'],
+        supervision: ['student_name', 'student_matric', 'student_level', 'student_role', 'student_current_status', 'student_title', 'student_start_semester', 'student_start_date'],
+        research: ['research_title', 'research_grant_code', 'research_role', 'research_start_date'],
+        publications: ['pub_title', 'pub_type', 'pub_stage'],
         administration: ['admin_position', 'admin_faculty', 'admin_start_date'],
-        admin_duties: ['duty_type', 'duty_name', 'duty_frequency', 'duty_year'],
-        service: ['service_type', 'service_title', 'service_organization', 'service_date', 'service_duration'],
-        laboratory: ['lab_responsibility', 'lab_name', 'lab_frequency', 'lab_year'],
-        professional: ['prof_type', 'prof_scope', 'prof_title', 'prof_organization', 'prof_year']
+        admin_duties: ['duty_type', 'duty_name', 'duty_frequency', 'duty_start_date'],
+        service: ['service_type', 'service_title', 'service_organization', 'service_start_date'],
+        laboratory: ['lab_responsibility', 'lab_name', 'lab_frequency', 'lab_start_date'],
+        professional: ['prof_type', 'prof_scope', 'prof_title', 'prof_organization', 'prof_start_date']
       };
 
       const numericBySection = {
         teaching: ['course_credit_hours', 'course_lecture', 'course_tutorial', 'course_lab', 'course_fieldwork'],
-        supervision: ['student_year'],
-        research: ['research_amount', 'research_year'],
-        publications: ['pub_year'],
+        supervision: [],
+        research: ['research_amount'],
+        publications: [],
         administration: [],
         admin_duties: [],
-        service: ['service_duration'],
+        service: [],
         laboratory: [],
         professional: []
       };
@@ -1634,6 +1678,13 @@ function getSubmitToken() {
             });
           }
 
+          if (sectionKey === 'supervision' && record.student_start_semester === 'Other' && !record.student_start_semester_other) {
+            errors.push({
+              section: 'supervision',
+              message: `Specify start semester details for supervision entry #${index + 1}.`
+            });
+          }
+
           if (sectionKey === 'publications' && record.indexing_label === 'Other' && !record.indexing_other_text) {
             errors.push({
               section: 'publications',
@@ -1655,12 +1706,6 @@ function getSubmitToken() {
             });
           }
 
-          if (sectionKey === 'publications' && record.pub_status === 'Other' && !record.pub_status_other_text) {
-            errors.push({
-              section: 'publications',
-              message: `Specify status details for publication entry #${index + 1}.`
-            });
-          }
 
           if (sectionKey === 'admin_duties' && record.duty_type === 'Other' && !record.duty_type_other_text) {
             errors.push({
@@ -1736,8 +1781,8 @@ function getSubmitToken() {
       }, 0);
 
       const serviceHours = (sectionsByKey.service || []).reduce((sum, service) => {
-        const duration = Number(service.service_duration || 0);
-        return sum + (Number.isFinite(duration) ? duration : 0);
+        const spanDays = calculateReportingDays(service.service_start_date, service.service_end_date || service.service_start_date);
+        return sum + (Number.isFinite(spanDays) ? spanDays : 0);
       }, 0);
 
       return Math.round((teachingHours + serviceHours) * 100) / 100;
@@ -2175,8 +2220,8 @@ function getSubmitToken() {
         const role = student.student_role;
         const statusFactor = getStudentCurrentStatusFactor(student.student_current_status);
         let base = 0;
-        if (level === 'masters') base = role === 'main' || role === 'leader' ? 1.0 : 0.2;
-        if (level === 'phd') base = role === 'main' || role === 'leader' ? 1.6 : 0.32;
+        if (level === 'masters') base = role === 'main' ? 1.0 : 0.2;
+        if (level === 'phd') base = role === 'main' ? 1.6 : 0.32;
         if (level === 'undergraduate') base = 0.2;
         return sum + (base * statusFactor);
       }, 0);
@@ -2204,12 +2249,8 @@ function getSubmitToken() {
     }
 
     function getSupervisionBasePoints(studentLevel, supervisorRole) {
-      if (studentLevel === 'phd') {
-        return supervisorRole === 'main' || supervisorRole === 'leader' ? 8 : 1.6;
-      }
-      if (studentLevel === 'masters') {
-        return supervisorRole === 'main' || supervisorRole === 'leader' ? 5 : 1;
-      }
+      if (studentLevel === 'phd') return supervisorRole === 'main' ? 8 : 4;
+      if (studentLevel === 'masters') return supervisorRole === 'main' ? 5 : 2.5;
       return 1;
     }
 
@@ -2307,27 +2348,19 @@ function getSubmitToken() {
 
     function getResearchRoleFactor(role) {
       if (role === 'lead') return 1.0;
-      if (role === 'co-lead') return 0.7;
       if (role === 'member') return 0.5;
       return 0;
     }
 
-    function getResearchActivityFactor(activity) {
-      if (activity === 'active') return 1.0;
-      if (activity === 'limited_admin') return 0.5;
-      if (activity === 'none') return 0.0;
-      return 0;
-    }
 
     function getResearchEntryBreakdown(research) {
-      if (!research?.research_role || !research?.research_activity) {
-        return { base_points: 5, role_factor: 0, activity_factor: 0, entry_points: 0, is_counted: false };
+      if (!research?.research_role) {
+        return { base_points: 5, role_factor: 0, entry_points: 0, is_counted: false };
       }
       const basePoints = 5;
       const roleFactor = getResearchRoleFactor(research.research_role);
-      const activityFactor = getResearchActivityFactor(research.research_activity);
-      const entryPoints = Math.round(basePoints * roleFactor * activityFactor * 100) / 100;
-      return { base_points: basePoints, role_factor: roleFactor, activity_factor: activityFactor, entry_points: entryPoints, is_counted: true };
+      const entryPoints = Math.round(basePoints * roleFactor * 100) / 100;
+      return { base_points: basePoints, role_factor: roleFactor, entry_points: entryPoints, is_counted: true };
     }
 
     function calculateResearchScore(research) {
@@ -2338,30 +2371,31 @@ function getSubmitToken() {
       return 1;
     }
 
-    function getPublicationStatusWeight(status) {
-      if (status === 'Drafting') return 0.10;
-      if (status === 'Submitted') return 0.50;
-      if (status === 'Accepted') return 0.50;
-      if (status === 'Published') return 1.00;
-      return 0;
+    function getPublicationStageWeight(stage) {
+      const stageWeightMap = {
+        drafting: 0.10,
+        revising: 0.50,
+        responding_reviewers: 0.50,
+        proofing: 1.00,
+        no_activity: 0.00
+      };
+      return stageWeightMap[stage] ?? 0;
     }
 
     function getPublicationEntryBreakdown(pub) {
-      if (!pub?.pub_type || !pub?.pub_status) {
-        return { base_points: 0, status_weight: 0, entry_points: 0, is_counted: false };
+      if (!pub?.pub_type || !pub?.pub_stage) {
+        return { base_points: 0, stage_weight: 0, entry_points: 0, is_counted: false };
       }
       const descriptive = getPublicationDescriptiveMetadata(pub);
-      const statusMeta = getPublicationStatusMetadata(pub);
       const basePoints = getPublicationBasePoints(pub.pub_type);
-      const statusWeight = getPublicationStatusWeight(pub.pub_status);
-      const entryPoints = Math.round(basePoints * statusWeight * 100) / 100;
+      const stageWeight = getPublicationStageWeight(pub.pub_stage);
+      const entryPoints = Math.round(basePoints * stageWeight * 100) / 100;
       return {
         base_points: basePoints,
-        status_weight: statusWeight,
+        stage_weight: stageWeight,
         indexing: descriptive.indexing_display,
         author_position: descriptive.author_position_display,
-        venue: pub.pub_venue || '-',
-        status: statusMeta.status_display,
+        stage: pub.pub_stage,
         entry_points: entryPoints,
         is_counted: true
       };
@@ -2427,14 +2461,14 @@ function getSubmitToken() {
     }
 
     function getServiceEntryBreakdown(service) {
-      if (!service?.service_type) {
-        return { base_points: 0, duration_factor: 0, duration_hours: 0, entry_points: 0, is_counted: false };
+      if (!service?.service_type || !service?.service_start_date) {
+        return { base_points: 0, duration_factor: 0, span_days: 0, entry_points: 0, is_counted: false };
       }
       const basePoints = getServiceBasePoints(service.service_type);
-      const durationHours = Number(service.service_duration ?? service.service_hours ?? 0);
-      const durationFactor = getServiceDurationFactor(durationHours);
+      const spanDays = calculateReportingDays(service.service_start_date, service.service_end_date || service.service_start_date) || 1;
+      const durationFactor = spanDays <= 1 ? 0.5 : spanDays <= 6 ? 1.0 : spanDays <= 15 ? 1.5 : 2.0;
       const entryPoints = Math.round(basePoints * durationFactor * 100) / 100;
-      return { base_points: basePoints, duration_factor: durationFactor, duration_hours: durationHours, entry_points: entryPoints, is_counted: true };
+      return { base_points: basePoints, duration_factor: durationFactor, span_days: spanDays, entry_points: entryPoints, is_counted: true };
     }
 
     function calculateServiceScore(service) {
@@ -2491,13 +2525,13 @@ function getSubmitToken() {
     }
 
     function getProfessionalEntryBreakdown(prof) {
-      if (!prof?.prof_type || !prof?.prof_effort_band) {
-        return { base_points: 0, effort_factor: 0, entry_points: 0, is_counted: false };
+      if (!prof?.prof_type || !prof?.prof_start_date) {
+        return { base_points: 0, active_fraction: 0, entry_points: 0, is_counted: false };
       }
       const basePoints = getProfessionalBasePoints(prof);
-      const effortFactor = getEffortFactor(prof.prof_effort_band);
-      const entryPoints = Math.round(basePoints * effortFactor * 100) / 100;
-      return { base_points: basePoints, effort_factor: effortFactor, entry_points: entryPoints, is_counted: true };
+      const activeFraction = getActiveFractionInReportingPeriod(prof.prof_start_date, prof.prof_end_date);
+      const entryPoints = Math.round(basePoints * activeFraction * 100) / 100;
+      return { base_points: basePoints, active_fraction: activeFraction, entry_points: entryPoints, is_counted: true };
     }
 
     function calculateProfessionalScore(prof) {
@@ -3246,11 +3280,11 @@ function getSubmitToken() {
                 </div>
                 
                 <div>
-                  <label for="student-role" class="block text-sm font-semibold text-gray-700 mb-2">Supervision Role *</label>
+                  <label for="student-role" class="block text-sm font-semibold text-gray-700 mb-2">Main Supervisor Type *</label>
                   <select id="student-role" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
                     <option value="">Select Role</option>
-                    <option value="leader">Leader</option>
-                    <option value="member">Member</option>
+                    <option value="main">Main Supervisor</option>
+                    <option value="co">Co Supervisor</option>
                   </select>
                 </div>
 
@@ -3282,10 +3316,23 @@ function getSubmitToken() {
                 </div>
                 
                 <div>
-                  <label for="student-year" class="block text-sm font-semibold text-gray-700 mb-2">Start Year *</label>
-                  <input type="number" id="student-year" required min="2000" max="2030"
-                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"
-                         placeholder="2024">
+                  <label for="student-start-semester-select" class="block text-sm font-semibold text-gray-700 mb-2">Start Semester *</label>
+                  <select id="student-start-semester-select" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
+                    <option value="">Select Semester</option>
+                    ${SUPERVISION_SEMESTER_OPTIONS.map((option) => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`).join('')}
+                  </select>
+                  <div id="student-start-semester-other-wrap" class="mt-3 hidden">
+                    <label for="student-start-semester-other" class="block text-sm font-semibold text-gray-700 mb-2">Specify</label>
+                    <input id="student-start-semester-other" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none" placeholder="Enter semester details">
+                  </div>
+                </div>
+                <div>
+                  <label for="student-start-date" class="block text-sm font-semibold text-gray-700 mb-2">Start Date *</label>
+                  <input type="date" id="student-start-date" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
+                </div>
+                <div>
+                  <label for="student-end-date" class="block text-sm font-semibold text-gray-700 mb-2">End Date</label>
+                  <input type="date" id="student-end-date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
                 </div>
               </div>
               
@@ -3307,7 +3354,7 @@ function getSubmitToken() {
                 ${students.map(student => {
                   const breakdown = getSupervisionEntryBreakdown(student);
                   const score = breakdown.entry_points;
-                  const roleLabel = student.student_role === 'main' ? 'Main Supervisor' : 'Co-Supervisor';
+                  const roleLabel = student.student_role === 'main' ? 'Main Supervisor' : 'Co Supervisor';
                   const modeLabel = 'Standard';
                   const statusLabelMap = {
                     active: 'Active',
@@ -3324,7 +3371,7 @@ function getSubmitToken() {
                       <div class="flex-1">
                         <div class="font-semibold text-gray-900">${student.student_name} (${student.student_matric})</div>
                         <div class="text-sm text-gray-600 mt-1">
-                          ${student.student_level.toUpperCase()} • ${roleLabel} • Started ${student.student_year}
+                          ${student.student_level.toUpperCase()} • ${roleLabel} • Start semester ${getOtherSpecifyMetadata(student, 'student_start_semester', 'student_start_semester_other', SUPERVISION_SEMESTER_OPTIONS).display}
                         </div>
                         <div class="text-xs text-gray-500 mt-1">
                           ${modeLabel} • ${statusLabel}
@@ -3359,6 +3406,7 @@ function getSubmitToken() {
       renderSupervisionLivePreview();
       const supervisionForm = document.getElementById('supervision-form');
       if (!supervisionForm) return;
+      wireOtherSpecifyBlock({ baseId: 'student-start-semester', onToggle: renderSupervisionLivePreview });
 
       supervisionForm.querySelectorAll('input, select').forEach((field) => {
         field.addEventListener('input', renderSupervisionLivePreview);
@@ -3415,41 +3463,42 @@ function getSubmitToken() {
 
     async function saveStudent(event) {
       event.preventDefault();
-      
       if (allRecords.length >= 999) {
         showToast('Maximum limit of 999 records reached', 'error');
         return;
       }
-      
       const btn = document.getElementById('save-student-btn');
-      btn.disabled = true;
-      btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
-      
+      const form = document.getElementById('supervision-form');
+      if (!form || !form.reportValidity()) return;
+      const semesterMeta = getOtherSpecifyValue({ baseId: 'student-start-semester', optionsArray: SUPERVISION_SEMESTER_OPTIONS });
       const studentData = {
         section: 'supervision',
         student_name: document.getElementById('student-name').value,
         student_matric: document.getElementById('student-matric').value,
         student_level: document.getElementById('student-level').value,
         student_role: document.getElementById('student-role').value,
-                student_current_status: document.getElementById('student_current_status').value,
+        student_current_status: document.getElementById('student_current_status').value,
         student_title: document.getElementById('student-title').value,
-        student_year: parseInt(document.getElementById('student-year').value),
+        student_start_semester: semesterMeta.selected,
+        student_start_semester_other: semesterMeta.other,
         student_start_date: document.getElementById('student-start-date').value,
         student_end_date: document.getElementById('student-end-date').value,
         created_at: new Date().toISOString()
       };
-      
-      const result = await window.dataSdk.create(studentData);
-      
-      btn.disabled = false;
-      btn.innerHTML = '➕ Add Student';
-      
-      if (result.isOk) {
-        showToast('Student added successfully!');
-        document.getElementById('supervision-form').reset();
-        renderSupervisionLivePreview();
-      } else {
-        showToast('Failed to add student', 'error');
+      btn.disabled = true;
+      btn.innerHTML = '<div class="loading-spinner mx-auto"></div>';
+      try {
+        const result = await window.dataSdk.create(studentData);
+        if (result.isOk) {
+          showToast('Student added successfully!');
+          form.reset();
+          renderSupervisionLivePreview();
+        } else {
+          showToast('Failed to add student', 'error');
+        }
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '➕ Add Student';
       }
     }
 
@@ -3505,6 +3554,8 @@ function getSubmitToken() {
     }
 
     const OTHER_SPECIFY_SELECT_CLASS = 'w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none';
+
+    const SUPERVISION_SEMESTER_OPTIONS = ['Semester 1 Session 2025/2026', 'Semester 2 Session 2025/2026', 'Semester 1 Session 2026/2027', 'Semester 2 Session 2026/2027', 'Other'];
     const OTHER_SPECIFY_OPTIONS = {
       teachingSemester: ['Semester 1 2025/2026', 'Semester 2 2025/2026', 'Semester 1 2026/2027', 'Semester 2 2026/2027', 'Other'],
       publicationIndexing: ['Scopus', 'Web of Science', 'MyCite', 'ERA', 'Not indexed', 'Other'],
@@ -3620,9 +3671,9 @@ function getSubmitToken() {
         research_grant_code: document.getElementById('research-grant-code')?.value || '',
         research_role: document.getElementById('research-role')?.value || '',
         research_status: document.getElementById('research-status')?.value || '',
-        research_activity: document.getElementById('research-activity')?.value || '',
         research_amount: document.getElementById('research-amount')?.value || '',
-        research_year: document.getElementById('research-year')?.value || ''
+        research_start_date: document.getElementById('research-start-date')?.value || '',
+        research_end_date: document.getElementById('research-end-date')?.value || ''
       };
     }
 
@@ -3633,10 +3684,10 @@ function getSubmitToken() {
           ${createCalculationPanel({
             sectionKey: 'research',
             title: '🧮 Research Workload Proxy',
-            formula: 'entry_points = base_points × role_factor × activity_factor',
+            formula: 'entry_points = base_points × role_factor',
             baseTableHtml: '<p><strong>Base points:</strong> Research project item = 5</p>',
-            factorTableHtml: '<p><strong>Role factors:</strong> Lead 1.0, Co-Lead 0.7, Member 0.5</p><p><strong>Activity in period factors:</strong> Active work 1.0, Limited admin only 0.5, No activity 0.0</p>',
-            workedExampleHtml: '<strong>Example:</strong> Co-Lead with active work → 5 × 0.7 × 1.0 = 3.50 points.',
+            factorTableHtml: '<p><strong>Role factors:</strong> Lead 1.0, Member 0.5</p>',
+            workedExampleHtml: '<strong>Example:</strong> Lead researcher → 5 × 1.0 = 5.00 points.',
             notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>Only work during the selected reporting period should be claimed.</li><li>Project prestige or funding size does not affect points.</li><li>Status such as ongoing or completed does not affect points.</li></ul>'
           })}
 
@@ -3646,11 +3697,11 @@ function getSubmitToken() {
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="md:col-span-2"><label for="research-title" class="block text-sm font-semibold text-gray-700 mb-2">Project Title *</label><input type="text" id="research-title" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="research-grant-code" class="block text-sm font-semibold text-gray-700 mb-2">Grant Code *</label><input type="text" id="research-grant-code" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-                <div><label for="research-role" class="block text-sm font-semibold text-gray-700 mb-2">Your Role *</label><select id="research-role" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select Role</option><option value="lead">Lead Researcher</option><option value="co-lead">Co-Lead Researcher</option><option value="member">Research Member</option></select></div>
+                <div><label for="research-role" class="block text-sm font-semibold text-gray-700 mb-2">Your Role *</label><select id="research-role" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select Role</option><option value="lead">Lead Researcher</option><option value="member">Research Member</option></select></div>
                 <div><label for="research-status" class="block text-sm font-semibold text-gray-700 mb-2">Status (descriptive only)</label><select id="research-status" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="ongoing">Ongoing</option><option value="completed">Completed</option><option value="pending">Pending Approval</option></select></div>
-                <div><label for="research-activity" class="block text-sm font-semibold text-gray-700 mb-2">Activity in Reporting Period *</label><select id="research-activity" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select Activity</option><option value="active">Active work in reporting period (1.0)</option><option value="limited_admin">Limited admin only (0.5)</option><option value="none">No activity (0.0)</option></select></div>
+                
                 <div><label for="research-amount" class="block text-sm font-semibold text-gray-700 mb-2">Grant Amount (descriptive only)</label><input type="number" id="research-amount" min="0" step="0.01" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-                <div><label for="research-year" class="block text-sm font-semibold text-gray-700 mb-2">Start Year *</label><input type="number" id="research-year" required min="2000" max="2035" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="research-start-date" class="block text-sm font-semibold text-gray-700 mb-2">Start Date *</label><input type="date" id="research-start-date" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div><div><label for="research-end-date" class="block text-sm font-semibold text-gray-700 mb-2">End Date</label><input type="date" id="research-end-date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
               </div>
               <div class="flex justify-end"><button type="submit" id="save-research-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add</button></div>
             </form>
@@ -3685,7 +3736,7 @@ function getSubmitToken() {
       const savedTotal = Math.round(saved.reduce((sum, item) => sum + calculateResearchScore(item), 0) * 100) / 100;
       const draft = getResearchDraftInputState();
       const breakdown = getResearchEntryBreakdown(draft);
-      renderLivePreview({ sectionKey: 'research', breakdown, equationText: `${breakdown.base_points} × ${breakdown.role_factor} × ${breakdown.activity_factor}`, savedTotal });
+      renderLivePreview({ sectionKey: 'research', breakdown, equationText: `${breakdown.base_points} × ${breakdown.role_factor}`, savedTotal });
     }
 
     async function saveResearch(event) {
@@ -3810,9 +3861,9 @@ function getSubmitToken() {
           ${createCalculationPanel({
             sectionKey: 'publications',
             title: '🧮 Publication Workload Proxy',
-            formula: 'entry_points = paper_equivalent × status_weight',
+            formula: 'entry_points = paper_equivalent × stage_weight',
             baseTableHtml: '<p><strong>Base points by item type:</strong> Journal manuscript 10, Conference paper 6, Book chapter 8, Proceeding 5, Other 3</p>',
-            factorTableHtml: '<p><strong>Status weights:</strong> Drafting 0.10, Submitted 0.50, Accepted 0.50, Published 1.00</p>',
+            factorTableHtml: '<p><strong>Writing stage weights:</strong> drafting 0.10, revising 0.50, responding reviewers 0.50, proofing 1.00, no activity 0.00</p>',
             workedExampleHtml: '<strong>Example:</strong> 1 submitted paper → 1 × 0.50 = 0.50 paper equivalent.',
             notesHtml: '<p class="font-semibold mb-1">Notes</p><ul class="list-disc ml-5 space-y-1"><li>Points represent writing work done in the reporting period.</li><li>Journal indexing, quartile, and acceptance do not change points.</li><li>Indexing, author position, venue, and status are descriptive only and do not affect points.</li></ul>'
           })}
@@ -3853,8 +3904,8 @@ function getSubmitToken() {
                   specifyPlaceholder: 'Enter author position details',
                   selectPlaceholder: 'Select author position'
                 })}
-                <div><label for="pub-venue" class="block text-sm font-semibold text-gray-700 mb-2">Venue *</label><input id="pub-venue" aria-describedby="pub-venue-note" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><p id="pub-venue-note" class="mt-2 text-xs text-gray-600">Target outlet for this item, for example the journal or conference name. Used for identification and reporting only, it does not affect points.</p></div>
-                <div><label for="pub-year" class="block text-sm font-semibold text-gray-700 mb-2">Year *</label><input id="pub-year" required type="number" min="2000" max="2035" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                
+                
                 <div>
                   <label for="pub-status-select" class="block text-sm font-semibold text-gray-700 mb-2">Status (descriptive only)</label>
                   <select id="pub-status-select" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none">
@@ -3927,7 +3978,7 @@ function getSubmitToken() {
       const saved = getRecordsBySection('publications');
       const savedTotal = Math.round(saved.reduce((sum, item) => sum + calculatePublicationScore(item), 0) * 100) / 100;
       const breakdown = getPublicationEntryBreakdown(getPublicationsDraftInputState());
-      renderLivePreview({ sectionKey: 'publications', breakdown, equationText: `${breakdown.base_points} × ${breakdown.status_weight}`, savedTotal });
+      renderLivePreview({ sectionKey: 'publications', breakdown, equationText: `${breakdown.base_points} × ${breakdown.stage_weight}`, savedTotal });
     }
 
     async function savePublication(event) {
@@ -4141,7 +4192,8 @@ function getSubmitToken() {
         duty_frequency: document.getElementById('duty-frequency')?.value || '',
         duty_role: document.getElementById('duty-role')?.value || '',
         duty_appointment_level: document.getElementById('duty-appointment-level')?.value || '',
-        duty_year: document.getElementById('duty-year')?.value || ''
+        duty_start_date: document.getElementById('duty-start-date')?.value || '',
+        duty_end_date: document.getElementById('duty-end-date')?.value || ''
       };
     }
 
@@ -4177,7 +4229,7 @@ function getSubmitToken() {
                 })}
                 <div><label for="duty-role" class="block text-sm font-semibold text-gray-700 mb-2">Role *</label><select id="duty-role" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Chairperson">Chairperson</option><option value="Secretary">Secretary</option><option value="Member">Member</option><option value="Other">Other</option></select></div><div><label for="duty-frequency" class="block text-sm font-semibold text-gray-700 mb-2">Appointment duration *</label><select id="duty-frequency" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Full period">Full period</option><option value="Half period">Half period</option><option value="Short term">Short term</option></select></div><div><label for="duty-appointment-level" class="block text-sm font-semibold text-gray-700 mb-2">Appointment level *</label><select id="duty-appointment-level" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="University">University level</option><option value="Faculty">Faculty level</option><option value="Programme">Programme level</option></select></div>
                 <div class="md:col-span-2"><label for="duty-name" class="block text-sm font-semibold text-gray-700 mb-2">Duty Name *</label><input id="duty-name" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-                <div><label for="duty-year" class="block text-sm font-semibold text-gray-700 mb-2">Year *</label><input id="duty-year" required type="number" min="2000" max="2035" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="duty-start-date" class="block text-sm font-semibold text-gray-700 mb-2">Start Date *</label><input id="duty-start-date" required type="date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><label for="duty-end-date" class="block text-sm font-semibold text-gray-700 mb-2 mt-3">End Date</label><input id="duty-end-date" type="date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
               </div>
               <div class="flex justify-end"><button type="submit" id="save-duty-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add</button></div>
             </form>
@@ -4261,8 +4313,8 @@ function getSubmitToken() {
         service_scope: document.getElementById('service-scope')?.value || '',
         service_title: document.getElementById('service-title')?.value || '',
         service_organization: document.getElementById('service-organization')?.value || '',
-        service_duration: document.getElementById('service-duration')?.value || '',
-        service_date: document.getElementById('service-date')?.value || ''
+        service_start_date: document.getElementById('service-start-date')?.value || '',
+        service_end_date: document.getElementById('service-end-date')?.value || ''
       };
     }
 
@@ -4304,9 +4356,9 @@ function getSubmitToken() {
                   required: true,
                   selectPlaceholder: 'Select'
                 })}
-                <div><label for="service-duration" class="block text-sm font-semibold text-gray-700 mb-2">Duration (hours) *</label><input id="service-duration" type="number" min="0" step="0.5" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                
                 <div><label for="service-scope" class="block text-sm font-semibold text-gray-700 mb-2">Scope (descriptive only)</label><input id="service-scope" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-                <div><label for="service-date" class="block text-sm font-semibold text-gray-700 mb-2">Date *</label><input id="service-date" type="date" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="service-start-date" class="block text-sm font-semibold text-gray-700 mb-2">Start Date *</label><input id="service-start-date" type="date" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><label for="service-end-date" class="block text-sm font-semibold text-gray-700 mb-2 mt-3">End Date</label><input id="service-end-date" type="date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div class="md:col-span-2"><label for="service-title" class="block text-sm font-semibold text-gray-700 mb-2">Title *</label><input id="service-title" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div class="md:col-span-2"><label for="service-organization" class="block text-sm font-semibold text-gray-700 mb-2">Organization *</label><input id="service-organization" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
               </div>
@@ -4392,7 +4444,8 @@ function getSubmitToken() {
         lab_name: document.getElementById('lab-name')?.value || '',
         lab_frequency: document.getElementById('lab-frequency')?.value || '',
         number_of_courses_supported: document.getElementById('number-of-courses-supported')?.value || 1,
-        lab_year: document.getElementById('lab-year')?.value || ''
+        lab_start_date: document.getElementById('lab-start-date')?.value || '',
+        lab_end_date: document.getElementById('lab-end-date')?.value || ''
       };
     }
 
@@ -4428,7 +4481,7 @@ function getSubmitToken() {
                 })}
                 <div><label for="lab-frequency" class="block text-sm font-semibold text-gray-700 mb-2">Frequency *</label><select id="lab-frequency" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="Ongoing within reporting period">Ongoing within reporting period</option><option value="Per semester occurrence">Per semester occurrence</option><option value="Per course supported">Per course supported</option></select></div>
                 <div id="lab-course-count-wrap" class="hidden"><label for="number-of-courses-supported" class="block text-sm font-semibold text-gray-700 mb-2">Number of courses supported *</label><input id="number-of-courses-supported" type="number" min="1" step="1" value="1" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-                <div><label for="lab-year" class="block text-sm font-semibold text-gray-700 mb-2">Year *</label><input id="lab-year" required type="number" min="2000" max="2035" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="lab-start-date" class="block text-sm font-semibold text-gray-700 mb-2">Start Date *</label><input id="lab-start-date" required type="date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><label for="lab-end-date" class="block text-sm font-semibold text-gray-700 mb-2 mt-3">End Date</label><input id="lab-end-date" type="date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div class="md:col-span-2"><label for="lab-name" class="block text-sm font-semibold text-gray-700 mb-2">Laboratory / Context *</label><input id="lab-name" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
               </div>
               <div class="flex justify-end"><button type="submit" id="save-lab-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add</button></div>
@@ -4517,12 +4570,13 @@ function getSubmitToken() {
       return {
         prof_type: profType.selected,
         prof_type_other_text: profType.other,
-        prof_effort_band: document.getElementById('prof-effort-band')?.value || '',
+
         prof_position: document.getElementById('prof-position')?.value || '',
         prof_scope: document.getElementById('prof-scope')?.value || '',
         prof_title: document.getElementById('prof-title')?.value || '',
         prof_organization: document.getElementById('prof-organization')?.value || '',
-        prof_year: document.getElementById('prof-year')?.value || '',
+        prof_start_date: document.getElementById('prof-start-date')?.value || '',
+        prof_end_date: document.getElementById('prof-end-date')?.value || '',
         prof_description: document.getElementById('prof-description')?.value || ''
       };
     }
@@ -4557,12 +4611,12 @@ function getSubmitToken() {
                   required: true,
                   selectPlaceholder: 'Select'
                 })}
-                <div><label for="prof-effort-band" class="block text-sm font-semibold text-gray-700 mb-2">Effort Band *</label><select id="prof-effort-band" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><option value="">Select</option><option value="low">Low effort (0.5)</option><option value="standard">Standard effort (1.0)</option><option value="high">High effort (1.5)</option></select></div>
+                
                 <div><label for="prof-position" class="block text-sm font-semibold text-gray-700 mb-2">Role/Position (optional)</label><input id="prof-position" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="prof-scope" class="block text-sm font-semibold text-gray-700 mb-2">Scope (descriptive only)</label><input id="prof-scope" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div class="md:col-span-2"><label for="prof-title" class="block text-sm font-semibold text-gray-700 mb-2">Activity Title *</label><input id="prof-title" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div><label for="prof-organization" class="block text-sm font-semibold text-gray-700 mb-2">Organization *</label><input id="prof-organization" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
-                <div><label for="prof-year" class="block text-sm font-semibold text-gray-700 mb-2">Year *</label><input id="prof-year" required type="number" min="2000" max="2035" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
+                <div><label for="prof-start-date" class="block text-sm font-semibold text-gray-700 mb-2">Start Date *</label><input id="prof-start-date" required type="date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"><label for="prof-end-date" class="block text-sm font-semibold text-gray-700 mb-2 mt-3">End Date</label><input id="prof-end-date" type="date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></div>
                 <div class="md:col-span-2"><label for="prof-description" class="block text-sm font-semibold text-gray-700 mb-2">Description</label><textarea id="prof-description" rows="2" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-sky-500 focus:outline-none"></textarea></div>
               </div>
               <div class="flex justify-end"><button type="submit" id="save-professional-btn" class="px-6 py-3 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700">Add</button></div>
@@ -4598,7 +4652,7 @@ function getSubmitToken() {
       const saved = getRecordsBySection('professional');
       const savedTotal = Math.round(saved.reduce((sum, item) => sum + calculateProfessionalScore(item), 0) * 100) / 100;
       const breakdown = getProfessionalEntryBreakdown(getProfessionalDraftInputState());
-      renderLivePreview({ sectionKey: 'professional', breakdown, equationText: `${breakdown.base_points} × ${breakdown.effort_factor}`, savedTotal });
+      renderLivePreview({ sectionKey: 'professional', breakdown, equationText: `${breakdown.base_points} × ${breakdown.active_fraction.toFixed(2)}`, savedTotal });
     }
 
     async function saveProfessional(event) {
